@@ -53,7 +53,7 @@ sentry-sdk[flask]==1.39.2
 
 # Production Server
 gunicorn==21.2.0
-gevent==23.9.1
+# gevent removed - incompatible with Python 3.11
 
 # Development
 pytest==7.4.3
