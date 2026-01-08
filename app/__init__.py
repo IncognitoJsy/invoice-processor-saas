@@ -53,13 +53,14 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings
+    from app.web import dashboard, invoices, queue, settings, upload
     
     # Web interface
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(invoices.bp)
     app.register_blueprint(queue.bp)
     app.register_blueprint(settings.bp)
+    app.register_blueprint(upload.bp)
 
 def register_error_handlers(app):
     """Register error handlers"""
@@ -72,6 +73,3 @@ def register_error_handlers(app):
         db.session.rollback()
         return {'error': 'Internal server error'}, 500
 
-# Register upload blueprint
-from app.web import upload
-app.register_blueprint(upload.bp)
