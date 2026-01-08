@@ -14,10 +14,15 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
         super().__init__()
         self.supplier_name = 'WHOLESALE'
 
-    def detect(self, text: str) -> bool:
+    def detect(self, filepath: str) -> bool:
         """Detect if this is a Wholesale invoice"""
-        return 'WHOLESALE ELECTRIC' in text.upper() or 'wholesaleelectrics' in text.lower()
-
+        import pdfplumber
+        try:
+            with pdfplumber.open(filepath) as pdf:
+                first_page_text = pdf.pages[0].extract_text() or ''
+                return 'wholesale electric' in first_page_text.lower()
+        except:
+            return False
     def extract_from_tables(self, pdf):
         """Extract invoice data using table extraction"""
         items = []

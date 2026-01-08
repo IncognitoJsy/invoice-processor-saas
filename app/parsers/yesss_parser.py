@@ -14,9 +14,15 @@ class YesssInvoiceParser(BaseInvoiceParser):
         super().__init__()
         self.supplier_name = 'YESSS'
 
-    def detect(self, text: str) -> bool:
+    def detect(self, filepath: str) -> bool:
         """Detect if this is a YESSS invoice"""
-        return 'YESSS ELECTRICAL' in text.upper() or 'yesss.co.uk' in text.lower()
+        import pdfplumber
+        try:
+            with pdfplumber.open(filepath) as pdf:
+                first_page_text = pdf.pages[0].extract_text() or ''
+                return 'YESSS ELECTRICAL' in first_page_text.upper() or 'yesss.co.uk' in first_page_text.lower()
+        except:
+            return False
 
     def is_start_of_new_item(self, line: str) -> bool:
         """Check if this line starts a new item"""

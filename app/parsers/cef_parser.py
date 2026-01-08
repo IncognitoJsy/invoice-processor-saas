@@ -14,10 +14,15 @@ class CEFInvoiceParser(BaseInvoiceParser):
         super().__init__()
         self.supplier_name = 'CEF'
 
-    def detect(self, text: str) -> bool:
+    def detect(self, filepath: str) -> bool:
         """Detect if this is a CEF invoice"""
-        return 'C.E.F.' in text or 'CEF' in text.upper()
-
+        import pdfplumber
+        try:
+            with pdfplumber.open(filepath) as pdf:
+                first_page_text = pdf.pages[0].extract_text() or ''
+                return 'c.e.f.' in first_page_text.lower() or 'city electrical' in first_page_text.lower()
+        except:
+            return False
     def parse(self, pdf_path: str) -> Dict:
         """Parse CEF invoice"""
         items = []
