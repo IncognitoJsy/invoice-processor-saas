@@ -5,6 +5,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -20,5 +21,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Run migrations then start gunicorn
-CMD flask db upgrade && gunicorn --bind 0.0.0.0:8000 wsgi:app
+# Run migrations then start gunicorn with access logs
+CMD flask db upgrade && gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
