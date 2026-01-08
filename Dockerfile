@@ -15,8 +15,10 @@ COPY . .
 RUN mkdir -p logs uploads temp_uploads integration_data/queue
 
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+
 USER appuser
 
 EXPOSE 8000
 
-CMD gunicorn --bind 0.0.0.0:8000 wsgi:app
+# Run migrations then start gunicorn
+CMD flask db upgrade && gunicorn --bind 0.0.0.0:8000 wsgi:app
