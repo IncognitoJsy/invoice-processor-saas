@@ -1,5 +1,5 @@
 """Upload routes"""
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
@@ -21,38 +21,41 @@ def upload_page():
 def api_upload():
     """Handle file upload and process invoices"""
     try:
+        current_app.logger.info("=== UPLOAD REQUEST RECEIVED ===")
+        current_app.logger.info(f"Files in request: {request.files}")
+        
         if 'files' not in request.files:
+            current_app.logger.error("No files key in request.files")
             return jsonify({'error': 'No files provided'}), 400
         
         files = request.files.getlist('files')
         supplier = request.form.get('supplier', 'auto')
         
-        if not files:
+        current_app.logger.info(f"Number of files: {len(files)}")
+        
+        if not files or len(files) == 0:
             return jsonify({'error': 'No files selected'}), 400
         
         results = []
         errors = []
         
-        # Import parsers
         from app.parsers.yesss_parser import YesssInvoiceParser
         from app.parsers.wholesale_parser import WholesaleInvoiceParser
         from app.parsers.cef_parser import CEFInvoiceParser
         
         for file in files:
-            if file and allowed_file(file.filename):
+            current_app.logger.info(f"Processing: {file.filename}")
+            
+            if file and file.filename and allowed_file(file.filename):
                 try:
-                    # Save file temporarily
                     filename = secure_filename(file.filename)
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                     unique_filename = f"{timestamp}_{filename}"
                     filepath = os.path.join('temp_uploads', unique_filename)
                     
-                    # Ensure directory exists
                     os.makedirs('temp_uploads', exist_ok=True)
-                    
                     file.save(filepath)
                     
-                    # Auto-detect supplier or use selected one
                     parser = None
                     detected_supplier = None
                     
@@ -75,7 +78,6 @@ def api_upload():
                             detected_supplier = 'CEF'
                     
                     if parser:
-                        # Parse the invoice
                         parsed_data = parser.parse(filepath)
                         
                         results.append({
@@ -83,20 +85,20 @@ def api_upload():
                             'supplier': detected_supplier,
                             'items_count': len(parsed_data.get('items', [])),
                             'total': parsed_data.get('total', 0),
-                            'items': parsed_data.get('items', [])[:5],  # First 5 items for preview
+                            'items': parsed_data.get('items', [])[:5],
                             'success': True
                         })
                     else:
                         errors.append(f"{filename}: Could not detect supplier")
                     
-                    # Clean up temp file
                     if os.path.exists(filepath):
                         os.remove(filepath)
                         
                 except Exception as e:
+                    current_app.logger.error(f"Error: {str(e)}", exc_info=True)
                     errors.append(f"{filename}: {str(e)}")
             else:
-                errors.append(f'{file.filename} is not a valid PDF file')
+                errors.append(f'{file.filename if file and file.filename else "Unknown"} is not a valid PDF')
         
         if results:
             return jsonify({
@@ -112,4 +114,5 @@ def api_upload():
             }), 400
             
     except Exception as e:
+        current_app.logger.error(f"Server error: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
