@@ -73,3 +73,9 @@ def register_error_handlers(app):
         db.session.rollback()
         return {'error': 'Internal server error'}, 500
 
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user for Flask-Login"""
+    from app.models.user import User
+    return User.query.get(int(user_id))
