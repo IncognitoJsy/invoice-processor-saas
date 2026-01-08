@@ -77,8 +77,13 @@ def api_upload():
                             parser = cef_parser
                             detected_supplier = 'CEF'
                     
+                    current_app.logger.info(f"Parser result: {parser}")
+                    current_app.logger.info(f"Detected supplier: {detected_supplier}")
+                    
                     if parser:
+                        current_app.logger.info("Starting parse...")
                         parsed_data = parser.parse(filepath)
+                        current_app.logger.info(f"Parse complete: {parsed_data}")
                         
                         results.append({
                             'filename': filename,
