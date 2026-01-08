@@ -71,3 +71,7 @@ def register_error_handlers(app):
     def internal_error(error):
         db.session.rollback()
         return {'error': 'Internal server error'}, 500
+
+# Register upload blueprint
+from app.web import upload
+app.register_blueprint(upload.bp)
