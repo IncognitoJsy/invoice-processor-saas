@@ -200,6 +200,128 @@
             </div>
         </template>
     </div>
+        
+        <!-- Results Display -->
+        <template x-if="results.length > 0">
+            <div class="mt-6 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        📊 Processing Results
+                    </h3>
+                    <span class="px-3 py-1 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300 rounded-full text-sm font-medium">
+                        <span x-text="results.length"></span> Processed
+                    </span>
+                </div>
+                
+                <template x-for="(result, index) in results" :key="index">
+                    <div class="p-6 bg-gradient-to-br from-success-50 to-emerald-50 dark:from-success-900/20 dark:to-emerald-900/20 rounded-xl border-2 border-success-200 dark:border-success-800">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-12 h-12 bg-success-500 rounded-lg flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-gray-900 dark:text-gray-100" x-text="result.filename"></p>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400" x-text="result.supplier"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-2xl font-bold text-success-600 dark:text-success-400">
+                                    £<span x-text="result.total.toFixed(2)"></span>
+                                </p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">
+                                    <span x-text="result.items_count"></span> items
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- All Parsed Items -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                    Parsed Items (<span x-text="result.items_count"></span> total)
+                                </p>
+                                <button @click="result.expanded = !result.expanded" 
+                                        class="px-3 py-1 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-lg hover:bg-primary-200 dark:hover:bg-primary-800/30 transition">
+                                    <span x-text="result.expanded ? 'Show Less ▲' : 'Show All ▼'"></span>
+                                </button>
+                            </div>
+                            
+                            <template x-for="(item, idx) in (result.expanded ? result.all_items : result.items)" :key="idx">
+                                <div class="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition">
+                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                        <!-- Column 1: Product Info -->
+                                        <div class="space-y-2">
+                                            <div>
+                                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Part Number</p>
+                                                <p class="text-sm font-bold text-primary-600 dark:text-primary-400" x-text="item.part_number || 'N/A'"></p>
+                                            </div>
+                                            <div>
+                                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</p>
+                                                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed" x-text="item.description || 'N/A'"></p>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Column 2: Quantities & Discount -->
+                                        <div class="space-y-2">
+                                            <div class="grid grid-cols-2 gap-3">
+                                                <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Quantity</p>
+                                                    <p class="text-lg font-bold text-gray-900 dark:text-gray-100" x-text="item.quantity || '0'"></p>
+                                                </div>
+                                                <div class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                                                    <p class="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase">Discount</p>
+                                                    <p class="text-lg font-bold text-amber-600 dark:text-amber-400" x-text="item.discount ? item.discount + '%' : '0%'"></p>
+                                                </div>
+                                            </div>
+                                            <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                                <p class="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase">Original Price</p>
+                                                <p class="text-sm text-blue-600 dark:text-blue-400">
+                                                    £<span x-text="item.original_price ? item.original_price.toFixed(2) : '0.00'"></span> each
+                                                </p>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Column 3: Pricing Breakdown -->
+                                        <div class="space-y-2">
+                                            <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit Price (After Discount)</p>
+                                                <p class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                                    £<span x-text="item.price_per ? item.price_per.toFixed(2) : '0.00'"></span>
+                                                </p>
+                                            </div>
+                                            <div class="p-3 bg-success-50 dark:bg-success-900/20 rounded-lg">
+                                                <p class="text-xs font-medium text-success-700 dark:text-success-400 uppercase">Purchase Cost/Unit</p>
+                                                <p class="text-lg font-bold text-success-600 dark:text-success-400">
+                                                    £<span x-text="item.cost_per_item ? item.cost_per_item.toFixed(2) : '0.00'"></span>
+                                                </p>
+                                            </div>
+                                            <div class="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg border-2 border-primary-200 dark:border-primary-700">
+                                                <p class="text-xs font-medium text-primary-700 dark:text-primary-400 uppercase">Line Total</p>
+                                                <p class="text-xl font-bold text-primary-600 dark:text-primary-400">
+                                                    £<span x-text="item.total_amount ? item.total_amount.toFixed(2) : '0.00'"></span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <template x-if="!result.expanded && result.items_count > 5">
+                                <div class="text-center">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                                        Showing first 5 items. Click "Show All" to see all <span x-text="result.items_count"></span> items.
+                                    </p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+
     
     <!-- Quick Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -251,6 +373,7 @@
 function uploadPage() {
     return {
         files: [],
+        results: [],
         dragover: false,
         uploading: false,
         processing: false,
