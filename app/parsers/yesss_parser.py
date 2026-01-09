@@ -56,12 +56,12 @@ class YesssInvoiceParser(BaseInvoiceParser):
                         # First word is usually account/invoice number, skip it
                         # Find words that are letters (the job reference)
                         ref_words = []
-                        for word in words[1:]:  # Skip first word (invoice number)
+                        for word in words:  # Check all words
                             # Stop at dates
                             if '/' in word or len(word) > 15:
                                 break
-                            # Only take words with letters
-                            if any(c.isalpha() for c in word):
+                            # Only take words with letters (not invoice numbers)
+                            if any(c.isalpha() for c in word) and not word[0].isdigit():
                                 ref_words.append(word)
                         
                         if ref_words:
