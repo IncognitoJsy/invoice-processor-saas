@@ -21,6 +21,28 @@ class CEFInvoiceParser:
             self.logger.error(f"Error detecting CEF invoice: {str(e)}")
             return False
 
+    def parse(self, pdf_path: str) -> Dict:
+        """Main parse method called by upload handler"""
+        try:
+            items = self.extract_pdf_data(pdf_path)
+            job_ref = self.extract_job_reference(pdf_path)
+            
+            return {
+                'success': True,
+                'items': items,
+                'job_reference': job_ref,
+                'supplier': 'CEF'
+            }
+        except Exception as e:
+            self.logger.error(f"Error in parse: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return {
+                'success': False,
+                'error': str(e),
+                'items': []
+            }
+
     def calculate_new_prices(self, item: Dict) -> Dict:
         """Calculate new prices based on discount rules"""
         cost_per_item = item['cost_per_item']
