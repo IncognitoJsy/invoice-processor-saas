@@ -91,19 +91,27 @@ class CEFInvoiceParser(BaseInvoiceParser):
                 logger.info(f"Found {len(tables)} tables")
                 
                 if tables:
-                    for table in tables:
+                    for table_idx, table in enumerate(tables):
+                        logger.info(f"Table {table_idx}: {len(table)} rows")
                         if not table or len(table) < 2:
                             continue
+                        
+                        # Log first few rows to debug
+                        for i in range(min(3, len(table))):
+                            logger.info(f"  Row {i}: {table[i]}")
                         
                         # Find header row
                         header_row = None
                         for i, row in enumerate(table):
                             row_text = ' '.join([str(cell or '') for cell in row]).lower()
-                            if 'item' in row_text or 'description' in row_text:
+                            logger.info(f"Checking row {i} for headers: {row_text[:100]}")
+                            if 'item' in row_text or 'description' in row_text or 'qty' in row_text:
                                 header_row = i
+                                logger.info(f"Found header row at {i}")
                                 break
                         
                         if header_row is None:
+                            logger.info("No header row found")
                             continue
                         
                         # Process data rows
