@@ -69,22 +69,157 @@ class CEFInvoiceParser:
                     self.logger.info("Not a CEF invoice")
                     return []
                 self.logger.info("CEF invoice detected, processing...")
+                
                 for page in pdf.pages:
-                    width = page.width
-                    height = page.height
-                    is_rotated = width > height
-                    self.logger.info(f"Page dimensions: {width}x{height}, rotated: {is_rotated}")
-                    if is_rotated:
-                        page_items = self._extract_rotated_page(page)
-                    else:
-                        page_items = self._extract_normal_page(page)
+                    # Try table extraction first (works for rotated PDFs where items are in columns)
+                    page_items = self._extract_table_columns(page)
+                    
+                    # If that didn't work, try coordinate-based extraction
+                    if not page_items:
+                        width = page.width
+                        height = page.height
+                        is_rotated = width > height
+                        self.logger.info(f"Page dimensions: {width}x{height}, rotated: {is_rotated}")
+                        
+                        if is_rotated:
+                            page_items = self._extract_rotated_page(page)
+                        else:
+                            page_items = self._extract_normal_page(page)
+                    
                     items.extend(page_items)
+                    
         except Exception as e:
             self.logger.error(f"Error extracting PDF data: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
+        
         self.logger.info(f"Extracted {len(items)} items total")
         return items
+
+    def _extract_table_columns(self, page) -> List[Dict]:
+        """Extract items from table where each item is in a column (rotated PDF format)"""
+        items = []
+        
+        try:
+            tables = page.extract_tables()
+            if not tables:
+                return []
+            
+            table = tables[0]
+            if not table or len(table) == 0:
+                return []
+            
+            # Get the first row which contains all columns
+            row = table[0]
+            
+            self.logger.info(f"Table has {len(row)} columns")
+            
+            # Each column (except first and last) potentially contains an item
+            for col_idx, cell in enumerate(row):
+                if not cell or not cell.strip():
+                    continue
+                
+                # Skip if this looks like a header
+                if 'Qty' in cell and 'Item' in cell:
+                    continue
+                
+                # Try to parse this cell as an item
+                item = self._parse_column_cell(cell)
+                if item:
+                    items.append(item)
+                    self.logger.info(f"Extracted from column {col_idx}: {item['part_number']}")
+            
+        except Exception as e:
+            self.logger.error(f"Error in _extract_table_columns: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+        
+        return items
+
+    def _parse_column_cell(self, cell_text: str) -> Dict:
+        """Parse a table cell that contains a complete item (quantity, part, desc, price, etc.)"""
+        try:
+            lines = [line.strip() for line in cell_text.split('\n') if line.strip()]
+            
+            if len(lines) < 3:
+                return None
+            
+            # First line should be quantity
+            try:
+                quantity = float(lines[0])
+            except ValueError:
+                return None
+            
+            # Second line should be part number
+            part_number = lines[1]
+            
+            # Find where numerical data starts (price, discount, total)
+            description_lines = []
+            price_per = 0.0
+            discount = '0'
+            total_amount = 0.0
+            
+            for i, line in enumerate(lines[2:], start=2):
+                # Check if this line contains price info
+                if 'each' in line.lower():
+                    # Extract price before 'each'
+                    parts = line.split('each')
+                    if parts:
+                        try:
+                            price_per = float(parts[0].strip())
+                        except:
+                            pass
+                    # Everything after 'each' on this line might be discount/total
+                    if len(parts) > 1:
+                        remaining = parts[1].strip()
+                        # Check for discount (e.g., "45%")
+                        discount_match = re.search(r'(\d+)%', remaining)
+                        if discount_match:
+                            discount = discount_match.group(1)
+                        # Check for total (last number followed by J)
+                        total_match = re.search(r'(\d+\.\d+)\s*J', remaining)
+                        if total_match:
+                            total_amount = float(total_match.group(1))
+                    break
+                elif re.match(r'^\d+\.\d+$', line):
+                    # This is likely the price
+                    price_per = float(line)
+                elif '%' in line:
+                    # This is the discount
+                    discount = line.replace('%', '').strip()
+                elif 'J' in line:
+                    # This is the total
+                    total_amount = float(line.replace('J', '').strip())
+                else:
+                    # Part of description
+                    description_lines.append(line)
+            
+            description = ' '.join(description_lines)
+            
+            # Calculate cost per item
+            cost_per_item = 0.0
+            if total_amount > 0 and quantity > 0:
+                cost_per_item = round(total_amount / quantity, 2)
+            elif price_per > 0:
+                discount_val = float(discount) / 100 if discount else 0
+                cost_per_item = round(price_per * (1 - discount_val), 2)
+            
+            if not part_number or cost_per_item == 0:
+                return None
+            
+            return {
+                'quantity': quantity,
+                'part_number': part_number,
+                'description': description,
+                'price_per': price_per,
+                'discount': discount,
+                'total_amount': total_amount,
+                'cost_per_item': cost_per_item
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing column cell: {str(e)}")
+            return None
 
     def _extract_rotated_page(self, page) -> List[Dict]:
         """Extract items from a 90-degree rotated page using coordinate-based approach"""
