@@ -202,6 +202,13 @@ class YesssInvoiceParser(BaseInvoiceParser):
                 selling_price = round(cost_per_item * (1 + markup), 2)
                 profit_per_item = round(selling_price - cost_per_item, 2)
                 
+                # Calculate true original price per unit (before discount)
+                # If there's a discount, work backwards from cost_per_item
+                if discount_pct > 0:
+                    original_unit_price = round(cost_per_item / (1 - discount_pct / 100), 2)
+                else:
+                    original_unit_price = cost_per_item
+                
                 return {
                     'part_number': part_no,
                     'description': description,
@@ -211,6 +218,7 @@ class YesssInvoiceParser(BaseInvoiceParser):
                     'total_amount': total_amount or 0,
                     'cost_per_item': round(cost_per_item, 2),
                     'original_price': original_price or price_per or 0,
+                    'original_unit_price': original_unit_price,
                     'selling_price': selling_price,
                     'profit_per_item': profit_per_item,
                     'markup_percent': int(markup * 100)
