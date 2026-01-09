@@ -28,44 +28,17 @@ class YesssInvoiceParser(BaseInvoiceParser):
     def extract_job_reference(self, text: str) -> str:
         """Extract job reference from YESSS invoice"""
         import re
-        lines = text.split('\n')
         
-        # Find the line with YOUR ORDER REFERENCE header
-        for i, line in enumerate(lines):
-            if "YOUR ORDER REFERENCE" in line and "DATE" in line:
-                # The reference is on the next data row (skip table headers)
-                for j in range(i+1, min(i+5, len(lines))):
-                    next_line = lines[j].strip()
-                    
-                    # Skip empty lines
-                    if not next_line:
-                        continue
-                    
-                    # Skip table headers like "Qty. Part No. Description"
-                    if "Qty." in next_line or "Part No" in next_line or "Description" in next_line:
-                        continue
-                    
-                    # Skip pure date lines or invoice number lines
-                    if next_line.replace('/', '').replace('-', '').replace('.', '').isdigit():
-                        continue
-                    
-                    # Extract reference - it's the part before any date
-                    # Format is like: "093IN1054492 ROSE COTTAGE 21/11/2024"
-                    words = next_line.split()
-                    if len(words) >= 2:
-                        # First word is usually account/invoice number, skip it
-                        # Find words that are letters (the job reference)
-                        ref_words = []
-                        for word in words:  # Check all words
-                            # Stop at dates
-                            if '/' in word or len(word) > 15:
-                                break
-                            # Only take words with letters (not invoice numbers)
-                            if any(c.isalpha() for c in word) and not word[0].isdigit():
-                                ref_words.append(word)
-                        
-                        if ref_words:
-                            return ' '.join(ref_words)
+        # Pattern: Find text after "093IN" number and before a date (dd/mm/yyyy)
+        # Example: "093IN1054492 ROSE COTTAGE 21/11/2024"
+        pattern = r'093IN\d+\s+([A-Z][A-Z\s]+?)\s+\d{2}/\d{2}/\d{4}'
+        match = re.search(pattern, text)
+        
+        if match:
+            job_ref = match.group(1).strip()
+            # Clean up extra spaces
+            job_ref = ' '.join(job_ref.split())
+            return job_ref
         
         return None
 
