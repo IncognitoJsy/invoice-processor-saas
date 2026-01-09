@@ -93,7 +93,7 @@ class YesssInvoiceParser(BaseInvoiceParser):
 
             each_index = -1
             for i, part in enumerate(parts):
-                if part in ['EACH', 'EA', 'M']:
+                if part in ['EACH', 'EA', 'M', 'PK']:
                     each_index = i
                     break
 
@@ -109,7 +109,7 @@ class YesssInvoiceParser(BaseInvoiceParser):
                         continue
 
             for i, part in enumerate(parts):
-                if part in ['EACH', 'EA', 'M']:
+                if part in ['EACH', 'EA', 'M', 'PK']:
                     for j in range(i-1, -1, -1):
                         try:
                             candidate = float(parts[j].rstrip('R'))
