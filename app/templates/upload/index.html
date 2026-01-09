@@ -307,9 +307,15 @@ function uploadPage() {
                 const data = await response.json();
                 
                 if (response.ok) {
+                    this.results = data.results || [];
                     this.success = true;
                     this.successMessage = `Processed ${data.processed} invoice${data.processed > 1 ? 's' : ''} successfully`;
                     this.files = [];
+                    
+                    // Scroll to results
+                    setTimeout(() => {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                    }, 100);
                 } else {
                     this.error = true;
                     this.errorMessage = data.error || 'An error occurred during processing';
