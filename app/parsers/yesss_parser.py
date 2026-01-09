@@ -14,6 +14,17 @@ class YesssInvoiceParser(BaseInvoiceParser):
         super().__init__()
         self.supplier_name = 'YESSS'
 
+    
+    def calculate_markup(self, discount_percent):
+        if discount_percent == 0:
+            return 0.20
+        elif 1 <= discount_percent <= 30:
+            return 0.40
+        elif 30 < discount_percent <= 70:
+            return 0.50
+        else:
+            return 0.70
+
     def detect(self, filepath: str) -> bool:
         """Detect if this is a YESSS invoice"""
         import pdfplumber
@@ -186,6 +197,11 @@ class YesssInvoiceParser(BaseInvoiceParser):
                 else:
                     cost_per_item = 0
 
+                discount_pct = float(discount) if discount and str(discount).replace('.', '').isdigit() else 0
+                markup = self.calculate_markup(discount_pct)
+                selling_price = round(cost_per_item * (1 + markup), 2)
+                profit_per_item = round(selling_price - cost_per_item, 2)
+                
                 return {
                     'part_number': part_no,
                     'description': description,
@@ -194,7 +210,10 @@ class YesssInvoiceParser(BaseInvoiceParser):
                     'discount': discount or '0',
                     'total_amount': total_amount or 0,
                     'cost_per_item': round(cost_per_item, 2),
-                    'original_price': original_price or price_per or 0
+                    'original_price': original_price or price_per or 0,
+                    'selling_price': selling_price,
+                    'profit_per_item': profit_per_item,
+                    'markup_percent': int(markup * 100)
                 }
 
         except Exception as e:
