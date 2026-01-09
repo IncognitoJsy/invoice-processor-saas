@@ -220,11 +220,16 @@ class YesssInvoiceParser(BaseInvoiceParser):
                             if item:
                                 items.append(item)
 
+            # Extract full text for job reference
+                text = pdf.pages[0].extract_text()
+                job_reference = self.extract_job_reference(text)
+                
             return {
                 'supplier': 'YESSS',
                 'items': items,
                 'invoice_number': None,
                 'invoice_date': None,
+                'job_reference': job_reference,
                 'total': sum(item.get('total_amount', 0) for item in items)
             }
         except Exception as e:
