@@ -28,25 +28,36 @@ class YesssInvoiceParser(BaseInvoiceParser):
     def extract_job_reference(self, text: str) -> str:
         """Extract job reference from YESSS invoice"""
         import re
-        # Look for ROSE COTTAGE or similar after YOUR ORDER REFERENCE
-        lines = text.split("\n")
+        lines = text.split('\n')
+        
+        # Find the line with YOUR ORDER REFERENCE header
         for i, line in enumerate(lines):
             if "YOUR ORDER REFERENCE" in line:
-                # Reference is on same line after the header
-                parts = line.split("YOUR ORDER REFERENCE")
-                if len(parts) > 1:
-                    ref = parts[1].split()[0] if parts[1].split() else None
-                    if ref and ref not in ["DATE", "INVOICE"]:
-                        # Handle multi-word references like ROSE COTTAGE
-                        words = parts[1].split()
-                        # Take words until we hit DATE or end
-                        ref_words = []
-                        for word in words:
-                            if word in ["DATE", "INVOICE"]:
-                                break
-                            ref_words.append(word)
-                        if ref_words:
-                            return " ".join(ref_words)
+                # The reference is usually on the NEXT line (below in the table)
+                # Or sometimes a few lines down
+                for j in range(i+1, min(i+5, len(lines))):
+                    next_line = lines[j].strip()
+                    # Skip lines with just dates or invoice numbers
+                    if next_line and not next_line.replace('/', '').replace('-', '').isdigit():
+                        # Extract potential job reference
+                        # It's usually the first meaningful text that's not a date
+                        words = next_line.split()
+                        if words:
+                            # Check if it looks like a job reference (letters, not just numbers/dates)
+                            first_word = words[0]
+                            if any(c.isalpha() for c in first_word):
+                                # Take up to 3 words for multi-word references like ROSE COTTAGE
+                                ref_words = []
+                                for word in words[:3]:
+                                    # Stop if we hit a date pattern or invoice pattern
+                                    if '/' in word or word.isdigit():
+                                        break
+                                    if any(c.isalpha() for c in word):
+                                        ref_words.append(word)
+                                if ref_words:
+                                    return ' '.join(ref_words)
+        return None
+
         return None
 
     def is_start_of_new_item(self, line: str) -> bool:
