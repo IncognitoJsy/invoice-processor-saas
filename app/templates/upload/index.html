@@ -430,7 +430,10 @@ function uploadPage() {
                 const data = await response.json();
                 
                 if (response.ok) {
+                    console.log('API Response:', data);
+                    console.log('Results:', data.results);
                     this.results = data.results || [];
+                    console.log('this.results:', this.results);
                     this.success = true;
                     this.successMessage = `Processed ${data.processed} invoice${data.processed > 1 ? 's' : ''} successfully`;
                     this.files = [];
