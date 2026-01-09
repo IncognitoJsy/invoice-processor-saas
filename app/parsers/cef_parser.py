@@ -105,11 +105,9 @@ class CEFInvoiceParser:
                 self.logger.info("CEF invoice detected, processing...")
                 
                 for page in pdf.pages:
-                    # First try table-based extraction
                     page_items = self._extract_from_tables(page)
                     
                     if not page_items:
-                        # Fallback to coordinate-based extraction
                         width = page.width
                         height = page.height
                         is_rotated = width > height
@@ -143,20 +141,14 @@ class CEFInvoiceParser:
             if not table or len(table) == 0:
                 return []
             
-            # Detect format type
             row = table[0]
             
-            # Format 1: Multiple columns (each column is an item) - JER765610 style
             if len(row) > 3 and any(cell and '\n' in str(cell) for cell in row):
                 self.logger.info("Detected column-based format (rotated PDF with items in columns)")
                 items = self._extract_table_columns(table)
-            
-            # Format 2: Single column with full row text - JER753997 style
             elif len(row) == 1:
                 self.logger.info("Detected row-based format (single column with space-separated data)")
                 items = self._extract_single_column_rows(table)
-            
-            # Format 3: Normal multi-column table
             else:
                 self.logger.info("Detected normal table format")
                 items = self._extract_normal_table(table)
@@ -178,11 +170,9 @@ class CEFInvoiceParser:
             
             line = row[0].strip()
             
-            # Skip header and empty rows
             if not line or 'Qty' in line and 'Item' in line:
                 continue
             
-            # Parse the space-separated line
             item = self._parse_single_line(line)
             if item:
                 items.append(item)
@@ -191,7 +181,7 @@ class CEFInvoiceParser:
         return items
 
     def _parse_single_line(self, line: str) -> Dict:
-        """Parse a single line like '1 SWA STORM20S Storm Cable Gland M20S 34.78 pack 65% 12.17 J'"""
+        """Parse a single line like '25 221-415 32A Compact 5 Way Conn 4mm Term Block 16.22 25 16.22 J'"""
         try:
             parts = line.split()
             
@@ -204,58 +194,53 @@ class CEFInvoiceParser:
             except:
                 return None
             
-            # Second element is part number (might be multi-word like "SWA STORM20S")
-            part_number_parts = []
+            # Second element is ALWAYS the part number (single word or hyphenated)
+            part_number = parts[1]
+            
+            # Special case: check if this is a multi-word part number like "SWA STORM20S"
+            # Pattern: First word is 3-4 letters, second word is ALLCAPS+numbers
+            if (len(parts) > 2 and 
+                len(parts[1]) <= 4 and 
+                parts[1].isupper() and 
+                re.match(r'^[A-Z]+\d+[A-Z]*$', parts[2])):
+                part_number = f"{parts[1]} {parts[2]}"
+                desc_start_idx = 3
+            else:
+                desc_start_idx = 2
+            
+            # Everything after part number until we hit a price is description
             description_parts = []
             price_per = 0.0
             discount = '0'
             total_amount = 0.0
-            unit = 'each'
             
-            found_price = False
-            i = 1
+            i = desc_start_idx
             
-            # Extract part number - keep collecting until we hit description text or price
+            # Collect description until we hit the price
             while i < len(parts):
                 part = parts[i]
                 
-                # Check if this looks like a part number component
-                # Part numbers: alphanumeric with hyphens (SWA, STORM20S, 251-100-040, GW44207)
-                if re.match(r'^[A-Z0-9\-]+$', part) and not found_price:
-                    part_number_parts.append(part)
-                    i += 1
-                elif part.replace('.', '').isdigit() and '.' in part:
-                    # This is the price
-                    price_per = float(part)
-                    found_price = True
-                    i += 1
-                    break
-                else:
-                    # Start of description
-                    break
-            
-            # Everything between part number and price is description
-            while i < len(parts) and not found_price:
-                part = parts[i]
+                # Check if this is a price (decimal number)
                 if part.replace('.', '').isdigit() and '.' in part:
                     price_per = float(part)
-                    found_price = True
                     i += 1
                     break
                 else:
                     description_parts.append(part)
                     i += 1
             
+            description = ' '.join(description_parts)
+            
             # After price, look for unit, discount, total
             while i < len(parts):
                 part = parts[i]
                 
-                if part in ['each', 'pack', 'm']:
-                    unit = part
+                if part in ['each', 'pack', 'm', '1', '100', '25']:
+                    # Skip unit indicators and multipliers
+                    pass
                 elif '%' in part:
                     discount = part.replace('%', '')
                 elif 'J' in part:
-                    # Total might be before J or combined with it
                     if part == 'J' and i > 0:
                         try:
                             total_amount = float(parts[i-1])
@@ -268,13 +253,9 @@ class CEFInvoiceParser:
                             pass
                     break
                 elif part.replace('.', '').isdigit() and '.' in part:
-                    # Could be total amount
                     total_amount = float(part)
                 
                 i += 1
-            
-            part_number = ' '.join(part_number_parts)
-            description = ' '.join(description_parts)
             
             # Calculate cost per item
             cost_per_item = 0.0
@@ -479,15 +460,7 @@ class CEFInvoiceParser:
 
     def _extract_rotated_page(self, page) -> List[Dict]:
         """Fallback: coordinate-based extraction for truly rotated pages"""
-        items = []
-        try:
-            words = page.extract_words(keep_blank_chars=True, x_tolerance=3, y_tolerance=3)
-            if not words:
-                return []
-            # ... (keep existing coordinate-based code as fallback)
-        except Exception as e:
-            self.logger.error(f"Error in _extract_rotated_page: {str(e)}")
-        return items
+        return []
 
     def _extract_normal_page(self, page) -> List[Dict]:
         """Fallback for normal pages"""
