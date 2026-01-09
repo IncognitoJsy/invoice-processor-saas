@@ -24,6 +24,24 @@ class YesssInvoiceParser(BaseInvoiceParser):
         except:
             return False
 
+
+    def extract_job_reference(self, text: str) -> str:
+        """Extract job reference from YESSS invoice"""
+        import re
+        patterns = [
+            r'YOUR ORDER REFERENCE[:\s]+([A-Z0-9\s\-/]+?)(?:\s+DATE|\n)',
+            r'ORDER REFERENCE[:\s]+([A-Z0-9\s\-/]+?)(?:\s+DATE|\n)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                job_ref = match.group(1).strip()
+                job_ref = re.sub(r'\s+', ' ', job_ref)
+                if job_ref and len(job_ref) > 2:
+                    return job_ref
+        return None
+
     def is_start_of_new_item(self, line: str) -> bool:
         """Check if this line starts a new item"""
         parts = line.split()
