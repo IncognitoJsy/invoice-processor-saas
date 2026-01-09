@@ -11,6 +11,16 @@ class CEFInvoiceParser:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+    def detect(self, pdf_path: str) -> bool:
+        """Detect if this is a CEF invoice"""
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                first_page_text = pdf.pages[0].extract_text() if len(pdf.pages) > 0 else ""
+                return "C.E.F." in first_page_text or "CEF" in first_page_text
+        except Exception as e:
+            self.logger.error(f"Error detecting CEF invoice: {str(e)}")
+            return False
+
     def calculate_new_prices(self, item: Dict) -> Dict:
         """Calculate new prices based on discount rules"""
         cost_per_item = item['cost_per_item']
