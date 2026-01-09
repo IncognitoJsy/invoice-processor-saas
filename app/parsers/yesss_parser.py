@@ -28,17 +28,20 @@ class YesssInvoiceParser(BaseInvoiceParser):
     def extract_job_reference(self, text: str) -> str:
         """Extract job reference from YESSS invoice"""
         import re
+        # Look for YOUR ORDER REFERENCE followed by the value on the next line or same line
         patterns = [
-            r'YOUR ORDER REFERENCE[:\s]+([A-Z0-9\s\-/]+?)(?:\s+DATE|\n)',
-            r'ORDER REFERENCE[:\s]+([A-Z0-9\s\-/]+?)(?:\s+DATE|\n)',
+            r'YOUR ORDER REFERENCE\s+([A-Z][A-Z0-9\s\-/]+?)\s+DATE',
+            r'YOUR ORDER REFERENCE\s*\n\s*([A-Z][A-Z0-9\s\-/]+)',
         ]
         
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 job_ref = match.group(1).strip()
+                # Clean up whitespace
                 job_ref = re.sub(r'\s+', ' ', job_ref)
-                if job_ref and len(job_ref) > 2:
+                # Filter out generic words
+                if job_ref and len(job_ref) > 2 and job_ref not in ['DATE', 'INVOICE', 'DUE DATE']:
                     return job_ref
         return None
 
