@@ -150,6 +150,7 @@ class CEFInvoiceParser:
             
             found_price = False
             price_line_idx = -1
+            found_part_number = False
             
             for i, line in enumerate(lines[1:], start=1):
                 if 'each' in line.lower():
@@ -163,17 +164,26 @@ class CEFInvoiceParser:
                     break
                 
                 elif not found_price:
-                    if re.match(r'^[A-Z0-9\-]+$', line):
+                    # Part number logic: collect consecutive ALL CAPS lines at the start
+                    # Once we hit a non-caps line, part number is complete
+                    if not found_part_number and re.match(r'^[A-Z0-9\-]+$', line):
                         part_number_lines.append(line)
-                    elif line.replace('.', '').isdigit() and '.' in line:
-                        try:
-                            price_per = float(line)
-                            found_price = True
-                            price_line_idx = i
-                        except:
-                            description_lines.append(line)
                     else:
-                        description_lines.append(line)
+                        # Once we hit a non-caps line, mark part number as complete
+                        if not found_part_number and part_number_lines:
+                            found_part_number = True
+                        
+                        # Check if this is a decimal number (price)
+                        if line.replace('.', '').isdigit() and '.' in line:
+                            try:
+                                price_per = float(line)
+                                found_price = True
+                                price_line_idx = i
+                                break
+                            except:
+                                description_lines.append(line)
+                        else:
+                            description_lines.append(line)
             
             # Look for discount and total after price
             if price_line_idx > 0:
@@ -182,11 +192,9 @@ class CEFInvoiceParser:
                     if '%' in remaining_line:
                         discount = remaining_line.replace('%', '').strip()
                     elif 'J' in remaining_line:
-                        # Try to extract number from same line
                         try:
                             total_amount = float(remaining_line.replace('J', '').strip())
                         except:
-                            # J is on separate line, look at previous line
                             if j > 0:
                                 prev_line = remaining_lines[j - 1]
                                 try:
