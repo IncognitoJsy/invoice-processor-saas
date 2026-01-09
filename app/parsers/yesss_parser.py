@@ -28,21 +28,25 @@ class YesssInvoiceParser(BaseInvoiceParser):
     def extract_job_reference(self, text: str) -> str:
         """Extract job reference from YESSS invoice"""
         import re
-        # Look for YOUR ORDER REFERENCE followed by the value on the next line or same line
-        patterns = [
-            r'YOUR ORDER REFERENCE\s+([A-Z][A-Z0-9\s\-/]+?)\s+DATE',
-            r'YOUR ORDER REFERENCE\s*\n\s*([A-Z][A-Z0-9\s\-/]+)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                job_ref = match.group(1).strip()
-                # Clean up whitespace
-                job_ref = re.sub(r'\s+', ' ', job_ref)
-                # Filter out generic words
-                if job_ref and len(job_ref) > 2 and job_ref not in ['DATE', 'INVOICE', 'DUE DATE']:
-                    return job_ref
+        # Look for ROSE COTTAGE or similar after YOUR ORDER REFERENCE
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if "YOUR ORDER REFERENCE" in line:
+                # Reference is on same line after the header
+                parts = line.split("YOUR ORDER REFERENCE")
+                if len(parts) > 1:
+                    ref = parts[1].split()[0] if parts[1].split() else None
+                    if ref and ref not in ["DATE", "INVOICE"]:
+                        # Handle multi-word references like ROSE COTTAGE
+                        words = parts[1].split()
+                        # Take words until we hit DATE or end
+                        ref_words = []
+                        for word in words:
+                            if word in ["DATE", "INVOICE"]:
+                                break
+                            ref_words.append(word)
+                        if ref_words:
+                            return " ".join(ref_words)
         return None
 
     def is_start_of_new_item(self, line: str) -> bool:
@@ -110,8 +114,12 @@ class YesssInvoiceParser(BaseInvoiceParser):
                             break
                         except ValueError:
                             continue
-                    for j in range(i+1, len(parts)):
-                        if parts[j].isdigit() or parts[j].replace('.', '').isdigit():
+                    # Look for discount: only 1-2 digit numbers after EACH, before amount
+                    for j in range(i+1, min(i+4, len(parts))):
+                        if parts[j].isdigit() and len(parts[j]) <= 2:
+                            discount = parts[j]
+                            break
+                        elif parts[j].replace('.', '').isdigit() and len(parts[j]) <= 3:
                             discount = parts[j]
                             break
                 elif part.endswith('R') and part[:-1].replace('.', '').replace(' ', '').isdigit():
