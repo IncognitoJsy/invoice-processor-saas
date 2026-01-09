@@ -41,8 +41,8 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
             if 'Your Order Ref' in line or 'REF' in line:
                 logger.info(f"Found REF line {i}: '{line}'")
         
-        # Simple pattern that works: look for "REF" followed by uppercase words
-        pattern = r'REF\s+([A-Z][A-Z\s]+?)(?:\s+Item|\s+Taken|\s+Advice|\n)'
+        # Pattern: REF followed by uppercase words, stopping at date (dd/mm/yyyy) or numbers
+        pattern = r'REF\s+([A-Z][A-Z\s]+?)(?:\s+\d{2}/\d{2}/\d{4}|\s+AN\d+|\s+Item|\s+Taken|\n)'
         
         match = re.search(pattern, text, re.MULTILINE)
         if match:
