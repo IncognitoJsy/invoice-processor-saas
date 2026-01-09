@@ -90,7 +90,10 @@ def api_upload():
                             'supplier': detected_supplier,
                             'items_count': len(parsed_data.get('items', [])),
                             'total': parsed_data.get('total', 0),
+                            'job_reference': parsed_data.get('job_reference'),
                             'items': parsed_data.get('items', [])[:5],
+                            'all_items': parsed_data.get('items', []),
+                            'expanded': False,
                             'success': True
                         })
                     else:
