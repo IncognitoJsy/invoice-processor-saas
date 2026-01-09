@@ -241,6 +241,17 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
 
             purchase_cost = purchase_cost_per_item * quantity
 
+            # Calculate selling price with markup
+            markup = self.calculate_markup(discount_percent)
+            selling_price = round(purchase_cost_per_item * (1 + markup), 2)
+            profit_per_item = round(selling_price - purchase_cost_per_item, 2)
+            
+            # Calculate original unit price (before discount)
+            if discount_percent > 0:
+                original_unit_price = round(purchase_cost_per_item / (1 - discount_percent / 100), 2)
+            else:
+                original_unit_price = purchase_cost_per_item
+
             return {
                 'part_number': item_code,
                 'description': description.strip(),
@@ -250,7 +261,11 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
                 'total_amount': round(total_amount, 2),
                 'cost_per_item': round(purchase_cost_per_item, 2),
                 'original_price': round(unit_price, 2),
-                'purchase_cost': round(purchase_cost, 2)
+                'original_unit_price': original_unit_price,
+                'purchase_cost': round(purchase_cost, 2),
+                'selling_price': selling_price,
+                'profit_per_item': profit_per_item,
+                'markup_percent': int(markup * 100)
             }
         except Exception as e:
             logger.error(f"Error extracting item: {str(e)}")
@@ -288,11 +303,16 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
                             if item:
                                 items.append(item)
                             i += 1
+            # Extract job reference from text
+                text = pdf.pages[0].extract_text()
+                job_reference = self.extract_job_reference(text)
+            
             return {
                 'supplier': 'WHOLESALE',
                 'items': items,
                 'invoice_number': None,
                 'invoice_date': None,
+                'job_reference': job_reference,
                 'total': sum(item.get('total_amount', 0) for item in items)
             }
         except Exception as e:
