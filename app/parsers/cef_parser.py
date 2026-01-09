@@ -27,9 +27,28 @@ class CEFInvoiceParser:
             items = self.extract_pdf_data(pdf_path)
             job_ref = self.extract_job_reference(pdf_path)
             
+            # Transform items to match frontend expectations
+            transformed_items = []
+            for item in items:
+                new_prices = self.calculate_new_prices(item)
+                
+                transformed_item = {
+                    'part_number': item['part_number'],
+                    'description': item['description'],
+                    'quantity': item['quantity'],
+                    'original_unit_price': item.get('price_per', 0),  # Frontend expects this
+                    'discount': item.get('discount', '0'),
+                    'cost_per_item': item.get('cost_per_item', 0),
+                    'total_amount': item.get('total_amount', 0),
+                    'selling_price': new_prices['new_sales_price'],  # Frontend expects this
+                    'markup_percent': self._get_markup_percent(item.get('discount', '0')),
+                    'profit_per_item': round(new_prices['new_sales_price'] - item.get('cost_per_item', 0), 2)
+                }
+                transformed_items.append(transformed_item)
+            
             return {
                 'success': True,
-                'items': items,
+                'items': transformed_items,
                 'job_reference': job_ref,
                 'supplier': 'CEF'
             }
@@ -42,6 +61,22 @@ class CEFInvoiceParser:
                 'error': str(e),
                 'items': []
             }
+
+    def _get_markup_percent(self, discount: str) -> int:
+        """Get markup percentage based on discount"""
+        try:
+            discount_val = float(discount)
+        except:
+            discount_val = 0
+        
+        if discount_val == 0:
+            return 20
+        elif 1 <= discount_val <= 30:
+            return 40
+        elif 30 < discount_val <= 70:
+            return 50
+        else:
+            return 70
 
     def calculate_new_prices(self, item: Dict) -> Dict:
         """Calculate new prices based on discount rules"""
@@ -164,22 +199,15 @@ class CEFInvoiceParser:
                     break
                 
                 elif not found_price:
-                    # Part number logic: 
-                    # 1. Must be ALL CAPS alphanumeric
-                    # 2. Must contain at least one letter (not just numbers)
-                    # 3. Keep collecting until we hit a non-matching line
                     is_all_caps = re.match(r'^[A-Z0-9\-]+$', line)
                     has_letter = any(c.isalpha() for c in line)
                     
                     if not found_part_number and is_all_caps and has_letter:
-                        # This is part of the part number
                         part_number_lines.append(line)
                     else:
-                        # Once we hit a non-matching line, part number is complete
                         if not found_part_number and part_number_lines:
                             found_part_number = True
                         
-                        # Check if this is a decimal number (price)
                         if line.replace('.', '').isdigit() and '.' in line:
                             try:
                                 price_per = float(line)
@@ -191,7 +219,6 @@ class CEFInvoiceParser:
                         else:
                             description_lines.append(line)
             
-            # Look for discount and total after price
             if price_line_idx > 0:
                 remaining_lines = lines[price_line_idx + 1:]
                 for j, remaining_line in enumerate(remaining_lines):
@@ -215,7 +242,6 @@ class CEFInvoiceParser:
             
             description = ' '.join(description_lines)
             
-            # Calculate cost per item
             cost_per_item = 0.0
             if total_amount > 0 and quantity > 0:
                 cost_per_item = round(total_amount / quantity, 2)
