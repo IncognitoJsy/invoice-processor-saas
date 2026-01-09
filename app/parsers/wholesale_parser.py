@@ -14,6 +14,34 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
         super().__init__()
         self.supplier_name = 'WHOLESALE'
 
+    
+    def calculate_markup(self, discount_percent):
+        if discount_percent == 0:
+            return 0.20
+        elif 1 <= discount_percent <= 30:
+            return 0.40
+        elif 30 < discount_percent <= 70:
+            return 0.50
+        else:
+            return 0.70
+
+    
+    def extract_job_reference(self, text):
+        import re
+        patterns = [
+            r'Your Order Ref[:\s]+(?:REF\s+)?([A-Z][A-Z\s]+?)(?:\s+Item|\s+Taken|\n)',
+            r'ORDER REF[:\s]+(?:REF\s+)?([A-Z][A-Z\s]+?)(?:\s+Item|\n)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                job_ref = match.group(1).strip()
+                job_ref = ' '.join(job_ref.split())
+                if job_ref and len(job_ref) > 2:
+                    return job_ref
+        return None
+
     def detect(self, filepath: str) -> bool:
         """Detect if this is a Wholesale invoice"""
         import pdfplumber
@@ -111,6 +139,17 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
                             else:
                                 cost_per_item = price_per
 
+                            # Calculate selling price with markup
+                            discount_val = float(discount.replace('%', '')) if discount and '%' in discount else (float(discount) if discount and str(discount).replace('.', '').isdigit() else 0)
+                            markup = self.calculate_markup(discount_val)
+                            selling_price = round(cost_per_item * (1 + markup), 2)
+                            profit_per_item = round(selling_price - cost_per_item, 2)
+                            
+                            if discount_val > 0:
+                                original_unit_price = round(cost_per_item / (1 - discount_val / 100), 2)
+                            else:
+                                original_unit_price = cost_per_item
+                            
                             items.append({
                                 'part_number': item_code,
                                 'description': description.strip(),
@@ -119,7 +158,11 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
                                 'discount': discount,
                                 'total_amount': round(total_amount, 2) if total_amount else 0,
                                 'cost_per_item': round(cost_per_item, 2),
-                                'original_price': round(price_per, 2)
+                                'original_price': round(price_per, 2),
+                                'original_unit_price': original_unit_price,
+                                'selling_price': selling_price,
+                                'profit_per_item': profit_per_item,
+                                'markup_percent': int(markup * 100)
                             })
         except Exception as e:
             logger.error(f"Error extracting from tables: {str(e)}")
