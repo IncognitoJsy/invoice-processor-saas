@@ -29,16 +29,24 @@ class YesssInvoiceParser(BaseInvoiceParser):
         """Extract job reference from YESSS invoice"""
         import re
         
-        # Pattern: Find text after "093IN" number and before a date (dd/mm/yyyy)
-        # Example: "093IN1054492 ROSE COTTAGE 21/11/2024"
-        pattern = r'093IN\d+\s+([A-Z][A-Z\s]+?)\s+\d{2}/\d{2}/\d{4}'
-        match = re.search(pattern, text)
+        # Try multiple patterns
+        patterns = [
+            # Pattern 1: 093INxxxxxx ROSE COTTAGE dd/mm/yyyy
+            r'093IN\d+\s+([A-Z][A-Z\s]+?)\s+\d{2}/\d{2}/\d{4}',
+            # Pattern 2: More flexible with whitespace/newlines
+            r'093IN\d+[\s\n]+([A-Z][A-Z\s]+?)[\s\n]+\d{2}/\d{2}/\d{4}',
+            # Pattern 3: Just look for uppercase words between invoice and date
+            r'\d{6,}[\s\n]+([A-Z][A-Z\s]{3,30}?)[\s\n]+\d{2}/\d{2}/\d{4}',
+        ]
         
-        if match:
-            job_ref = match.group(1).strip()
-            # Clean up extra spaces
-            job_ref = ' '.join(job_ref.split())
-            return job_ref
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                job_ref = match.group(1).strip()
+                job_ref = ' '.join(job_ref.split())
+                # Make sure it's not a table header or junk
+                if len(job_ref) > 2 and 'EACH' not in job_ref and 'DESCRIPTION' not in job_ref:
+                    return job_ref
         
         return None
 
