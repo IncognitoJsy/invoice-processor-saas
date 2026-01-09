@@ -32,30 +32,41 @@ class YesssInvoiceParser(BaseInvoiceParser):
         
         # Find the line with YOUR ORDER REFERENCE header
         for i, line in enumerate(lines):
-            if "YOUR ORDER REFERENCE" in line:
-                # The reference is usually on the NEXT line (below in the table)
-                # Or sometimes a few lines down
+            if "YOUR ORDER REFERENCE" in line and "DATE" in line:
+                # The reference is on the next data row (skip table headers)
                 for j in range(i+1, min(i+5, len(lines))):
                     next_line = lines[j].strip()
-                    # Skip lines with just dates or invoice numbers
-                    if next_line and not next_line.replace('/', '').replace('-', '').isdigit():
-                        # Extract potential job reference
-                        # It's usually the first meaningful text that's not a date
-                        words = next_line.split()
-                        if words:
-                            # Check if it looks like a job reference (letters, not just numbers/dates)
-                            first_word = words[0]
-                            if any(c.isalpha() for c in first_word):
-                                # Take up to 3 words for multi-word references like ROSE COTTAGE
-                                ref_words = []
-                                for word in words[:3]:
-                                    # Stop if we hit a date pattern or invoice pattern
-                                    if '/' in word or word.isdigit():
-                                        break
-                                    if any(c.isalpha() for c in word):
-                                        ref_words.append(word)
-                                if ref_words:
-                                    return ' '.join(ref_words)
+                    
+                    # Skip empty lines
+                    if not next_line:
+                        continue
+                    
+                    # Skip table headers like "Qty. Part No. Description"
+                    if "Qty." in next_line or "Part No" in next_line or "Description" in next_line:
+                        continue
+                    
+                    # Skip pure date lines or invoice number lines
+                    if next_line.replace('/', '').replace('-', '').replace('.', '').isdigit():
+                        continue
+                    
+                    # Extract reference - it's the part before any date
+                    # Format is like: "093IN1054492 ROSE COTTAGE 21/11/2024"
+                    words = next_line.split()
+                    if len(words) >= 2:
+                        # First word is usually account/invoice number, skip it
+                        # Find words that are letters (the job reference)
+                        ref_words = []
+                        for word in words[1:]:  # Skip first word (invoice number)
+                            # Stop at dates
+                            if '/' in word or len(word) > 15:
+                                break
+                            # Only take words with letters
+                            if any(c.isalpha() for c in word):
+                                ref_words.append(word)
+                        
+                        if ref_words:
+                            return ' '.join(ref_words)
+        
         return None
 
         return None
