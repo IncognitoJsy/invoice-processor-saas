@@ -82,6 +82,16 @@ class CEFInvoiceParser(BaseInvoiceParser):
                 text = page.extract_text() or ''
                 logger.info(f"Extracted text length: {len(text)}")
                 
+                # Log first 500 chars of text to debug
+                logger.info(f"Text sample: {text[:500]}")
+                
+                # Log lines that might contain items
+                lines = text.split('\n')
+                logger.info(f"Total lines: {len(lines)}")
+                for i, line in enumerate(lines[:20]):
+                    if line.strip():
+                        logger.info(f"Line {i}: {line[:100]}")
+                
                 # Extract job reference
                 job_reference = self.extract_job_reference(text)
                 logger.info(f"Job reference: {job_reference}")
