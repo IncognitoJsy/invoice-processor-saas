@@ -28,6 +28,19 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
     
     def extract_job_reference(self, text):
         import re
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Check if the text contains what we're looking for
+        logger.info(f"Looking for job ref. Text contains 'ROSE COTTAGE': {'ROSE COTTAGE' in text}")
+        logger.info(f"Text contains 'REF': {'REF' in text}")
+        
+        # Find lines with REF
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if 'Your Order Ref' in line or 'REF' in line:
+                logger.info(f"Found REF line {i}: '{line}'")
+        
         # Simple pattern that works: look for "REF" followed by uppercase words
         pattern = r'REF\s+([A-Z][A-Z\s]+?)(?:\s+Item|\s+Taken|\s+Advice|\n)'
         
@@ -35,8 +48,11 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
         if match:
             job_ref = match.group(1).strip()
             job_ref = ' '.join(job_ref.split())
+            logger.info(f"Matched job ref: '{job_ref}'")
             if job_ref and len(job_ref) > 2:
                 return job_ref
+        else:
+            logger.info("No regex match found")
         return None
 
     def detect(self, filepath: str) -> bool:
