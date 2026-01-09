@@ -163,7 +163,6 @@ class CEFInvoiceParser:
                     break
                 
                 elif not found_price:
-                    # ALL CAPS words are part number
                     if re.match(r'^[A-Z0-9\-]+$', line):
                         part_number_lines.append(line)
                     elif line.replace('.', '').isdigit() and '.' in line:
@@ -178,13 +177,23 @@ class CEFInvoiceParser:
             
             # Look for discount and total after price
             if price_line_idx > 0:
-                for remaining_line in lines[price_line_idx + 1:]:
+                remaining_lines = lines[price_line_idx + 1:]
+                for j, remaining_line in enumerate(remaining_lines):
                     if '%' in remaining_line:
                         discount = remaining_line.replace('%', '').strip()
                     elif 'J' in remaining_line:
-                        total_amount = float(remaining_line.replace('J', '').strip())
+                        # Try to extract number from same line
+                        try:
+                            total_amount = float(remaining_line.replace('J', '').strip())
+                        except:
+                            # J is on separate line, look at previous line
+                            if j > 0:
+                                prev_line = remaining_lines[j - 1]
+                                try:
+                                    total_amount = float(prev_line)
+                                except:
+                                    pass
             
-            # Join part number with spaces (e.g., "WIRELESS AIR SENSOR")
             part_number = ' '.join(part_number_lines) if part_number_lines else ''
             
             if not part_number and len(lines) > 1:
