@@ -114,6 +114,9 @@ class CEFInvoiceParser(BaseInvoiceParser):
                             logger.info("No header row found")
                             continue
                         
+                        # Log all rows
+                        logger.info(f"Processing {len(table) - header_row - 1} data rows")
+                        
                         # Process data rows
                         for row in table[header_row + 1:]:
                             if not row or len(row) < 4:
@@ -183,6 +186,88 @@ class CEFInvoiceParser(BaseInvoiceParser):
                             except Exception as e:
                                 logger.error(f"Error parsing CEF row: {e}")
                                 continue
+                
+                # Fallback: Try text-based parsing if no items found
+                if not items:
+                    logger.info("No items from table, trying text-based parsing")
+                    lines = text.split('\n')
+                    
+                    for i, line in enumerate(lines):
+                        # Look for lines with quantity at start (e.g., "1 VML004 ...")
+                        parts = line.strip().split()
+                        if not parts:
+                            continue
+                        
+                        try:
+                            # Check if first part is a number (quantity)
+                            qty = float(parts[0])
+                            if qty > 0 and len(parts) > 3:
+                                part_no = parts[1]
+                                
+                                # Find description and prices
+                                # Format: QTY PARTNO DESCRIPTION PRICE UNIT DISCOUNT TOTAL TAXCODE
+                                desc_parts = []
+                                prices = []
+                                
+                                for j, part in enumerate(parts[2:], start=2):
+                                    # Check if it's a price (contains decimal or is "each")
+                                    if '.' in part and part.replace('.', '').isdigit():
+                                        prices.append(float(part))
+                                    elif part == 'each':
+                                        continue
+                                    elif '%' in part:
+                                        # This is discount
+                                        break
+                                    elif not prices:
+                                        desc_parts.append(part)
+                                
+                                if len(prices) >= 2:
+                                    description = ' '.join(desc_parts)
+                                    original_price = prices[0]
+                                    total_amount = prices[-1]
+                                    
+                                    # Look for discount in the line
+                                    discount_pct = 0
+                                    for part in parts:
+                                        if '%' in part:
+                                            try:
+                                                discount_pct = float(part.replace('%', ''))
+                                                break
+                                            except:
+                                                pass
+                                    
+                                    cost_per_item = total_amount / qty if qty > 0 else original_price
+                                    
+                                    # Calculate selling price
+                                    markup = self.calculate_markup(discount_pct)
+                                    selling_price = round(cost_per_item * (1 + markup), 2)
+                                    profit_per_item = round(selling_price - cost_per_item, 2)
+                                    
+                                    if discount_pct > 0:
+                                        original_unit_price = round(cost_per_item / (1 - discount_pct / 100), 2)
+                                    else:
+                                        original_unit_price = cost_per_item
+                                    
+                                    item = {
+                                        'part_number': part_no,
+                                        'description': description,
+                                        'quantity': qty,
+                                        'price_per': original_price,
+                                        'discount': f'{discount_pct}%',
+                                        'total_amount': total_amount,
+                                        'cost_per_item': round(cost_per_item, 2),
+                                        'original_price': original_price,
+                                        'original_unit_price': original_unit_price,
+                                        'selling_price': selling_price,
+                                        'profit_per_item': profit_per_item,
+                                        'markup_percent': int(markup * 100)
+                                    }
+                                    
+                                    items.append(item)
+                                    logger.info(f"Text-parsed CEF item: {part_no}")
+                        
+                        except (ValueError, IndexError):
+                            continue
                 
                 total = sum(item['total_amount'] for item in items)
                 
