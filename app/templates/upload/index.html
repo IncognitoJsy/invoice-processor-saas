@@ -290,19 +290,25 @@
                                         <!-- Column 3: Pricing Breakdown -->
                                         <div class="space-y-2">
                                             <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit Price (After Discount)</p>
+                                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Purchase Cost/Unit</p>
                                                 <p class="text-lg font-bold text-gray-900 dark:text-gray-100">
-                                                    £<span x-text="item.price_per ? item.price_per.toFixed(2) : '0.00'"></span>
-                                                </p>
-                                            </div>
-                                            <div class="p-3 bg-success-50 dark:bg-success-900/20 rounded-lg">
-                                                <p class="text-xs font-medium text-success-700 dark:text-success-400 uppercase">Purchase Cost/Unit</p>
-                                                <p class="text-lg font-bold text-success-600 dark:text-success-400">
                                                     £<span x-text="item.cost_per_item ? item.cost_per_item.toFixed(2) : '0.00'"></span>
                                                 </p>
                                             </div>
+                                            <div class="p-3 bg-success-50 dark:bg-success-900/20 rounded-lg border-2 border-success-300 dark:border-success-700">
+                                                <p class="text-xs font-medium text-success-700 dark:text-success-400 uppercase">
+                                                    Selling Price/Unit 
+                                                    <span class="text-[10px] bg-success-200 dark:bg-success-800 px-1 rounded" x-text="'(+' + (item.markup_percent || 0) + '%)'"></span>
+                                                </p>
+                                                <p class="text-lg font-bold text-success-600 dark:text-success-400">
+                                                    £<span x-text="item.selling_price ? item.selling_price.toFixed(2) : '0.00'"></span>
+                                                </p>
+                                                <p class="text-xs text-success-600 dark:text-success-400">
+                                                    Profit: £<span x-text="item.profit_per_item ? item.profit_per_item.toFixed(2) : '0.00'"></span>
+                                                </p>
+                                            </div>
                                             <div class="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg border-2 border-primary-200 dark:border-primary-700">
-                                                <p class="text-xs font-medium text-primary-700 dark:text-primary-400 uppercase">Line Total</p>
+                                                <p class="text-xs font-medium text-primary-700 dark:text-primary-400 uppercase">Line Total (Cost)</p>
                                                 <p class="text-xl font-bold text-primary-600 dark:text-primary-400">
                                                     £<span x-text="item.total_amount ? item.total_amount.toFixed(2) : '0.00'"></span>
                                                 </p>
