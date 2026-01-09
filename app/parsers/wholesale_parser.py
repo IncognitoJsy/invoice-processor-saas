@@ -28,18 +28,15 @@ class WholesaleInvoiceParser(BaseInvoiceParser):
     
     def extract_job_reference(self, text):
         import re
-        patterns = [
-            r'Your Order Ref[:\s]+(?:REF\s+)?([A-Z][A-Z\s]+?)(?:\s+Item|\s+Taken|\n)',
-            r'ORDER REF[:\s]+(?:REF\s+)?([A-Z][A-Z\s]+?)(?:\s+Item|\n)',
-        ]
+        # Simple pattern that works: look for "REF" followed by uppercase words
+        pattern = r'REF\s+([A-Z][A-Z\s]+?)(?:\s+Item|\s+Taken|\s+Advice|\n)'
         
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                job_ref = match.group(1).strip()
-                job_ref = ' '.join(job_ref.split())
-                if job_ref and len(job_ref) > 2:
-                    return job_ref
+        match = re.search(pattern, text, re.MULTILINE)
+        if match:
+            job_ref = match.group(1).strip()
+            job_ref = ' '.join(job_ref.split())
+            if job_ref and len(job_ref) > 2:
+                return job_ref
         return None
 
     def detect(self, filepath: str) -> bool:
