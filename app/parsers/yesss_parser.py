@@ -230,9 +230,13 @@ class YesssInvoiceParser(BaseInvoiceParser):
                         if not line or not any(c.isdigit() for c in line.split()[0] if line.split()):
                             continue
                         if line.split() and line.split()[0].replace('.', '').isdigit():
+                            logger.info(f"Checking line {i}: {line[:80]}")
                             item = self.extract_item_from_line(line, lines, i)
                             if item:
+                                logger.info(f"  -> Added item: {item['part_number']}")
                                 items.append(item)
+                            else:
+                                logger.info(f"  -> Rejected (returned None)")
 
             # Extract full text for job reference
                 text = pdf.pages[0].extract_text()
