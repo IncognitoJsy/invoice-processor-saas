@@ -164,12 +164,18 @@ class CEFInvoiceParser:
                     break
                 
                 elif not found_price:
-                    # Part number logic: collect consecutive ALL CAPS lines at the start
-                    # Once we hit a non-caps line, part number is complete
-                    if not found_part_number and re.match(r'^[A-Z0-9\-]+$', line):
+                    # Part number logic: 
+                    # 1. Must be ALL CAPS alphanumeric
+                    # 2. Must contain at least one letter (not just numbers)
+                    # 3. Keep collecting until we hit a non-matching line
+                    is_all_caps = re.match(r'^[A-Z0-9\-]+$', line)
+                    has_letter = any(c.isalpha() for c in line)
+                    
+                    if not found_part_number and is_all_caps and has_letter:
+                        # This is part of the part number
                         part_number_lines.append(line)
                     else:
-                        # Once we hit a non-caps line, mark part number as complete
+                        # Once we hit a non-matching line, part number is complete
                         if not found_part_number and part_number_lines:
                             found_part_number = True
                         
