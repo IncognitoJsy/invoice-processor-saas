@@ -83,7 +83,7 @@ class YesssInvoiceParser(BaseInvoiceParser):
             part_no = parts[1]
             if 'JE' in part_no:
                 return None
-            if not (any(c.isdigit() or c == '-' for c in part_no) or len(part_no) > 3):
+            if not (any(c.isdigit() or c == '-' for c in part_no) or len(part_no) >= 3):
                 return None
 
             total_amount = None
