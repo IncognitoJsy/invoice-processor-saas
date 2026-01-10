@@ -14,12 +14,14 @@ def allowed_file(filename):
 
 @bp.route('/upload')
 def upload_page():
+    """Upload page"""
     return render_template('upload/index.html')
 
 @bp.route('/api/upload', methods=['POST'])
 def api_upload():
+    """Handle file upload and process invoices"""
     try:
-        current_app.logger.info("=== UPLOAD REQUEST ===")
+        current_app.logger.info("=== UPLOAD REQUEST RECEIVED ===")
         
         if 'files' not in request.files:
             return jsonify({'error': 'No files provided'}), 400
@@ -27,7 +29,7 @@ def api_upload():
         files = request.files.getlist('files')
         use_claude = request.form.get('use_claude', 'true').lower() == 'true'
         
-        if not files:
+        if not files or len(files) == 0:
             return jsonify({'error': 'No files selected'}), 400
         
         results = []
@@ -50,17 +52,22 @@ def api_upload():
                     
                     if parsed_data.get('success'):
                         items = parsed_data.get('items', [])
+                        total = sum(item.get('total_amount', 0) for item in items)
+                        
                         results.append({
                             'filename': filename,
                             'supplier': parsed_data.get('supplier', 'Unknown'),
                             'items_count': len(items),
-                            'total': sum(item.get('total_amount', 0) for item in items),
+                            'total': total,
                             'job_reference': parsed_data.get('job_reference'),
                             'items': items[:5],
                             'all_items': items,
+                            'expanded': False,
                             'success': True,
                             'method': parsed_data.get('method'),
-                            'confidence': parsed_data.get('confidence')
+                            'confidence': parsed_data.get('confidence'),
+                            'needs_review': parsed_data.get('needs_review', False),
+                            'comparison': parsed_data.get('comparison')
                         })
                     else:
                         errors.append(f"{filename}: {parsed_data.get('error')}")
@@ -69,11 +76,14 @@ def api_upload():
                         os.remove(filepath)
                         
                 except Exception as e:
+                    current_app.logger.error(f"Error: {str(e)}", exc_info=True)
                     errors.append(f"{filename}: {str(e)}")
         
         if results:
-            return jsonify({'success': True, 'processed': len(results), 'results': results})
-        return jsonify({'error': 'No invoices processed'}), 400
+            return jsonify({'success': True, 'processed': len(results), 'results': results, 'errors': errors})
+        else:
+            return jsonify({'error': 'No invoices processed', 'details': errors}), 400
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Server error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500

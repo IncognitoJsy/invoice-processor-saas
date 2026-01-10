@@ -1,0 +1,211 @@
+"""Master invoice parser service that uses multiple parsers and compares results"""
+import logging
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+class InvoiceParserService:
+    """
+    Master parser that uses both custom parsers and Claude API,
+    then compares results for maximum accuracy
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        
+        # Import parsers
+        from app.parsers.yesss_parser import YesssInvoiceParser
+        from app.parsers.cef_parser import CEFInvoiceParser
+        from app.parsers.wholesale_parser import WholesaleInvoiceParser
+        from app.parsers.claude_parser import ClaudeInvoiceParser
+        
+        self.custom_parsers = [
+            YesssInvoiceParser(),
+            CEFInvoiceParser(),
+            WholesaleInvoiceParser()
+        ]
+        
+        try:
+            self.claude_parser = ClaudeInvoiceParser()
+            self.claude_available = True
+        except ValueError as e:
+            self.logger.warning(f"Claude parser not available: {str(e)}")
+            self.claude_available = False
+    
+    def parse(self, pdf_path: str, use_claude: bool = True) -> Dict:
+        """
+        Parse invoice using multiple methods and compare results
+        
+        Args:
+        self.logger.info(f"\n{=*80}\n=== MASTER PARSER: {pdf_path} ===\n{=*80}")
+            use_claude: Whether to use Claude API (default True)
+        
+        Returns:
+            Dict with parsing results including comparison
+self.logger.info(f"📝 Custom Parser: {custom_result.get('method', 'unknown')} - Success: {custom_result.get('success')}")
+if custom_result.get('success'): self.logger.info(f"   Items extracted: {len(custom_result.get('items', []))}")
+        """
+        self.logger.info(f"=== MASTER PARSER: {pdf_path} ===")
+        
+        # Try custom parsers
+        custom_result = self._try_custom_parsers(pdf_path)
+self.logger.info(f"🤖 Claude Parser: Success: {claude_result.get('success')}")
+if claude_result.get('success'): self.logger.info(f"   Items extracted: {len(claude_result.get('items', []))}")
+        self.logger.info(f"Custom parser result: {custom_result.get('success')}")
+        
+        # If Claude not requested or not available, return custom result
+        if not use_claude or not self.claude_available:
+            return custom_result
+        
+        # Try Claude parser
+        claude_result = self.claude_parser.parse(pdf_path)
+        self.logger.info(f"Claude parser result: {claude_result.get('success')}")
+        
+        # If one failed, return the successful one
+        if not custom_result.get('success') and claude_result.get('success'):
+            self.logger.info("Only Claude succeeded")
+            return {
+                **claude_result,
+                'method': 'claude_only',
+                'confidence': 'medium'
+            }
+        
+self.logger.info(f"🔍 Comparison: Match={comparison['match']}, Differences={comparison['differences']}")
+        if custom_result.get('success') and not claude_result.get('success'):
+            self.logger.info("Only custom parser succeeded")
+            return {
+                **custom_result,
+                'method': 'custom_only',
+                'confidence': 'medium'
+            }
+        
+        if not custom_result.get('success') and not claude_result.get('success'):
+            self.logger.error("Both parsers failed")
+            return {
+                'success': False,
+                'error': 'Both parsers failed',
+                'custom_error': custom_result.get('error'),
+                'claude_error': claude_result.get('error')
+            }
+        
+        # Both succeeded - compare results
+        comparison = self._compare_results(custom_result, claude_result)
+        self.logger.info(f"Comparison: {comparison}")
+        
+        if comparison['match']:
+            # Both agree - high confidence
+            self.logger.info("✅ Both parsers agree - HIGH CONFIDENCE")
+            return {
+                'success': True,
+                'confidence': 'high',
+                'method': 'both_agreed',
+                'items': claude_result['items'],  # Use Claude's (better formatting)
+                'job_reference': claude_result.get('job_reference') or custom_result.get('job_reference'),
+                'supplier': claude_result.get('supplier') or custom_result.get('supplier'),
+                'comparison': {
+                    'agreed': True,
+                    'custom_item_count': len(custom_result.get('items', [])),
+                    'claude_item_count': len(claude_result.get('items', []))
+                }
+            }
+        else:
+            # Disagreement - flag for review
+            self.logger.warning(f"⚠️ Parsers disagree: {comparison['differences']}")
+            return {
+                'success': True,
+                'confidence': 'low',
+                'needs_review': True,
+                'method': 'disagreement',
+                
+                # Provide both results
+                'items': claude_result['items'],  # Default to Claude
+                'job_reference': claude_result.get('job_reference'),
+                'supplier': claude_result.get('supplier'),
+                
+                # Comparison details
+                'comparison': {
+                    'agreed': False,
+                    'differences': comparison['differences'],
+                    'custom_item_count': len(custom_result.get('items', [])),
+                    'claude_item_count': len(claude_result.get('items', [])),
+                    'custom_total': comparison['custom_total'],
+                    'claude_total': comparison['claude_total']
+                },
+                
+                # Full results for manual review
+                'custom_result': {
+                    'items': custom_result.get('items', []),
+                    'supplier': custom_result.get('supplier')
+                },
+                'claude_result': {
+                    'items': claude_result.get('items', []),
+                    'supplier': claude_result.get('supplier')
+                }
+            }
+    
+    def _try_custom_parsers(self, pdf_path: str) -> Dict:
+        """Try all custom parsers"""
+        for parser in self.custom_parsers:
+            try:
+                if parser.detect(pdf_path):
+                    result = parser.parse(pdf_path)
+                    if result.get('success'):
+                        return {
+                            **result,
+                            'method': f'custom_{parser.__class__.__name__}'
+                        }
+            except Exception as e:
+                self.logger.error(f"Custom parser error: {str(e)}")
+                continue
+        
+        return {
+            'success': False,
+            'error': 'No custom parser could handle this invoice'
+        }
+    
+    def _compare_results(self, result1: Dict, result2: Dict) -> Dict:
+        """Compare two parsing results"""
+        differences = []
+        
+        items1 = result1.get('items', [])
+        items2 = result2.get('items', [])
+        
+        # Compare item counts
+        count1 = len(items1)
+        count2 = len(items2)
+        
+        if count1 != count2:
+            differences.append(f'Item count: {count1} vs {count2}')
+        
+        # Calculate totals
+        total1 = sum(item.get('total_amount', 0) for item in items1)
+        total2 = sum(item.get('total_amount', 0) for item in items2)
+        
+        # Compare totals (allow £1 difference for rounding)
+        if abs(total1 - total2) > 1.00:
+            differences.append(f'Total: £{total1:.2f} vs £{total2:.2f} (diff: £{abs(total1-total2):.2f})')
+        
+        # Compare part numbers
+        parts1 = {item['part_number'] for item in items1}
+        parts2 = {item['part_number'] for item in items2}
+        
+        missing_in_1 = parts2 - parts1
+        missing_in_2 = parts1 - parts2
+        
+        if missing_in_1:
+            differences.append(f'Custom missing: {list(missing_in_1)[:5]}')  # Show first 5
+        if missing_in_2:
+            differences.append(f'Claude missing: {list(missing_in_2)[:5]}')
+        
+        # Match if no significant differences
+        match = (
+            len(differences) == 0 or 
+            (abs(total1 - total2) <= 1.00 and count1 == count2)
+        )
+        
+        return {
+            'match': match,
+            'differences': differences,
+            'custom_total': total1,
+            'claude_total': total2
+        }
