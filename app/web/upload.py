@@ -85,14 +85,18 @@ def api_upload():
                         parsed_data = parser.parse(filepath)
                         current_app.logger.info(f"Parse complete: {parsed_data}")
                         
+                        # Calculate total from items
+                        items = parsed_data.get('items', [])
+                        total = sum(item.get('total_amount', 0) for item in items)
+                        
                         results.append({
                             'filename': filename,
                             'supplier': detected_supplier,
-                            'items_count': len(parsed_data.get('items', [])),
-                            'total': parsed_data.get('total', 0),
+                            'items_count': len(items),
+                            'total': total,
                             'job_reference': parsed_data.get('job_reference'),
-                            'items': parsed_data.get('items', [])[:5],
-                            'all_items': parsed_data.get('items', []),
+                            'items': items[:5],
+                            'all_items': items,
                             'expanded': False,
                             'success': True
                         })
