@@ -1,6 +1,9 @@
 """Claude API-based invoice parser using vision"""
 import anthropic
 import os
+"""Claude API-based invoice parser using vision"""
+import anthropic
+import os
 import base64
 import json
 import logging
@@ -18,7 +21,10 @@ class ClaudeInvoiceParser:
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
         
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = anthropic.Anthropic(
+            api_key=api_key,
+            max_retries=2
+        )
         self.logger = logging.getLogger(__name__)
     
     def parse(self, pdf_path: str) -> Dict:
