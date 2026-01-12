@@ -15,6 +15,10 @@ def create_app(config_name='default'):
     login_manager.init_app(app)
     limiter.init_app(app)
     
+    # Create tables if they don't exist (for SQLite on Railway)
+    with app.app_context():
+        db.create_all()
+    
     # Configure logging
     configure_logging(app)
     
