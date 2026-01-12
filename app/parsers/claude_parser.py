@@ -1,15 +1,10 @@
 """Claude API-based invoice parser using vision"""
 import anthropic
 import os
-"""Claude API-based invoice parser using vision"""
-import anthropic
-import os
 import base64
 import json
 import logging
-from typing import Dict, List
-from pdf2image import convert_from_path
-import io
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -28,51 +23,34 @@ class ClaudeInvoiceParser:
         self.logger = logging.getLogger(__name__)
     
     def parse(self, pdf_path: str) -> Dict:
-        """Parse invoice using Claude API with vision"""
+        """Parse invoice using Claude API - send PDF directly"""
         try:
             self.logger.info(f"Claude parsing: {pdf_path}")
             
-            # Convert PDF to images (first 2 pages)
-            images = convert_from_path(pdf_path, first_page=1, last_page=2, dpi=200)
+            # Read PDF file as binary and encode to base64
+            with open(pdf_path, 'rb') as f:
+                pdf_data = base64.standard_b64encode(f.read()).decode('utf-8')
             
-            if not images:
-                return {'success': False, 'error': 'Could not convert PDF to images'}
-            
-            # Encode images to base64
-            image_data = []
-            for img in images[:2]:  # Max 2 pages
-                img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format='PNG')
-                img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
-                image_data.append(img_base64)
-            
-            # Call Claude API
-            message_content = []
-            
-            # Add images
-            for img_base64 in image_data:
-                message_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": img_base64
-                    }
-                })
-            
-            # Add text prompt
-            message_content.append({
-                "type": "text",
-                "text": self._get_extraction_prompt()
-            })
-            
-            # Make API call
+            # Call Claude API with PDF document
             message = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
-                    "content": message_content
+                    "content": [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "application/pdf",
+                                "data": pdf_data
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": self._get_extraction_prompt()
+                        }
+                    ]
                 }]
             )
             
