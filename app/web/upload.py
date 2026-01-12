@@ -1,4 +1,4 @@
-"""Upload routes"""
+"""Upload routes - handles single and consolidated invoices"""
 from flask import Blueprint, render_template, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 import os
@@ -14,10 +14,12 @@ def allowed_file(filename):
 
 @bp.route('/upload')
 def upload_page():
+    """Upload page"""
     return render_template('upload/index.html')
 
 @bp.route('/api/upload', methods=['POST'])
 def api_upload():
+    """Handle file upload and process invoices - supports consolidated invoices"""
     try:
         current_app.logger.info("=== UPLOAD REQUEST ===")
         
@@ -27,7 +29,7 @@ def api_upload():
         files = request.files.getlist('files')
         use_claude = request.form.get('use_claude', 'true').lower() == 'true'
         
-        if not files:
+        if not files or len(files) == 0:
             return jsonify({'error': 'No files selected'}), 400
         
         results = []
@@ -46,34 +48,62 @@ def api_upload():
                     os.makedirs('temp_uploads', exist_ok=True)
                     file.save(filepath)
                     
-                    parsed_data = master_parser.parse(filepath, use_claude=use_claude)
+                    # Parser now returns LIST of invoices (for consolidated support)
+                    parsed_invoices = master_parser.parse(filepath, use_claude=use_claude)
                     
-                    if parsed_data.get('success'):
-                        items = parsed_data.get('items', [])
-                        results.append({
-                            'filename': filename,
-                            'supplier': parsed_data.get('supplier', 'Unknown'),
-                            'items_count': len(items),
-                            'total': sum(item.get('total_amount', 0) for item in items),
-                            'job_reference': parsed_data.get('job_reference'),
-                            'items': items[:5],
-                            'all_items': items,
-                            'success': True,
-                            'method': parsed_data.get('method'),
-                            'confidence': parsed_data.get('confidence')
-                        })
-                    else:
-                        errors.append(f"{filename}: {parsed_data.get('error')}")
+                    # Process each invoice (could be 1 for single, or multiple for consolidated)
+                    for invoice_data in parsed_invoices:
+                        if invoice_data.get('success'):
+                            items = invoice_data.get('items', [])
+                            total = sum(item.get('total_amount', 0) for item in items)
+                            
+                            result = {
+                                'filename': filename,
+                                'supplier': invoice_data.get('supplier', 'Unknown'),
+                                'items_count': len(items),
+                                'total': total,
+                                'job_reference': invoice_data.get('job_reference'),
+                                'items': items[:5],  # First 5 for preview
+                                'all_items': items,  # All items for expansion
+                                'expanded': False,
+                                'success': True,
+                                'method': invoice_data.get('method'),
+                                'confidence': invoice_data.get('confidence'),
+                                'needs_review': invoice_data.get('needs_review', False),
+                                'comparison': invoice_data.get('comparison')
+                            }
+                            
+                            # Add consolidated metadata if present
+                            if invoice_data.get('consolidated'):
+                                result['consolidated'] = True
+                                result['order_number'] = invoice_data.get('order_number')
+                                result['total_orders'] = invoice_data.get('total_orders')
+                            
+                            results.append(result)
+                        else:
+                            errors.append(f"{filename}: {invoice_data.get('error')}")
                     
+                    # Clean up temp file
                     if os.path.exists(filepath):
                         os.remove(filepath)
                         
                 except Exception as e:
+                    current_app.logger.error(f"Error processing {filename}: {str(e)}", exc_info=True)
                     errors.append(f"{filename}: {str(e)}")
         
         if results:
-            return jsonify({'success': True, 'processed': len(results), 'results': results})
-        return jsonify({'error': 'No invoices processed'}), 400
+            return jsonify({
+                'success': True,
+                'processed': len(results),
+                'results': results,
+                'errors': errors if errors else []
+            })
+        else:
+            return jsonify({
+                'error': 'No invoices processed',
+                'details': errors
+            }), 400
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Server error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
