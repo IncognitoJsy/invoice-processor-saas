@@ -21,5 +21,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Run migrations then start gunicorn with access logs
-CMD flask db upgrade && gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
+# Start gunicorn (no auto-migration)
+CMD gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
