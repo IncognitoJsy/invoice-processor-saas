@@ -1,0 +1,485 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Invoices - FluxOps{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Invoices</h1>
+            <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage all your processed invoices</p>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Invoices</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-total">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Cost</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-cost">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Selling</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-selling">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Profit</p>
+                        <p class="text-2xl font-bold text-green-600 dark:text-green-400" id="stat-profit">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6 border border-gray-200 dark:border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
+                    <input type="text" id="search-input" placeholder="Job reference, supplier..." 
+                           class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supplier</label>
+                    <select id="supplier-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All Suppliers</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Range</label>
+                    <select id="date-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="year">This Year</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="exportCSV()" class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoices Table -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supplier</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Job Reference</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selling</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profit</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoices-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        <!-- Invoices loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden py-12 text-center">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No invoices</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by uploading your first invoice.</p>
+                <div class="mt-6">
+                    <a href="/upload" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Upload Invoice
+                    </a>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="py-12 text-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading invoices...</p>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="hidden mt-6 flex items-center justify-between">
+            <div class="text-sm text-gray-700 dark:text-gray-300">
+                Showing <span id="showing-start">1</span> to <span id="showing-end">10</span> of <span id="showing-total">0</span> invoices
+            </div>
+            <div class="flex space-x-2">
+                <button id="prev-btn" onclick="prevPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                    Previous
+                </button>
+                <button id="next-btn" onclick="nextPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                    Next
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Invoice Detail Modal -->
+<div id="invoice-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white" id="modal-title">Invoice Details</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400" id="modal-subtitle"></p>
+            </div>
+            <button onclick="closeModal()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[60vh]">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Part #</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qty</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cost</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Selling</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Profit</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-items" class="divide-y divide-gray-200 dark:divide-gray-700">
+                </tbody>
+            </table>
+        </div>
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500 dark:text-gray-400">Total Cost:</span>
+                <span class="font-bold text-gray-900 dark:text-white" id="modal-total-cost">£0.00</span>
+            </div>
+            <div class="flex justify-between text-sm mt-1">
+                <span class="text-gray-500 dark:text-gray-400">Total Selling:</span>
+                <span class="font-bold text-gray-900 dark:text-white" id="modal-total-selling">£0.00</span>
+            </div>
+            <div class="flex justify-between text-sm mt-1">
+                <span class="text-gray-500 dark:text-gray-400">Total Profit:</span>
+                <span class="font-bold text-green-600 dark:text-green-400" id="modal-total-profit">£0.00</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allInvoices = [];
+let filteredInvoices = [];
+let currentPage = 1;
+const perPage = 20;
+
+// Load invoices on page load
+document.addEventListener('DOMContentLoaded', loadInvoices);
+
+// Filter listeners
+document.getElementById('search-input').addEventListener('input', debounce(applyFilters, 300));
+document.getElementById('supplier-filter').addEventListener('change', applyFilters);
+document.getElementById('date-filter').addEventListener('change', applyFilters);
+
+async function loadInvoices() {
+    try {
+        const response = await fetch('/api/invoices');
+        const data = await response.json();
+        
+        if (data.success) {
+            allInvoices = data.invoices;
+            filteredInvoices = [...allInvoices];
+            
+            // Update stats
+            updateStats(data.stats);
+            
+            // Populate supplier filter
+            populateSupplierFilter(data.suppliers);
+            
+            // Render table
+            renderInvoices();
+        }
+    } catch (error) {
+        console.error('Error loading invoices:', error);
+    } finally {
+        document.getElementById('loading-state').classList.add('hidden');
+    }
+}
+
+function updateStats(stats) {
+    document.getElementById('stat-total').textContent = stats.total_invoices || 0;
+    document.getElementById('stat-cost').textContent = '£' + (stats.total_cost || 0).toFixed(2);
+    document.getElementById('stat-selling').textContent = '£' + (stats.total_selling || 0).toFixed(2);
+    document.getElementById('stat-profit').textContent = '£' + (stats.total_profit || 0).toFixed(2);
+}
+
+function populateSupplierFilter(suppliers) {
+    const select = document.getElementById('supplier-filter');
+    suppliers.forEach(supplier => {
+        const option = document.createElement('option');
+        option.value = supplier;
+        option.textContent = supplier;
+        select.appendChild(option);
+    });
+}
+
+function applyFilters() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const supplier = document.getElementById('supplier-filter').value;
+    const dateRange = document.getElementById('date-filter').value;
+    
+    filteredInvoices = allInvoices.filter(inv => {
+        // Search filter
+        if (search && !inv.job_reference?.toLowerCase().includes(search) && 
+            !inv.supplier_name?.toLowerCase().includes(search) &&
+            !inv.invoice_number?.toLowerCase().includes(search)) {
+            return false;
+        }
+        
+        // Supplier filter
+        if (supplier && inv.supplier_name !== supplier) {
+            return false;
+        }
+        
+        // Date filter
+        if (dateRange) {
+            const invDate = new Date(inv.created_at);
+            const now = new Date();
+            
+            if (dateRange === 'today') {
+                if (invDate.toDateString() !== now.toDateString()) return false;
+            } else if (dateRange === 'week') {
+                const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+                if (invDate < weekAgo) return false;
+            } else if (dateRange === 'month') {
+                const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+                if (invDate < monthAgo) return false;
+            } else if (dateRange === 'year') {
+                const yearAgo = new Date(now - 365 * 24 * 60 * 60 * 1000);
+                if (invDate < yearAgo) return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    currentPage = 1;
+    renderInvoices();
+}
+
+function renderInvoices() {
+    const tbody = document.getElementById('invoices-table');
+    const emptyState = document.getElementById('empty-state');
+    const pagination = document.getElementById('pagination');
+    
+    if (filteredInvoices.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        pagination.classList.add('hidden');
+        return;
+    }
+    
+    emptyState.classList.add('hidden');
+    
+    // Pagination
+    const start = (currentPage - 1) * perPage;
+    const end = start + perPage;
+    const pageInvoices = filteredInvoices.slice(start, end);
+    
+    tbody.innerHTML = pageInvoices.map(inv => `
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="viewInvoice(${inv.id})">
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                ${formatDate(inv.created_at)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 text-xs font-medium rounded-full 
+                    ${inv.supplier_name === 'YESSS Electrical' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : ''}
+                    ${inv.supplier_name === 'CEF' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : ''}
+                    ${inv.supplier_name === 'Wholesale Electrics' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : ''}
+                ">
+                    ${inv.supplier_name}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
+                ${inv.job_reference || '-'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                ${inv.items_count} items
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
+                £${(inv.total_cost || 0).toFixed(2)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
+                £${(inv.total_selling || 0).toFixed(2)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(inv.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                £${(inv.total_profit || 0).toFixed(2)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <button onclick="event.stopPropagation(); viewInvoice(${inv.id})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+    
+    // Update pagination
+    const totalPages = Math.ceil(filteredInvoices.length / perPage);
+    pagination.classList.toggle('hidden', totalPages <= 1);
+    
+    document.getElementById('showing-start').textContent = start + 1;
+    document.getElementById('showing-end').textContent = Math.min(end, filteredInvoices.length);
+    document.getElementById('showing-total').textContent = filteredInvoices.length;
+    
+    document.getElementById('prev-btn').disabled = currentPage === 1;
+    document.getElementById('next-btn').disabled = currentPage === totalPages;
+}
+
+async function viewInvoice(id) {
+    try {
+        const response = await fetch(`/api/invoices/${id}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const inv = data.invoice;
+            
+            document.getElementById('modal-title').textContent = inv.job_reference || 'Invoice Details';
+            document.getElementById('modal-subtitle').textContent = `${inv.supplier_name} • ${formatDate(inv.created_at)}`;
+            
+            document.getElementById('modal-items').innerHTML = inv.items.map(item => `
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">${item.part_number || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${item.description || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center">${item.quantity}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${(item.total_amount || 0).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${((item.selling_price || 0) * item.quantity).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-right font-medium ${(item.profit_per_item || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                        £${((item.profit_per_item || 0) * item.quantity).toFixed(2)}
+                    </td>
+                </tr>
+            `).join('');
+            
+            document.getElementById('modal-total-cost').textContent = '£' + (inv.total_cost || 0).toFixed(2);
+            document.getElementById('modal-total-selling').textContent = '£' + (inv.total_selling || 0).toFixed(2);
+            document.getElementById('modal-total-profit').textContent = '£' + (inv.total_profit || 0).toFixed(2);
+            
+            document.getElementById('invoice-modal').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error loading invoice:', error);
+    }
+}
+
+function closeModal() {
+    document.getElementById('invoice-modal').classList.add('hidden');
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        renderInvoices();
+    }
+}
+
+function nextPage() {
+    const totalPages = Math.ceil(filteredInvoices.length / perPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        renderInvoices();
+    }
+}
+
+async function exportCSV() {
+    try {
+        const response = await fetch('/api/invoices/export');
+        const blob = await response.blob();
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoices_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Error exporting:', error);
+    }
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+// Close modal on escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+});
+
+// Close modal on backdrop click
+document.getElementById('invoice-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'invoice-modal') closeModal();
+});
+</script>
+{% endblock %}
