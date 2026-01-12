@@ -49,6 +49,10 @@ class Invoice(db.Model):
     processed_at = db.Column(db.DateTime, default=datetime.utcnow)
     error_message = db.Column(db.Text)
     
+    # QuickBooks sync
+    qb_bill_id = db.Column(db.String(50))
+    qb_synced_at = db.Column(db.DateTime)
+    
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -73,7 +77,9 @@ class Invoice(db.Model):
             'confidence': self.confidence,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'is_consolidated': self.is_consolidated,
-            'order_number': self.order_number
+            'order_number': self.order_number,
+            'qb_bill_id': self.qb_bill_id,
+            'qb_synced_at': self.qb_synced_at.isoformat() if self.qb_synced_at else None
         }
 
 
