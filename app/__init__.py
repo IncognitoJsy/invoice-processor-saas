@@ -53,7 +53,10 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload
+    from app.web import dashboard, invoices, queue, settings, upload, auth
+    
+    # Auth (must be first!)
+    app.register_blueprint(auth.bp)
     
     # Web interface
     app.register_blueprint(dashboard.bp)
@@ -73,9 +76,10 @@ def register_error_handlers(app):
         db.session.rollback()
         return {'error': 'Internal server error'}, 500
 
-
 @login_manager.user_loader
 def load_user(user_id):
     """Load user for Flask-Login"""
     from app.models.user import User
     return User.query.get(int(user_id))
+
+login_manager.login_view = 'auth.login'

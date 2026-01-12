@@ -1,5 +1,6 @@
 """Upload routes - handles single and consolidated invoices"""
 from flask import Blueprint, render_template, request, jsonify, current_app
+from flask_login import login_required
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
@@ -13,11 +14,13 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @bp.route('/upload')
+@login_required
 def upload_page():
     """Upload page"""
     return render_template('upload/index.html')
 
 @bp.route('/api/upload', methods=['POST'])
+@login_required
 def api_upload():
     """Handle file upload and process invoices - supports consolidated invoices"""
     try:
