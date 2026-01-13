@@ -1,4 +1,4 @@
-"""Master invoice parser service - handles consolidated invoices"""
+"""Master invoice parser service - handles consolidated invoices with duplicate detection"""
 import logging
 from typing import Dict, List
 
@@ -28,11 +28,13 @@ class InvoiceParserService:
             self.logger.warning(f"Claude parser not available: {str(e)}")
             self.claude_available = False
     
-    def parse(self, pdf_path: str, use_claude: bool = True) -> List[Dict]:
+    def parse(self, pdf_path: str, use_claude: bool = True, user_id: int = None) -> List[Dict]:
         """
         Parse invoice - returns LIST of invoices (for consolidated support)
         Single invoice returns list with 1 item
         Consolidated returns list with multiple items
+        
+        If user_id is provided, checks for duplicate invoices
         """
         
         print("\n" + "="*80)
@@ -48,8 +50,14 @@ class InvoiceParserService:
         if not use_claude or not self.claude_available:
             print("\n⚠️  Claude not used\n")
             if custom_result.get('success'):
-                return [custom_result]  # Wrap in list
-            return [{'success': False, 'error': custom_result.get('error')}]
+                results = [custom_result]
+            else:
+                results = [{'success': False, 'error': custom_result.get('error')}]
+            
+            # Check for duplicates if user_id provided
+            if user_id:
+                results = self._check_duplicates(results, user_id)
+            return results
         
         # Try Claude parser
         print(f"\n🤖 CLAUDE PARSER: Running...")
@@ -58,12 +66,60 @@ class InvoiceParserService:
         # Check if consolidated
         if claude_result.get('consolidated'):
             print(f"✅ Detected CONSOLIDATED invoice with {len(claude_result.get('invoices', []))} orders")
-            return self._handle_consolidated(claude_result, custom_result, pdf_path)
+            if claude_result.get('skipped_credits', 0) > 0:
+                print(f"⚠️  Skipped {claude_result['skipped_credits']} credit note(s)")
+            results = self._handle_consolidated(claude_result, custom_result, pdf_path)
+        else:
+            # Single invoice - do normal comparison
+            print(f"📄 Single invoice detected")
+            compared = self._compare_single(custom_result, claude_result)
+            results = [compared]  # Wrap in list
         
-        # Single invoice - do normal comparison
-        print(f"📄 Single invoice detected")
-        compared = self._compare_single(custom_result, claude_result)
-        return [compared]  # Wrap in list
+        # Check for duplicates if user_id provided
+        if user_id:
+            results = self._check_duplicates(results, user_id)
+        
+        return results
+    
+    def _check_duplicates(self, invoices: List[Dict], user_id: int) -> List[Dict]:
+        """Check all parsed invoices for duplicates"""
+        from app.services.duplicate_detection import get_duplicate_service
+        
+        dup_service = get_duplicate_service()
+        
+        for invoice in invoices:
+            if not invoice.get('success'):
+                continue
+            
+            supplier = invoice.get('supplier', '')
+            inv_number = invoice.get('invoice_number')
+            
+            if inv_number:
+                is_dup, existing = dup_service.check_duplicate(user_id, supplier, inv_number)
+                invoice['is_duplicate'] = is_dup
+                invoice['existing_invoice'] = existing
+                
+                if is_dup:
+                    print(f"\n⚠️  DUPLICATE DETECTED: Invoice {inv_number} already exists!")
+                    print(f"   Existing invoice ID: {existing.get('id')}")
+                    print(f"   Created: {existing.get('created_at')}\n")
+            else:
+                # No invoice number - check for similar invoices
+                total = sum(item.get('total_amount', 0) for item in invoice.get('items', []))
+                job_ref = invoice.get('job_reference')
+                
+                is_similar, similar = dup_service.check_similar_invoice(
+                    user_id, supplier, total, job_ref
+                )
+                
+                if is_similar:
+                    invoice['is_potential_duplicate'] = True
+                    invoice['similar_invoice'] = similar
+                    print(f"\n⚠️  POTENTIAL DUPLICATE: Similar invoice found!")
+                    print(f"   Similar invoice: {similar.get('invoice_number')}")
+                    print(f"   Total: £{similar.get('total_cost'):.2f}\n")
+        
+        return invoices
     
     def _handle_consolidated(self, claude_result: Dict, custom_result: Dict, pdf_path: str) -> List[Dict]:
         """Handle consolidated invoice with multiple job references"""
@@ -76,6 +132,7 @@ class InvoiceParserService:
         for idx, invoice in enumerate(invoices):
             print(f"\n📋 Processing Order {idx + 1}/{len(invoices)}")
             print(f"   Job Reference: {invoice.get('job_reference')}")
+            print(f"   Invoice Number: {invoice.get('invoice_number')}")
             print(f"   Items: {len(invoice.get('items', []))}")
             
             # Add consolidated metadata
@@ -92,6 +149,11 @@ class InvoiceParserService:
     
     def _compare_single(self, custom_result: Dict, claude_result: Dict) -> Dict:
         """Compare single invoice results"""
+        
+        # Check if Claude returned a credit note error
+        if claude_result.get('is_credit_note'):
+            print("\n⚠️  Document is a CREDIT NOTE - skipping\n")
+            return {'success': False, 'error': 'Document is a credit note', 'is_credit_note': True}
         
         if not custom_result.get('success') and claude_result.get('success'):
             print("\n✅ Only Claude succeeded\n")
@@ -117,6 +179,7 @@ class InvoiceParserService:
                 'items': claude_result['items'],
                 'job_reference': claude_result.get('job_reference'),
                 'supplier': claude_result.get('supplier'),
+                'invoice_number': claude_result.get('invoice_number'),
                 'comparison': comparison
             }
         else:
@@ -129,6 +192,7 @@ class InvoiceParserService:
                 'items': claude_result['items'],
                 'job_reference': claude_result.get('job_reference'),
                 'supplier': claude_result.get('supplier'),
+                'invoice_number': claude_result.get('invoice_number'),
                 'comparison': comparison
             }
     

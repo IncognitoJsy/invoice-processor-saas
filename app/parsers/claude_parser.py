@@ -4,6 +4,7 @@ import os
 import base64
 import json
 import logging
+import re
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -75,14 +76,17 @@ class ClaudeInvoiceParser:
 
 CRITICAL: This PDF may contain MULTIPLE invoices (consolidated invoice). Each invoice has its own job reference and should be treated separately.
 
+CRITICAL: This PDF may also contain CREDIT NOTES mixed with invoices. You MUST identify each document type.
+
 Extract all invoices and return ONLY valid JSON with no markdown formatting, no code blocks, no explanation:
 
 {
     "invoices": [
         {
+            "document_type": "invoice" or "credit_note",
             "supplier": "name of supplier (e.g. YESSS Electrical, CEF, Wholesale Electrics)",
+            "invoice_number": "EXACT invoice number as shown on document - THIS IS CRITICAL",
             "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD)",
-            "invoice_number": "invoice number if present",
             "total_net_amount": 2788.74,
             "items": [
                 {
@@ -98,27 +102,38 @@ Extract all invoices and return ONLY valid JSON with no markdown formatting, no 
     ]
 }
 
+INVOICE NUMBER EXTRACTION - VERY IMPORTANT:
+1. **CEF**: Invoice number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
+2. **YESSS**: Invoice number is directly under "INVOICE NUMBER" text, starts with "093" (e.g., 0931234567)
+3. **Wholesale Electrics**: Invoice number is below "INVOICE NUMBER" text, starts with "IN" (e.g., IN123456)
+4. Extract the EXACT invoice number - do not modify or abbreviate it
+
+DOCUMENT TYPE DETECTION:
+5. **INVOICE**: Normal purchase document - process normally
+6. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts, or reference to returned goods
+7. Mark document_type as "credit_note" if it's a credit - we will skip these
+
 CRITICAL RULES FOR CONSOLIDATED INVOICES:
-1. **DETECT MULTIPLE ORDERS**: Look for job reference changes (e.g., "TLC" then "LA MAISON DE ST JEAN")
-2. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
-3. **GROUP ITEMS CORRECTLY**: Each invoice object should only contain items for that specific job reference
-4. **CALCULATE TOTALS PER INVOICE**: total_net_amount should be the sum of all items for that specific job
-5. **IGNORE BLANK PAGES**: Skip empty pages between invoices
+8. **DETECT MULTIPLE ORDERS**: Look for job reference changes (e.g., "TLC" then "LA MAISON DE ST JEAN")
+9. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
+10. **GROUP ITEMS CORRECTLY**: Each invoice object should only contain items for that specific job reference
+11. **CALCULATE TOTALS PER INVOICE**: total_net_amount should be the sum of all items for that specific job
+12. **IGNORE BLANK PAGES**: Skip empty pages between invoices
 
 STANDARD RULES:
-6. Extract EVERY SINGLE item from the invoice - do not skip any
-7. Part numbers must be EXACT as shown on invoice
-8. Descriptions must be COMPLETE - include all text even if it spans multiple lines
-9. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
-10. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
-11. original_unit_price is the price BEFORE discount is applied
-12. total_amount is the final line total AFTER discount
-13. If quantity is not explicitly shown, it's usually 1
-14. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
+13. Extract EVERY SINGLE item from the invoice - do not skip any
+14. Part numbers must be EXACT as shown on invoice
+15. Descriptions must be COMPLETE - include all text even if it spans multiple lines
+16. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
+17. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
+18. original_unit_price is the price BEFORE discount is applied
+19. total_amount is the final line total AFTER discount
+20. If quantity is not explicitly shown, it's usually 1
+21. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
 EXAMPLE: If you see three different job references (TLC, LA MAISON, DAVID), create THREE separate invoice objects in the array.
 
-Double-check your work - missing items or wrong grouping costs real money!"""
+Double-check your work - missing items, wrong invoice numbers, or wrong grouping costs real money!"""
     
     def _parse_response(self, text: str, pdf_path: str) -> Dict:
         """Parse Claude's JSON response - handles both single and consolidated invoices"""
@@ -134,7 +149,7 @@ Double-check your work - missing items or wrong grouping costs real money!"""
             
             # Check if this is consolidated format (multiple invoices)
             if 'invoices' in data and isinstance(data['invoices'], list):
-                self.logger.info(f"Detected consolidated invoice with {len(data['invoices'])} orders")
+                self.logger.info(f"Detected consolidated invoice with {len(data['invoices'])} documents")
                 return self._process_consolidated_invoices(data['invoices'], pdf_path)
             
             # Legacy single invoice format
@@ -160,22 +175,37 @@ Double-check your work - missing items or wrong grouping costs real money!"""
             }
     
     def _process_consolidated_invoices(self, invoices: List[Dict], pdf_path: str) -> Dict:
-        """Process consolidated invoices - returns multiple invoice results"""
+        """Process consolidated invoices - returns multiple invoice results, skips credit notes"""
         results = []
+        skipped_credits = 0
         
         for idx, invoice_data in enumerate(invoices):
             try:
+                # Check if this is a credit note - skip it
+                doc_type = invoice_data.get('document_type', 'invoice').lower()
+                if doc_type == 'credit_note' or 'credit' in doc_type:
+                    self.logger.info(f"Skipping credit note: {invoice_data.get('invoice_number', 'unknown')}")
+                    skipped_credits += 1
+                    continue
+                
                 items = self._transform_items(invoice_data.get('items', []))
                 
                 if not items:
                     continue
+                
+                # Validate and clean invoice number
+                invoice_number = self._clean_invoice_number(
+                    invoice_data.get('invoice_number'),
+                    invoice_data.get('supplier', '')
+                )
                 
                 results.append({
                     'success': True,
                     'items': items,
                     'job_reference': invoice_data.get('job_reference'),
                     'supplier': invoice_data.get('supplier', 'Unknown'),
-                    'invoice_number': invoice_data.get('invoice_number'),
+                    'invoice_number': invoice_number,
+                    'document_type': 'invoice',
                     'method': 'claude_api',
                     'consolidated': True,
                     'order_number': idx + 1,
@@ -186,7 +216,12 @@ Double-check your work - missing items or wrong grouping costs real money!"""
                 self.logger.error(f"Error processing invoice {idx + 1}: {str(e)}")
                 continue
         
+        if skipped_credits > 0:
+            self.logger.info(f"Skipped {skipped_credits} credit note(s)")
+        
         if not results:
+            if skipped_credits > 0:
+                return {'success': False, 'error': f'All {skipped_credits} documents were credit notes - nothing to process'}
             return {'success': False, 'error': 'No valid invoices processed from consolidated PDF'}
         
         # Return as multiple invoices
@@ -194,24 +229,83 @@ Double-check your work - missing items or wrong grouping costs real money!"""
             'success': True,
             'consolidated': True,
             'invoices': results,
+            'skipped_credits': skipped_credits,
             'method': 'claude_api'
         }
     
     def _process_single_invoice(self, data: Dict) -> Dict:
         """Process single invoice format (legacy/fallback)"""
+        # Check if this is a credit note
+        doc_type = data.get('document_type', 'invoice').lower()
+        if doc_type == 'credit_note' or 'credit' in doc_type:
+            return {
+                'success': False, 
+                'error': 'Document is a credit note - skipping',
+                'is_credit_note': True
+            }
+        
         items = self._transform_items(data.get('items', []))
         
         if not items:
             return {'success': False, 'error': 'No items found'}
+        
+        # Validate and clean invoice number
+        invoice_number = self._clean_invoice_number(
+            data.get('invoice_number'),
+            data.get('supplier', '')
+        )
         
         return {
             'success': True,
             'items': items,
             'job_reference': data.get('job_reference'),
             'supplier': data.get('supplier', 'Unknown'),
+            'invoice_number': invoice_number,
+            'document_type': 'invoice',
             'method': 'claude_api',
             'consolidated': False
         }
+    
+    def _clean_invoice_number(self, invoice_number: str, supplier: str) -> str:
+        """Clean and validate invoice number based on supplier patterns"""
+        if not invoice_number:
+            return None
+        
+        # Remove any whitespace
+        invoice_number = str(invoice_number).strip()
+        
+        supplier_lower = supplier.lower() if supplier else ''
+        
+        # Validate pattern based on supplier
+        if 'cef' in supplier_lower:
+            # CEF: Should start with JER
+            if not invoice_number.upper().startswith('JER'):
+                # Try to extract JER number from the string
+                match = re.search(r'(JER\d+)', invoice_number, re.IGNORECASE)
+                if match:
+                    invoice_number = match.group(1).upper()
+            else:
+                invoice_number = invoice_number.upper()
+                
+        elif 'yesss' in supplier_lower:
+            # YESSS: Should start with 093
+            if not invoice_number.startswith('093'):
+                # Try to extract 093 number
+                match = re.search(r'(093\d+)', invoice_number)
+                if match:
+                    invoice_number = match.group(1)
+                    
+        elif 'wholesale' in supplier_lower:
+            # Wholesale: Should start with IN
+            if not invoice_number.upper().startswith('IN'):
+                # Try to extract IN number
+                match = re.search(r'(IN\d+)', invoice_number, re.IGNORECASE)
+                if match:
+                    invoice_number = match.group(1).upper()
+            else:
+                invoice_number = invoice_number.upper()
+        
+        return invoice_number
     
     def _transform_items(self, items: List[Dict]) -> List[Dict]:
         """Transform items to our internal format with pricing"""
