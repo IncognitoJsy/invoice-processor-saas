@@ -615,9 +615,11 @@ class QuickBooksService:
             import json
             
             client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+            current_app.logger.info(f"Matching job reference: {job_reference} against {len(customer_names)} customers")
             
             message = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=1024,
                 messages=[{
                     "role": "user",
@@ -664,6 +666,8 @@ Rules:
             
         except Exception as e:
             current_app.logger.error(f"Customer matching error: {str(e)}")
+            import traceback
+            current_app.logger.error(traceback.format_exc())
             # Fallback to simple search
             return self._simple_customer_match(customers, job_reference)
     
