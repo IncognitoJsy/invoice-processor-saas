@@ -1,6 +1,6 @@
 """Flask application factory"""
 import logging
-from flask import Flask
+from flask import Flask, redirect, url_for, render_template
 from app.config import config
 from app.extensions import db, migrate, login_manager, limiter
 
@@ -35,7 +35,10 @@ def create_app(config_name='default'):
     
     @app.route('/')
     def index():
-        return {'message': 'Invoice Processor API', 'status': 'running'}, 200
+        from flask_login import current_user
+        if current_user.is_authenticated:
+            return redirect(url_for('dashboard.index'))
+        return render_template('landing/index.html')
     
     return app
 
