@@ -41,7 +41,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
                     <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
@@ -55,7 +54,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
                     <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
@@ -69,7 +67,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
                     <div class="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
@@ -90,8 +87,7 @@
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
-                    <input type="text" id="search-input" placeholder="Job reference, supplier..." 
-                           class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                    <input type="text" id="search-input" placeholder="Job reference, supplier..." class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supplier</label>
@@ -146,13 +142,10 @@
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="invoices-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        <!-- Invoices loaded via JS -->
-                    </tbody>
+                    <tbody id="invoices-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                 </table>
             </div>
             
-            <!-- Empty State -->
             <div id="empty-state" class="hidden py-12 text-center">
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -169,31 +162,25 @@
                 </div>
             </div>
 
-            <!-- Loading State -->
             <div id="loading-state" class="py-12 text-center">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading invoices...</p>
             </div>
         </div>
 
-        <!-- Pagination -->
         <div id="pagination" class="hidden mt-6 flex items-center justify-between">
             <div class="text-sm text-gray-700 dark:text-gray-300">
                 Showing <span id="showing-start">1</span> to <span id="showing-end">10</span> of <span id="showing-total">0</span> invoices
             </div>
             <div class="flex space-x-2">
-                <button id="prev-btn" onclick="prevPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
-                    Previous
-                </button>
-                <button id="next-btn" onclick="nextPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
-                    Next
-                </button>
+                <button id="prev-btn" onclick="prevPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">Previous</button>
+                <button id="next-btn" onclick="nextPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">Next</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Invoice Detail Modal with QuickBooks Sync -->
+<!-- Invoice Detail Modal -->
 <div id="invoice-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
         <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -208,35 +195,35 @@
             </button>
         </div>
         
-        <!-- Duplicate Warning Banner (if applicable) -->
-        <div id="modal-duplicate-warning" class="hidden bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 p-4">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                </svg>
-                <span class="text-amber-800 dark:text-amber-200 text-sm font-medium">This invoice may be a duplicate</span>
-            </div>
-        </div>
-        
         <!-- QuickBooks Sync Section -->
         <div id="qb-sync-section" class="hidden p-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sync to QuickBooks</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <!-- Customer Selection -->
-                <div>
+                <!-- Customer Selection with Search -->
+                <div class="relative">
                     <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Customer</label>
-                    <select id="qb-customer-select" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
-                        <option value="">Select customer...</option>
-                    </select>
-                    <!-- Suggested Match -->
-                    <div id="customer-suggestion" class="hidden mt-1 text-xs text-green-600 dark:text-green-400">
-                        <span class="font-medium">Suggested:</span> <span id="suggested-customer-name"></span> 
-                        <button onclick="useSuggestedCustomer()" class="ml-1 underline hover:no-underline">Use this</button>
+                    <div class="relative" id="customer-dropdown-container">
+                        <input type="text" id="customer-search-input" placeholder="Type to search customers..." autocomplete="off"
+                               class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <input type="hidden" id="qb-customer-select" value="">
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div id="customer-dropdown" class="hidden absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto"></div>
+                    </div>
+                    <div id="selected-customer-display" class="hidden mt-1 flex items-center justify-between text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                        <span id="selected-customer-name"></span>
+                        <button onclick="clearCustomerSelection()" class="ml-2 hover:text-blue-900 dark:hover:text-blue-100">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 
-                <!-- Invoice Action -->
                 <div>
                     <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Invoice Action</label>
                     <div id="draft-invoice-info" class="text-sm">
@@ -246,13 +233,9 @@
                             </svg>
                             <span id="invoice-action-text">Select customer first</span>
                         </div>
-                        <div id="draft-invoice-link" class="hidden mt-1">
-                            <a href="#" target="_blank" class="text-xs text-blue-600 hover:underline">View draft invoice in QB →</a>
-                        </div>
                     </div>
                 </div>
                 
-                <!-- Sync Button -->
                 <div class="flex items-end">
                     <button id="sync-to-qb-btn" onclick="syncToQuickBooks()" disabled
                             class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition flex items-center justify-center text-sm">
@@ -264,7 +247,6 @@
                 </div>
             </div>
             
-            <!-- Sync Progress -->
             <div id="sync-progress" class="hidden mt-4">
                 <div class="flex items-center mb-2">
                     <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
@@ -275,7 +257,6 @@
                 </div>
             </div>
             
-            <!-- Sync Result -->
             <div id="sync-result" class="hidden mt-4 p-3 rounded-lg">
                 <div class="flex items-center">
                     <svg id="sync-result-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
@@ -285,7 +266,6 @@
             </div>
         </div>
         
-        <!-- Items Table -->
         <div class="p-6 overflow-y-auto max-h-[40vh]">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-900">
@@ -298,12 +278,10 @@
                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Profit</th>
                     </tr>
                 </thead>
-                <tbody id="modal-items" class="divide-y divide-gray-200 dark:divide-gray-700">
-                </tbody>
+                <tbody id="modal-items" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
             </table>
         </div>
         
-        <!-- Totals Footer -->
         <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
@@ -335,32 +313,183 @@ const perPage = 20;
 let qbConnected = false;
 let qbCustomers = [];
 let currentInvoice = null;
-let suggestedCustomer = null;
+let suggestedCustomers = [];
+let selectedCustomerId = null;
+let dropdownOpen = false;
 
-// Load invoices on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadInvoices();
     checkQBStatus();
+    setupCustomerDropdown();
 });
 
-// Filter listeners
 document.getElementById('search-input').addEventListener('input', debounce(applyFilters, 300));
 document.getElementById('supplier-filter').addEventListener('change', applyFilters);
 document.getElementById('date-filter').addEventListener('change', applyFilters);
 document.getElementById('qb-filter').addEventListener('change', applyFilters);
-document.getElementById('qb-customer-select').addEventListener('change', onCustomerChange);
+
+// =====================================================================
+// SEARCHABLE CUSTOMER DROPDOWN
+// =====================================================================
+
+function setupCustomerDropdown() {
+    const searchInput = document.getElementById('customer-search-input');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('focus', () => openDropdown());
+    searchInput.addEventListener('input', debounce(() => filterCustomerDropdown(searchInput.value), 150));
+    
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeDropdown();
+        else if (e.key === 'ArrowDown') { e.preventDefault(); focusNextItem(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusPrevItem(); }
+        else if (e.key === 'Enter') { e.preventDefault(); selectFocusedItem(); }
+    });
+    
+    document.addEventListener('click', (e) => {
+        const container = document.getElementById('customer-dropdown-container');
+        if (container && !container.contains(e.target)) closeDropdown();
+    });
+}
+
+function openDropdown() {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (dropdown) {
+        dropdown.classList.remove('hidden');
+        dropdownOpen = true;
+        filterCustomerDropdown(document.getElementById('customer-search-input').value);
+    }
+}
+
+function closeDropdown() {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+        dropdownOpen = false;
+    }
+}
+
+function filterCustomerDropdown(searchTerm) {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (!dropdown) return;
+    
+    const term = searchTerm.toLowerCase().trim();
+    
+    // Sort: numbers first (0-9), then A-Z
+    let sortedCustomers = [...qbCustomers].sort((a, b) => {
+        const nameA = a.DisplayName.toUpperCase();
+        const nameB = b.DisplayName.toUpperCase();
+        const startsWithNumberA = /^[0-9]/.test(nameA);
+        const startsWithNumberB = /^[0-9]/.test(nameB);
+        if (startsWithNumberA && !startsWithNumberB) return -1;
+        if (!startsWithNumberA && startsWithNumberB) return 1;
+        return nameA.localeCompare(nameB);
+    });
+    
+    let html = '';
+    
+    // Show suggestions at top when no search term
+    if (suggestedCustomers.length > 0 && term === '') {
+        html += '<div class="px-3 py-2 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">⭐ Suggested Matches</div>';
+        suggestedCustomers.forEach(match => {
+            const customer = qbCustomers.find(c => c.Id === match.customer_id);
+            if (customer) {
+                const escapedName = customer.DisplayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                html += '<div class="customer-option px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+                    '<span class="text-sm text-gray-900 dark:text-white font-medium">⭐ ' + customer.DisplayName + '</span>' +
+                    '<span class="text-xs text-green-600 dark:text-green-400">' + match.confidence + '%</span>' +
+                '</div>';
+            }
+        });
+        html += '<div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">All Customers</div>';
+    }
+    
+    let filtered = term ? sortedCustomers.filter(c => c.DisplayName.toLowerCase().includes(term)) : sortedCustomers;
+    
+    filtered.slice(0, 50).forEach(customer => {
+        // Skip if already in suggestions (when no search term)
+        if (term === '' && suggestedCustomers.some(s => s.customer_id === customer.Id)) return;
+        
+        const escapedName = customer.DisplayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        html += '<div class="customer-option px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+            '<span class="text-sm text-gray-900 dark:text-white">' + customer.DisplayName + '</span>' +
+        '</div>';
+    });
+    
+    if (filtered.length === 0) {
+        html = '<div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">No customers found</div>';
+    }
+    if (filtered.length > 50) {
+        html += '<div class="px-3 py-2 text-xs text-gray-400 text-center border-t border-gray-200 dark:border-gray-700">Type to search more...</div>';
+    }
+    
+    dropdown.innerHTML = html;
+}
+
+function selectCustomer(id, name) {
+    selectedCustomerId = id;
+    document.getElementById('qb-customer-select').value = id;
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('selected-customer-display').classList.remove('hidden');
+    document.getElementById('selected-customer-name').textContent = name;
+    closeDropdown();
+    onCustomerChange();
+}
+
+function clearCustomerSelection() {
+    selectedCustomerId = null;
+    document.getElementById('qb-customer-select').value = '';
+    document.getElementById('selected-customer-display').classList.add('hidden');
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('invoice-action-text').textContent = 'Select customer first';
+    document.getElementById('sync-to-qb-btn').disabled = true;
+}
+
+function focusNextItem() {
+    const items = document.querySelectorAll('.customer-option');
+    const focused = document.querySelector('.customer-option.focused');
+    if (!focused && items.length > 0) {
+        items[0].classList.add('focused', 'bg-blue-50', 'dark:bg-blue-900/20');
+    } else if (focused) {
+        const idx = Array.from(items).indexOf(focused);
+        focused.classList.remove('focused', 'bg-blue-50', 'dark:bg-blue-900/20');
+        if (idx < items.length - 1) {
+            items[idx + 1].classList.add('focused', 'bg-blue-50', 'dark:bg-blue-900/20');
+            items[idx + 1].scrollIntoView({ block: 'nearest' });
+        }
+    }
+}
+
+function focusPrevItem() {
+    const items = document.querySelectorAll('.customer-option');
+    const focused = document.querySelector('.customer-option.focused');
+    if (focused) {
+        const idx = Array.from(items).indexOf(focused);
+        focused.classList.remove('focused', 'bg-blue-50', 'dark:bg-blue-900/20');
+        if (idx > 0) {
+            items[idx - 1].classList.add('focused', 'bg-blue-50', 'dark:bg-blue-900/20');
+            items[idx - 1].scrollIntoView({ block: 'nearest' });
+        }
+    }
+}
+
+function selectFocusedItem() {
+    const focused = document.querySelector('.customer-option.focused');
+    if (focused) selectCustomer(focused.dataset.id, focused.dataset.name);
+}
+
+// =====================================================================
+// QUICKBOOKS
+// =====================================================================
 
 async function checkQBStatus() {
     try {
         const response = await fetch('/integrations/api/quickbooks/status');
         const data = await response.json();
-        
         qbConnected = data.connected;
-        
         if (qbConnected) {
             document.getElementById('qb-status').classList.remove('hidden');
             document.getElementById('qb-status-disconnected').classList.add('hidden');
-            // Load customers
             loadQBCustomers();
         } else {
             document.getElementById('qb-status').classList.add('hidden');
@@ -375,45 +504,25 @@ async function loadQBCustomers() {
     try {
         const response = await fetch('/integrations/api/quickbooks/customers');
         const data = await response.json();
-        
-        if (data.customers) {
-            qbCustomers = data.customers;
-            populateCustomerDropdown();
-        }
+        if (data.customers) qbCustomers = data.customers;
     } catch (error) {
         console.error('Error loading customers:', error);
     }
 }
 
-function populateCustomerDropdown() {
-    const select = document.getElementById('qb-customer-select');
-    select.innerHTML = '<option value="">Select customer...</option>';
-    
-    qbCustomers.forEach(customer => {
-        const option = document.createElement('option');
-        option.value = customer.Id;
-        option.textContent = customer.DisplayName;
-        option.dataset.name = customer.DisplayName;
-        select.appendChild(option);
-    });
-}
+// =====================================================================
+// INVOICES
+// =====================================================================
 
 async function loadInvoices() {
     try {
         const response = await fetch('/api/invoices');
         const data = await response.json();
-        
         if (data.success) {
             allInvoices = data.invoices;
             filteredInvoices = [...allInvoices];
-            
-            // Update stats
             updateStats(data.stats);
-            
-            // Populate supplier filter
             populateSupplierFilter(data.suppliers);
-            
-            // Render table
             renderInvoices();
         }
     } catch (error) {
@@ -447,44 +556,22 @@ function applyFilters() {
     const qbStatus = document.getElementById('qb-filter').value;
     
     filteredInvoices = allInvoices.filter(inv => {
-        // Search filter
         if (search && !inv.job_reference?.toLowerCase().includes(search) && 
             !inv.supplier_name?.toLowerCase().includes(search) &&
-            !inv.invoice_number?.toLowerCase().includes(search)) {
-            return false;
-        }
-        
-        // Supplier filter
-        if (supplier && inv.supplier_name !== supplier) {
-            return false;
-        }
-        
-        // QB status filter
+            !inv.invoice_number?.toLowerCase().includes(search)) return false;
+        if (supplier && inv.supplier_name !== supplier) return false;
         if (qbStatus === 'synced' && !inv.qb_synced_at) return false;
         if (qbStatus === 'not-synced' && inv.qb_synced_at) return false;
-        
-        // Date filter
         if (dateRange) {
             const invDate = new Date(inv.created_at);
             const now = new Date();
-            
-            if (dateRange === 'today') {
-                if (invDate.toDateString() !== now.toDateString()) return false;
-            } else if (dateRange === 'week') {
-                const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-                if (invDate < weekAgo) return false;
-            } else if (dateRange === 'month') {
-                const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
-                if (invDate < monthAgo) return false;
-            } else if (dateRange === 'year') {
-                const yearAgo = new Date(now - 365 * 24 * 60 * 60 * 1000);
-                if (invDate < yearAgo) return false;
-            }
+            if (dateRange === 'today' && invDate.toDateString() !== now.toDateString()) return false;
+            else if (dateRange === 'week' && invDate < new Date(now - 7 * 24 * 60 * 60 * 1000)) return false;
+            else if (dateRange === 'month' && invDate < new Date(now - 30 * 24 * 60 * 60 * 1000)) return false;
+            else if (dateRange === 'year' && invDate < new Date(now - 365 * 24 * 60 * 60 * 1000)) return false;
         }
-        
         return true;
     });
-    
     currentPage = 1;
     renderInvoices();
 }
@@ -500,59 +587,30 @@ function renderInvoices() {
         pagination.classList.add('hidden');
         return;
     }
-    
     emptyState.classList.add('hidden');
     
-    // Pagination
     const start = (currentPage - 1) * perPage;
     const end = start + perPage;
     const pageInvoices = filteredInvoices.slice(start, end);
     
     tbody.innerHTML = pageInvoices.map(inv => `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="viewInvoice(${inv.id})">
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                ${formatDate(inv.created_at)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
-                ${inv.invoice_number || '-'}
-            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">${formatDate(inv.created_at)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">${inv.invoice_number || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 py-1 text-xs font-medium rounded-full 
                     ${inv.supplier_name === 'YESSS Electrical' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : ''}
                     ${inv.supplier_name === 'CEF' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : ''}
                     ${inv.supplier_name === 'Wholesale Electrics' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : ''}
-                ">
-                    ${inv.supplier_name}
-                </span>
+                    ${!['YESSS Electrical', 'CEF', 'Wholesale Electrics'].includes(inv.supplier_name) ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' : ''}">${inv.supplier_name}</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                ${inv.job_reference || '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                ${inv.items_count} items
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
-                £${(inv.total_cost || 0).toFixed(2)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
-                £${(inv.total_selling || 0).toFixed(2)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(inv.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
-                £${(inv.total_profit || 0).toFixed(2)}
-            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">${inv.job_reference || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${inv.items_count} items</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">£${(inv.total_cost || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">£${(inv.total_selling || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(inv.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">£${(inv.total_profit || 0).toFixed(2)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">
-                ${inv.qb_synced_at ? `
-                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                        </svg>
-                        Synced
-                    </span>
-                ` : `
-                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                        Not synced
-                    </span>
-                `}
+                ${inv.qb_synced_at ? '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Synced</span>' : '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">Not synced</span>'}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-center">
                 <button onclick="event.stopPropagation(); viewInvoice(${inv.id})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">
@@ -565,27 +623,26 @@ function renderInvoices() {
         </tr>
     `).join('');
     
-    // Update pagination
     const totalPages = Math.ceil(filteredInvoices.length / perPage);
     pagination.classList.toggle('hidden', totalPages <= 1);
-    
     document.getElementById('showing-start').textContent = start + 1;
     document.getElementById('showing-end').textContent = Math.min(end, filteredInvoices.length);
     document.getElementById('showing-total').textContent = filteredInvoices.length;
-    
     document.getElementById('prev-btn').disabled = currentPage === 1;
     document.getElementById('next-btn').disabled = currentPage === totalPages;
 }
+
+// =====================================================================
+// MODAL & SYNC
+// =====================================================================
 
 async function viewInvoice(id) {
     try {
         const response = await fetch(`/api/invoices/${id}`);
         const data = await response.json();
-        
         if (data.success) {
             currentInvoice = data.invoice;
             const inv = data.invoice;
-            
             document.getElementById('modal-title').textContent = inv.job_reference || 'Invoice Details';
             document.getElementById('modal-subtitle').textContent = `${inv.supplier_name} • ${inv.invoice_number || 'No invoice #'} • ${formatDate(inv.created_at)}`;
             
@@ -596,35 +653,25 @@ async function viewInvoice(id) {
                     <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center">${item.quantity}</td>
                     <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${(item.total_amount || 0).toFixed(2)}</td>
                     <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${((item.selling_price || 0) * item.quantity).toFixed(2)}</td>
-                    <td class="px-4 py-3 text-sm text-right font-medium ${(item.profit_per_item || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
-                        £${((item.profit_per_item || 0) * item.quantity).toFixed(2)}
-                    </td>
+                    <td class="px-4 py-3 text-sm text-right font-medium ${(item.profit_per_item || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">£${((item.profit_per_item || 0) * item.quantity).toFixed(2)}</td>
                 </tr>
             `).join('');
             
             const totalCost = inv.total_cost || 0;
             const totalSelling = inv.total_selling || 0;
             const totalProfit = inv.total_profit || 0;
-            const totalWithGST = totalSelling * 1.05;
-            
             document.getElementById('modal-total-cost').textContent = '£' + totalCost.toFixed(2);
             document.getElementById('modal-total-selling').textContent = '£' + totalSelling.toFixed(2);
             document.getElementById('modal-total-profit').textContent = '£' + totalProfit.toFixed(2);
-            document.getElementById('modal-total-with-gst').textContent = '£' + totalWithGST.toFixed(2);
+            document.getElementById('modal-total-with-gst').textContent = '£' + (totalSelling * 1.05).toFixed(2);
             
-            // Show/hide QB sync section
             if (qbConnected) {
                 document.getElementById('qb-sync-section').classList.remove('hidden');
-                // Reset sync UI
                 resetSyncUI();
-                // Get customer suggestions
-                if (inv.job_reference) {
-                    getCustomerSuggestions(inv.job_reference);
-                }
+                if (inv.job_reference) getCustomerSuggestions(inv.job_reference);
             } else {
                 document.getElementById('qb-sync-section').classList.add('hidden');
             }
-            
             document.getElementById('invoice-modal').classList.remove('hidden');
         }
     } catch (error) {
@@ -633,69 +680,48 @@ async function viewInvoice(id) {
 }
 
 function resetSyncUI() {
+    selectedCustomerId = null;
+    suggestedCustomers = [];
     document.getElementById('qb-customer-select').value = '';
-    document.getElementById('customer-suggestion').classList.add('hidden');
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('selected-customer-display').classList.add('hidden');
     document.getElementById('invoice-action-text').textContent = 'Select customer first';
-    document.getElementById('draft-invoice-link').classList.add('hidden');
     document.getElementById('sync-to-qb-btn').disabled = true;
     document.getElementById('sync-progress').classList.add('hidden');
     document.getElementById('sync-result').classList.add('hidden');
-    suggestedCustomer = null;
 }
 
 async function getCustomerSuggestions(jobReference) {
     try {
         const response = await fetch(`/integrations/api/quickbooks/match-customer?job_reference=${encodeURIComponent(jobReference)}`);
         const data = await response.json();
-        
         if (data.matches && data.matches.length > 0) {
-            suggestedCustomer = data.matches[0];
-            document.getElementById('suggested-customer-name').textContent = 
-                `${suggestedCustomer.customer_name} (${suggestedCustomer.confidence}% match)`;
-            document.getElementById('customer-suggestion').classList.remove('hidden');
+            suggestedCustomers = data.matches;
+            if (suggestedCustomers[0].confidence >= 80) {
+                const match = suggestedCustomers[0];
+                selectCustomer(match.customer_id, match.customer_name);
+            }
         }
     } catch (error) {
         console.error('Error getting customer suggestions:', error);
     }
 }
 
-function useSuggestedCustomer() {
-    if (suggestedCustomer && suggestedCustomer.customer_id) {
-        document.getElementById('qb-customer-select').value = suggestedCustomer.customer_id;
-        onCustomerChange();
-    }
-}
-
 async function onCustomerChange() {
     const customerId = document.getElementById('qb-customer-select').value;
-    
     if (!customerId) {
         document.getElementById('invoice-action-text').textContent = 'Select customer first';
-        document.getElementById('draft-invoice-link').classList.add('hidden');
         document.getElementById('sync-to-qb-btn').disabled = true;
         return;
     }
-    
     document.getElementById('sync-to-qb-btn').disabled = false;
-    
-    // Check for draft invoices
     try {
         const response = await fetch(`/integrations/api/quickbooks/draft-invoices?customer_id=${customerId}`);
         const data = await response.json();
-        
         if (data.drafts && data.drafts.length > 0) {
-            const draft = data.drafts[0];
-            document.getElementById('invoice-action-text').innerHTML = `
-                <span class="text-green-600 dark:text-green-400">
-                    Will add to existing draft invoice #${draft.DocNumber || draft.Id}
-                </span>
-            `;
+            document.getElementById('invoice-action-text').innerHTML = '<span class="text-green-600 dark:text-green-400">Will add to existing draft invoice #' + (data.drafts[0].DocNumber || data.drafts[0].Id) + '</span>';
         } else {
-            document.getElementById('invoice-action-text').innerHTML = `
-                <span class="text-blue-600 dark:text-blue-400">
-                    Will create new invoice
-                </span>
-            `;
+            document.getElementById('invoice-action-text').innerHTML = '<span class="text-blue-600 dark:text-blue-400">Will create new invoice</span>';
         }
     } catch (error) {
         document.getElementById('invoice-action-text').textContent = 'Will create new invoice';
@@ -704,29 +730,18 @@ async function onCustomerChange() {
 
 async function syncToQuickBooks() {
     const customerId = document.getElementById('qb-customer-select').value;
+    if (!customerId || !currentInvoice) { alert('Please select a customer'); return; }
     
-    if (!customerId || !currentInvoice) {
-        alert('Please select a customer');
-        return;
-    }
-    
-    // Show progress
     document.getElementById('sync-progress').classList.remove('hidden');
     document.getElementById('sync-result').classList.add('hidden');
     document.getElementById('sync-to-qb-btn').disabled = true;
     
     try {
-        // Step 1: Sync products
         updateSyncProgress(25, 'Syncing products to QuickBooks...');
-        
-        const productResponse = await fetch(`/integrations/quickbooks/sync-products/${currentInvoice.id}`, {
-            method: 'POST'
-        });
+        const productResponse = await fetch(`/integrations/quickbooks/sync-products/${currentInvoice.id}`, { method: 'POST' });
         const productData = await productResponse.json();
         
         updateSyncProgress(50, `Synced ${productData.details?.synced || 0} products...`);
-        
-        // Step 2: Create/update invoice
         updateSyncProgress(75, 'Creating customer invoice...');
         
         const invoiceResponse = await fetch(`/integrations/quickbooks/sync-to-customer/${currentInvoice.id}`, {
@@ -737,13 +752,10 @@ async function syncToQuickBooks() {
         const invoiceData = await invoiceResponse.json();
         
         updateSyncProgress(100, 'Complete!');
-        
-        // Show result
         setTimeout(() => {
             document.getElementById('sync-progress').classList.add('hidden');
             showSyncResult(invoiceData);
         }, 500);
-        
     } catch (error) {
         console.error('Sync error:', error);
         document.getElementById('sync-progress').classList.add('hidden');
@@ -761,7 +773,6 @@ function showSyncResult(data) {
     const icon = document.getElementById('sync-result-icon');
     const text = document.getElementById('sync-result-text');
     const details = document.getElementById('sync-result-details');
-    
     resultDiv.classList.remove('hidden');
     
     if (data.success) {
@@ -770,20 +781,12 @@ function showSyncResult(data) {
         icon.className = 'w-5 h-5 mr-2 text-green-600';
         text.textContent = 'Successfully synced to QuickBooks!';
         text.className = 'text-sm font-medium text-green-800 dark:text-green-200';
-        
         let detailsHtml = '';
-        if (data.products_synced) {
-            detailsHtml += `<p>Products synced: ${data.products_synced}</p>`;
-        }
-        if (data.invoice_action === 'created_new') {
-            detailsHtml += `<p>New invoice created: #${data.qb_invoice_number || data.qb_invoice_id}</p>`;
-        } else if (data.invoice_action === 'added_to_existing') {
-            detailsHtml += `<p>Added to existing invoice</p>`;
-        }
+        if (data.products_synced) detailsHtml += '<p>Products synced: ' + data.products_synced + '</p>';
+        if (data.invoice_action === 'created_new') detailsHtml += '<p>New invoice created: #' + (data.qb_invoice_number || data.qb_invoice_id) + '</p>';
+        else if (data.invoice_action === 'added_to_existing') detailsHtml += '<p>Added to existing invoice</p>';
         details.innerHTML = detailsHtml;
         details.className = 'mt-2 text-xs text-green-700 dark:text-green-300';
-        
-        // Reload invoices to update status
         loadInvoices();
     } else {
         resultDiv.className = 'mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
@@ -791,38 +794,25 @@ function showSyncResult(data) {
         icon.className = 'w-5 h-5 mr-2 text-red-600';
         text.textContent = 'Sync failed';
         text.className = 'text-sm font-medium text-red-800 dark:text-red-200';
-        details.innerHTML = `<p>${data.error || 'Unknown error occurred'}</p>`;
+        details.innerHTML = '<p>' + (data.error || 'Unknown error occurred') + '</p>';
         details.className = 'mt-2 text-xs text-red-700 dark:text-red-300';
     }
-    
     document.getElementById('sync-to-qb-btn').disabled = false;
 }
 
 function closeModal() {
     document.getElementById('invoice-modal').classList.add('hidden');
     currentInvoice = null;
+    closeDropdown();
 }
 
-function prevPage() {
-    if (currentPage > 1) {
-        currentPage--;
-        renderInvoices();
-    }
-}
-
-function nextPage() {
-    const totalPages = Math.ceil(filteredInvoices.length / perPage);
-    if (currentPage < totalPages) {
-        currentPage++;
-        renderInvoices();
-    }
-}
+function prevPage() { if (currentPage > 1) { currentPage--; renderInvoices(); } }
+function nextPage() { const totalPages = Math.ceil(filteredInvoices.length / perPage); if (currentPage < totalPages) { currentPage++; renderInvoices(); } }
 
 async function exportCSV() {
     try {
         const response = await fetch('/api/invoices/export');
         const blob = await response.blob();
-        
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -831,33 +821,20 @@ async function exportCSV() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error('Error exporting:', error);
-    }
+    } catch (error) { console.error('Error exporting:', error); }
 }
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function debounce(func, wait) {
     let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
+    return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); };
 }
 
-// Close modal on escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-});
-
-// Close modal on backdrop click
-document.getElementById('invoice-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'invoice-modal') closeModal();
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('invoice-modal').addEventListener('click', (e) => { if (e.target.id === 'invoice-modal') closeModal(); });
 </script>
 {% endblock %}
