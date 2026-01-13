@@ -11,7 +11,6 @@
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Invoices</h1>
                 <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage all your processed invoices</p>
             </div>
-            <!-- QuickBooks Connection Status -->
             <div id="qb-status" class="hidden">
                 <div class="flex items-center px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                     <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
@@ -202,9 +201,9 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <!-- Customer Selection with Search -->
                 <div class="relative">
-                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Customer</label>
+                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Customer / Job</label>
                     <div class="relative" id="customer-dropdown-container">
-                        <input type="text" id="customer-search-input" placeholder="Type to search customers..." autocomplete="off"
+                        <input type="text" id="customer-search-input" placeholder="Type to search customers & jobs..." autocomplete="off"
                                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
                         <input type="hidden" id="qb-customer-select" value="">
                         <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -212,11 +211,11 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </div>
-                        <div id="customer-dropdown" class="hidden absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto"></div>
+                        <div id="customer-dropdown" class="hidden absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div>
                     </div>
                     <div id="selected-customer-display" class="hidden mt-1 flex items-center justify-between text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-                        <span id="selected-customer-name"></span>
-                        <button onclick="clearCustomerSelection()" class="ml-2 hover:text-blue-900 dark:hover:text-blue-100">
+                        <span id="selected-customer-name" class="truncate"></span>
+                        <button onclick="clearCustomerSelection()" class="ml-2 hover:text-blue-900 dark:hover:text-blue-100 flex-shrink-0">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
@@ -329,7 +328,7 @@ document.getElementById('date-filter').addEventListener('change', applyFilters);
 document.getElementById('qb-filter').addEventListener('change', applyFilters);
 
 // =====================================================================
-// SEARCHABLE CUSTOMER DROPDOWN
+// SEARCHABLE CUSTOMER DROPDOWN WITH SUB-CUSTOMER SUPPORT
 // =====================================================================
 
 function setupCustomerDropdown() {
@@ -369,16 +368,31 @@ function closeDropdown() {
     }
 }
 
+function getCustomerDisplayName(customer) {
+    // Use FullyQualifiedName if available (shows hierarchy like "TLC:Project Alpha")
+    return customer.FullyQualifiedName || customer.DisplayName;
+}
+
+function isSubCustomer(customer) {
+    const fullName = customer.FullyQualifiedName || '';
+    return fullName.includes(':');
+}
+
+function getIndentLevel(customer) {
+    const fullName = customer.FullyQualifiedName || '';
+    return (fullName.match(/:/g) || []).length;
+}
+
 function filterCustomerDropdown(searchTerm) {
     const dropdown = document.getElementById('customer-dropdown');
     if (!dropdown) return;
     
     const term = searchTerm.toLowerCase().trim();
     
-    // Sort: numbers first (0-9), then A-Z
+    // Sort customers by FullyQualifiedName for proper hierarchy
     let sortedCustomers = [...qbCustomers].sort((a, b) => {
-        const nameA = a.DisplayName.toUpperCase();
-        const nameB = b.DisplayName.toUpperCase();
+        const nameA = (a.FullyQualifiedName || a.DisplayName).toUpperCase();
+        const nameB = (b.FullyQualifiedName || b.DisplayName).toUpperCase();
         const startsWithNumberA = /^[0-9]/.test(nameA);
         const startsWithNumberB = /^[0-9]/.test(nameB);
         if (startsWithNumberA && !startsWithNumberB) return -1;
@@ -394,33 +408,56 @@ function filterCustomerDropdown(searchTerm) {
         suggestedCustomers.forEach(match => {
             const customer = qbCustomers.find(c => c.Id === match.customer_id);
             if (customer) {
-                const escapedName = customer.DisplayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                html += '<div class="customer-option px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
-                    '<span class="text-sm text-gray-900 dark:text-white font-medium">⭐ ' + customer.DisplayName + '</span>' +
-                    '<span class="text-xs text-green-600 dark:text-green-400">' + match.confidence + '%</span>' +
+                const displayName = getCustomerDisplayName(customer);
+                const isSub = isSubCustomer(customer);
+                const indentLevel = getIndentLevel(customer);
+                const paddingClass = indentLevel > 0 ? 'pl-' + (3 + indentLevel * 4) : 'pl-3';
+                const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                html += '<div class="customer-option ' + paddingClass + ' pr-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+                    '<span class="text-sm text-gray-900 dark:text-white font-medium truncate">' + 
+                    (isSub ? '<span class="text-green-500 mr-1">↳</span>' : '⭐ ') + displayName + '</span>' +
+                    '<span class="text-xs text-green-600 dark:text-green-400 flex-shrink-0 ml-2">' + match.confidence + '%</span>' +
                 '</div>';
             }
         });
-        html += '<div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">All Customers</div>';
+        html += '<div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">All Customers & Jobs</div>';
     }
     
-    let filtered = term ? sortedCustomers.filter(c => c.DisplayName.toLowerCase().includes(term)) : sortedCustomers;
+    // Filter customers - search in both DisplayName and FullyQualifiedName
+    let filtered = sortedCustomers;
+    if (term) {
+        filtered = sortedCustomers.filter(c => {
+            const displayName = (c.DisplayName || '').toLowerCase();
+            const fullName = (c.FullyQualifiedName || '').toLowerCase();
+            return displayName.includes(term) || fullName.includes(term);
+        });
+    }
     
-    filtered.slice(0, 50).forEach(customer => {
+    filtered.slice(0, 100).forEach(customer => {
         // Skip if already in suggestions (when no search term)
         if (term === '' && suggestedCustomers.some(s => s.customer_id === customer.Id)) return;
         
-        const escapedName = customer.DisplayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        html += '<div class="customer-option px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
-            '<span class="text-sm text-gray-900 dark:text-white">' + customer.DisplayName + '</span>' +
+        const displayName = getCustomerDisplayName(customer);
+        const isSub = isSubCustomer(customer);
+        const indentLevel = getIndentLevel(customer);
+        const paddingClass = indentLevel > 0 ? 'pl-' + (3 + indentLevel * 4) : 'pl-3';
+        const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        // Visual styling for sub-customers
+        const textClass = isSub ? 'text-gray-700 dark:text-gray-300' : 'text-gray-900 dark:text-white font-medium';
+        
+        html += '<div class="customer-option ' + paddingClass + ' pr-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 ' + (selectedCustomerId === customer.Id ? 'bg-blue-100 dark:bg-blue-900/30' : '') + '" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+            '<span class="text-sm ' + textClass + ' truncate">' + 
+            (isSub ? '<span class="text-gray-400 mr-1">↳</span>' : '') + displayName + '</span>' +
         '</div>';
     });
     
     if (filtered.length === 0) {
         html = '<div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">No customers found</div>';
     }
-    if (filtered.length > 50) {
-        html += '<div class="px-3 py-2 text-xs text-gray-400 text-center border-t border-gray-200 dark:border-gray-700">Type to search more...</div>';
+    if (filtered.length > 100) {
+        html += '<div class="px-3 py-2 text-xs text-gray-400 text-center border-t border-gray-200 dark:border-gray-700">Showing first 100 - type to search more...</div>';
     }
     
     dropdown.innerHTML = html;
@@ -504,7 +541,10 @@ async function loadQBCustomers() {
     try {
         const response = await fetch('/integrations/api/quickbooks/customers');
         const data = await response.json();
-        if (data.customers) qbCustomers = data.customers;
+        if (data.customers) {
+            qbCustomers = data.customers;
+            console.log('Loaded ' + qbCustomers.length + ' customers (including sub-customers)');
+        }
     } catch (error) {
         console.error('Error loading customers:', error);
     }
