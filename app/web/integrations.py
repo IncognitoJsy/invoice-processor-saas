@@ -322,7 +322,12 @@ def quickbooks_customers():
     
     return jsonify({
         'customers': [
-            {'Id': c.get('Id'), 'DisplayName': c.get('DisplayName')}
+            {
+                'Id': c.get('Id'), 
+                'DisplayName': c.get('DisplayName'),
+                'FullyQualifiedName': c.get('FullyQualifiedName'),
+                'ParentRef': c.get('ParentRef')
+            }
             for c in customers
         ]
     })
