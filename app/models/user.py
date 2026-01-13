@@ -21,6 +21,11 @@ class User(db.Model, UserMixin):
     stripe_subscription_id = db.Column(db.String(255))
     trial_ends_at = db.Column(db.DateTime)
     subscription_ends_at = db.Column(db.DateTime)
+
+    # Setup wizard
+    setup_completed = db.Column(db.Boolean, default=False)
+    company_name = db.Column(db.String(255))
+    default_markup = db.Column(db.Float, default=50.0)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

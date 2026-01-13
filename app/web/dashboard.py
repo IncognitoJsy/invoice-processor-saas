@@ -10,6 +10,10 @@ bp = Blueprint('dashboard', __name__, url_prefix='/dashboard')
 @login_required
 def index():
     """Main dashboard / welcome page"""
+    # Redirect to setup wizard if not completed
+    if not current_user.setup_completed:
+        return redirect(url_for('setup.index'))
+    
     from app.models.invoice import Invoice
     from app.models.quickbooks import QuickBooksConnection
     

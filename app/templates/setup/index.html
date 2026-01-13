@@ -1,0 +1,68 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Setup Your Account - FluxOps{% endblock %}
+
+{% block content %}
+<div class="min-h-[80vh] flex items-center justify-center py-12">
+    <div class="max-w-2xl mx-auto px-4 w-full">
+        <!-- Welcome Card -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 md:p-12 text-center">
+            <!-- Logo -->
+            <div class="w-20 h-20 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary-600/25">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+            </div>
+            
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                Welcome to FluxOps, {{ current_user.first_name or 'there' }}! 👋
+            </h1>
+            
+            <p class="text-lg text-gray-600 dark:text-gray-300 mb-8">
+                Let's get you set up in just a few quick steps. This will only take about 2 minutes.
+            </p>
+            
+            <!-- Steps Preview -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+                <div class="text-center">
+                    <div class="w-10 h-10 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span class="text-primary-600 dark:text-primary-400 font-bold">1</span>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Business</span>
+                </div>
+                <div class="text-center">
+                    <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span class="text-gray-400 font-bold">2</span>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">QuickBooks</span>
+                </div>
+                <div class="text-center">
+                    <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span class="text-gray-400 font-bold">3</span>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Markup</span>
+                </div>
+                <div class="text-center">
+                    <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span class="text-gray-400 font-bold">4</span>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Done!</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="{{ url_for('setup.step', step=1) }}" class="px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-lg transition shadow-lg shadow-primary-600/25">
+                    Let's Get Started
+                    <svg class="w-5 h-5 inline ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+                    </svg>
+                </a>
+            </div>
+            
+            <p class="mt-6 text-sm text-gray-500 dark:text-gray-400">
+                <a href="{{ url_for('setup.skip') }}" class="hover:text-primary-600 transition">Skip for now →</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
