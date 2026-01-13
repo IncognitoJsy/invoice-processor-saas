@@ -20,6 +20,8 @@ class QuickBooksConnection(db.Model):
     token_expires_at = db.Column(db.DateTime)
     
     # Settings
+    default_income_account_id = db.Column(db.String(50))
+    default_income_account_name = db.Column(db.String(255))
     default_expense_account_id = db.Column(db.String(50))
     default_expense_account_name = db.Column(db.String(255))
     auto_sync = db.Column(db.Boolean, default=False)
@@ -45,6 +47,8 @@ class QuickBooksConnection(db.Model):
             'company_name': self.company_name,
             'is_active': self.is_active,
             'auto_sync': self.auto_sync,
+            'default_income_account_id': self.default_income_account_id,
+            'default_income_account_name': self.default_income_account_name,
             'default_expense_account_id': self.default_expense_account_id,
             'default_expense_account_name': self.default_expense_account_name,
             'last_sync_at': self.last_sync_at.isoformat() if self.last_sync_at else None,
