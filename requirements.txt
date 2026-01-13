@@ -79,3 +79,5 @@ Pillow==10.1.0
 
 # Force specific httpx version for Anthropic compatibility
 httpx==0.27.0
+stripe>=5.0.0
+stripe>=5.0.0

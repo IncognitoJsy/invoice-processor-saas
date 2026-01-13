@@ -1,0 +1,53 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Subscription Successful - FluxOps{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center py-12 px-4">
+    <div class="max-w-md w-full text-center">
+        
+        <!-- Success Icon -->
+        <div class="mx-auto w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
+            <svg class="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+        </div>
+        
+        <!-- Message -->
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">You're all set!</h1>
+        <p class="text-gray-600 dark:text-gray-400 mb-8">
+            Your subscription to <strong class="text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</strong> is now active. 
+            You can start uploading invoices and syncing to QuickBooks right away.
+        </p>
+        
+        <!-- Plan Details -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mb-8">
+            <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <span class="text-gray-600 dark:text-gray-400">Plan</span>
+                <span class="font-semibold text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</span>
+            </div>
+            <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <span class="text-gray-600 dark:text-gray-400">Monthly Invoices</span>
+                <span class="font-semibold text-gray-900 dark:text-white">
+                    {% if current_user.subscription_plan == 'pro' %}Unlimited{% else %}100{% endif %}
+                </span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-gray-600 dark:text-gray-400">QuickBooks Sync</span>
+                <span class="font-semibold text-green-600 dark:text-green-400">✓ Enabled</span>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="space-y-4">
+            <a href="{{ url_for('upload.index') }}" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">
+                Upload Your First Invoice
+            </a>
+            <a href="{{ url_for('dashboard.index') }}" class="block w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
+                Go to Dashboard
+            </a>
+        </div>
+        
+    </div>
+</div>
+{% endblock %}

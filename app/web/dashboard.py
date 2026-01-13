@@ -1,8 +1,50 @@
 """Dashboard routes"""
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for
+from flask_login import login_required, current_user
+from datetime import datetime
 
 bp = Blueprint('dashboard', __name__, url_prefix='/dashboard')
 
+
 @bp.route('/')
+@login_required
 def index():
-    return {'message': 'Dashboard'}, 200
+    """Main dashboard / welcome page"""
+    from app.models.invoice import Invoice
+    from app.models.quickbooks import QuickBooksConnection
+    
+    # Get invoice stats
+    first_of_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    total_invoices = Invoice.query.filter_by(user_id=current_user.id).count()
+    invoices_this_month = Invoice.query.filter(
+        Invoice.user_id == current_user.id,
+        Invoice.created_at >= first_of_month
+    ).count()
+    
+    # Get recent invoices
+    recent_invoices = Invoice.query.filter_by(user_id=current_user.id)\
+        .order_by(Invoice.created_at.desc())\
+        .limit(5).all()
+    
+    # Check QuickBooks connection
+    qb_connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+    qb_connected = qb_connection and qb_connection.is_active if qb_connection else False
+    
+    # Calculate invoice limit info
+    limit = current_user.monthly_invoice_limit
+    if limit == float('inf'):
+        limit_display = 'Unlimited'
+        usage_percent = 0
+    else:
+        limit_display = str(int(limit))
+        usage_percent = min(100, int((invoices_this_month / limit) * 100)) if limit > 0 else 100
+    
+    return render_template('dashboard/index.html',
+        total_invoices=total_invoices,
+        invoices_this_month=invoices_this_month,
+        invoice_limit=limit_display,
+        usage_percent=usage_percent,
+        recent_invoices=recent_invoices,
+        qb_connected=qb_connected
+    )
