@@ -784,9 +784,13 @@ Rules:
     
     def add_items_to_invoice(self, qb_connection, invoice_id: str, line_items: list):
         """
-        Add line items to an existing invoice
+        Add line items to an existing invoice, merging duplicates.
         
-        Fetches existing invoice, adds new lines, and updates
+        If an item already exists on the invoice:
+        - Add to the quantity (accumulate)
+        - Update the price to the latest price
+        
+        This keeps invoices compact and ensures prices are always current.
         """
         # Get existing invoice
         existing = self.make_api_request(qb_connection, f"invoice/{invoice_id}")
@@ -800,7 +804,21 @@ Rules:
         # Get tax code
         tax_code = self.get_default_tax_code(qb_connection)
         
-        # Find next line ID
+        # Build a map of existing items by ItemRef ID
+        # Structure: {item_id: {'line_index': idx, 'quantity': qty, 'line': line_obj}}
+        existing_items_map = {}
+        for idx, line in enumerate(existing_lines):
+            if line.get('DetailType') == 'SalesItemLineDetail':
+                item_ref = line.get('SalesItemLineDetail', {}).get('ItemRef', {})
+                item_id = item_ref.get('value')
+                if item_id:
+                    existing_items_map[item_id] = {
+                        'line_index': idx,
+                        'quantity': float(line.get('SalesItemLineDetail', {}).get('Qty', 0)),
+                        'line': line
+                    }
+        
+        # Find next line ID for new items
         max_id = 0
         for line in existing_lines:
             try:
@@ -810,32 +828,78 @@ Rules:
             except:
                 pass
         
-        # Add new line items
+        # Process each new item
+        items_merged = 0
+        items_added = 0
+        
         for item in line_items:
-            max_id += 1
-            new_line = {
-                "Id": str(max_id),
-                "DetailType": "SalesItemLineDetail",
-                "Amount": round(float(item.get('quantity', 1)) * float(item.get('unit_price', 0)), 2),
-                "SalesItemLineDetail": {
-                    "ItemRef": {
-                        "value": item['item_id']
-                    },
-                    "Qty": float(item.get('quantity', 1))
+            item_id = item['item_id']
+            new_qty = float(item.get('quantity', 1))
+            new_price = float(item.get('unit_price', 0))
+            description = item.get('description', '')
+            
+            if item_id in existing_items_map:
+                # Item already exists - merge quantities and update price
+                existing_info = existing_items_map[item_id]
+                line_index = existing_info['line_index']
+                old_qty = existing_info['quantity']
+                combined_qty = old_qty + new_qty
+                
+                # Update the existing line
+                existing_lines[line_index]['SalesItemLineDetail']['Qty'] = combined_qty
+                existing_lines[line_index]['SalesItemLineDetail']['UnitPrice'] = new_price
+                existing_lines[line_index]['Amount'] = round(combined_qty * new_price, 2)
+                
+                # Update description if provided
+                if description:
+                    existing_lines[line_index]['Description'] = description[:4000]
+                
+                # Update tax code if we have one
+                if tax_code:
+                    existing_lines[line_index]['SalesItemLineDetail']['TaxCodeRef'] = {"value": tax_code['value']}
+                
+                current_app.logger.info(
+                    f"Merged item {item_id}: {old_qty} + {new_qty} = {combined_qty} @ £{new_price}"
+                )
+                items_merged += 1
+                
+                # Update the map in case same item appears twice in new items
+                existing_items_map[item_id]['quantity'] = combined_qty
+                
+            else:
+                # New item - add as new line
+                max_id += 1
+                new_line = {
+                    "Id": str(max_id),
+                    "DetailType": "SalesItemLineDetail",
+                    "Amount": round(new_qty * new_price, 2),
+                    "SalesItemLineDetail": {
+                        "ItemRef": {
+                            "value": item_id
+                        },
+                        "Qty": new_qty,
+                        "UnitPrice": new_price
+                    }
                 }
-            }
-            
-            # Add tax code if found
-            if tax_code:
-                new_line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
-            
-            if item.get('unit_price'):
-                new_line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
-            
-            if item.get('description'):
-                new_line["Description"] = item['description'][:4000]
-            
-            existing_lines.append(new_line)
+                
+                # Add tax code if found
+                if tax_code:
+                    new_line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
+                
+                if description:
+                    new_line["Description"] = description[:4000]
+                
+                existing_lines.append(new_line)
+                
+                # Add to map in case same item appears again
+                existing_items_map[item_id] = {
+                    'line_index': len(existing_lines) - 1,
+                    'quantity': new_qty,
+                    'line': new_line
+                }
+                
+                current_app.logger.info(f"Added new item {item_id}: {new_qty} @ £{new_price}")
+                items_added += 1
         
         # Update invoice
         update_data = {
@@ -845,7 +909,15 @@ Rules:
             "Line": existing_lines
         }
         
-        return self.make_api_request(qb_connection, "invoice", method='POST', data=update_data)
+        result = self.make_api_request(qb_connection, "invoice", method='POST', data=update_data)
+        
+        if result.get('Invoice'):
+            current_app.logger.info(
+                f"Invoice updated: {items_merged} items merged, {items_added} items added"
+            )
+        
+        return result
+
     
     def sync_invoice_to_customer(self, qb_connection, fluxops_invoice, customer_id: str, 
                                   use_existing_invoice: bool = True):
