@@ -79,10 +79,32 @@
             </div>
             
             <form action="{{ url_for('integrations.quickbooks_update_settings') }}" method="POST" class="p-6 space-y-6">
-                <!-- Default Expense Account -->
+                <!-- Default Income Account (for Sales) -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Default Expense Account
+                        Default Income Account (for Sales)
+                    </label>
+                    <select name="income_account_id" 
+                            onchange="this.form.income_account_name.value = this.options[this.selectedIndex].text"
+                            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">Select an income account...</option>
+                        {% for account in income_accounts %}
+                            <option value="{{ account.Id }}" 
+                                    {% if connection.default_income_account_id == account.Id %}selected{% endif %}>
+                                {{ account.Name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <input type="hidden" name="income_account_name" value="{{ connection.default_income_account_name or '' }}">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Used when syncing products - this is where sales revenue goes
+                    </p>
+                </div>
+
+                <!-- Default Expense Account (for Purchases) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Default Expense Account (for Purchases)
                     </label>
                     <select name="expense_account_id" 
                             onchange="this.form.expense_account_name.value = this.options[this.selectedIndex].text"
@@ -97,7 +119,7 @@
                     </select>
                     <input type="hidden" name="expense_account_name" value="{{ connection.default_expense_account_name or '' }}">
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        This account will be used when creating bills in QuickBooks
+                        Used when syncing products - this is where purchase costs go
                     </p>
                 </div>
 
@@ -146,8 +168,8 @@
                             <span class="text-blue-600 font-semibold text-sm">2</span>
                         </div>
                         <div>
-                            <p class="text-gray-900 dark:text-white font-medium">Review & Verify</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Check the extracted data is correct</p>
+                            <p class="text-gray-900 dark:text-white font-medium">Review & Select Customer</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Check the extracted data and select the customer to invoice</p>
                         </div>
                     </li>
                     <li class="flex items-start">
@@ -156,15 +178,15 @@
                         </div>
                         <div>
                             <p class="text-gray-900 dark:text-white font-medium">Sync to QuickBooks</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Click sync to create a Bill in QuickBooks with vendor and line items</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Products are updated and added to a customer invoice with GST</p>
                         </div>
                     </li>
                 </ul>
                 
                 <div class="mt-6 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
                     <p class="text-sm text-amber-800 dark:text-amber-200">
-                        <strong>Note:</strong> Invoices are synced as <strong>Bills</strong> in QuickBooks. 
-                        The supplier becomes a Vendor, and each line item is added to your selected expense account.
+                        <strong>Note:</strong> Products are synced with <strong>GST-exclusive prices</strong>. 
+                        When added to invoices, 5% GST is applied to each line item.
                     </p>
                 </div>
             </div>
@@ -180,8 +202,7 @@
                 </div>
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Connect to QuickBooks</h3>
                 <p class="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                    Link your QuickBooks Online account to automatically sync invoices as Bills, 
-                    keeping your accounting up to date.
+                    Link your QuickBooks Online account to sync products and create customer invoices automatically.
                 </p>
                 <a href="{{ url_for('integrations.quickbooks_connect') }}" 
                    class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition inline-flex items-center">
