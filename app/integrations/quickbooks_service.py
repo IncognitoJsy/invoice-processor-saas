@@ -662,10 +662,11 @@ Return ONLY valid JSON, no markdown:
 Rules:
 1. Match despite typos (e.g., "RIVERWOD" matches "Riverwood")
 2. Match partial names (e.g., "JAMES R" could match "James Riverwood")
-3. Confidence should be 0-100
-4. Return up to 3 best matches
-5. If no reasonable match, return empty matches array
-6. Only return names that are EXACTLY in the customer list"""
+3. For parent:child format (e.g., "TLC Home:Project"), if parent matches, include ALL sub-customers
+4. Confidence should be 0-100
+5. Return up to 10 best matches
+6. If no reasonable match, return empty matches array
+7. Only return names that are EXACTLY in the customer list"""
                 }]
             )
             
@@ -684,7 +685,7 @@ Rules:
                         match['customer_id'] = customer.get('Id')
                         break
             
-            return matches
+            return matches[:10]
             
         except Exception as e:
             current_app.logger.error(f"Customer matching error: {str(e)}")
@@ -719,7 +720,7 @@ Rules:
         
         # Sort by confidence
         matches.sort(key=lambda x: x['confidence'], reverse=True)
-        return matches[:3]
+        return matches[:10]
     
     # =========================================================================
     # INVOICE MANAGEMENT
