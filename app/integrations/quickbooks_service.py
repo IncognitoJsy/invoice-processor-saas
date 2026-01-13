@@ -927,7 +927,7 @@ Rules:
                 qb_connection,
                 customer_id,
                 line_items,
-                memo=f"Job: {fluxops_invoice.job_reference}" if fluxops_invoice.job_reference else None
+                memo=None  # Don't add job reference to invoice memo
             )
         
         if invoice_result.get('Invoice'):
