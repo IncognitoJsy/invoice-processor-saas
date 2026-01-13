@@ -21,6 +21,7 @@ class QuickBooksService:
         self.client_secret = current_app.config.get('QUICKBOOKS_CLIENT_SECRET')
         self.redirect_uri = current_app.config.get('QUICKBOOKS_REDIRECT_URI')
         self.environment = current_app.config.get('QUICKBOOKS_ENVIRONMENT', 'production')
+        self._tax_code_cache = None  # Cache tax code per request
     
     @property
     def api_base_url(self):
@@ -118,6 +119,12 @@ class QuickBooksService:
             return {'error': 'Unable to get valid access token'}
         
         url = f"{self.api_base_url}/v3/company/{qb_connection.realm_id}/{endpoint}"
+        
+        # Add minorversion parameter for better API compatibility
+        if '?' in url:
+            url += '&minorversion=75'
+        else:
+            url += '?minorversion=75'
         
         headers = {
             'Authorization': f'Bearer {access_token}',
@@ -299,6 +306,68 @@ class QuickBooksService:
             return {'success': False, 'error': result.get('error', 'Unknown error')}
     
     # =========================================================================
+    # TAX CODE MANAGEMENT
+    # =========================================================================
+    
+    def get_default_tax_code(self, qb_connection):
+        """
+        Get the default GST tax code from QuickBooks.
+        Caches the result for the duration of the request.
+        """
+        # Return cached result if available
+        if self._tax_code_cache:
+            return self._tax_code_cache
+        
+        try:
+            query = "query?query=SELECT * FROM TaxCode WHERE Active = true"
+            result = self.make_api_request(qb_connection, query)
+            
+            if result.get('QueryResponse', {}).get('TaxCode'):
+                tax_codes = result['QueryResponse']['TaxCode']
+                
+                # First look for GST specifically
+                for tax_code in tax_codes:
+                    name = tax_code.get('Name', '')
+                    if 'GST' in name.upper():
+                        self._tax_code_cache = {
+                            'value': tax_code['Id'],
+                            'name': name
+                        }
+                        current_app.logger.info(f"Found GST tax code: {name} (ID: {tax_code['Id']})")
+                        return self._tax_code_cache
+                
+                # If no GST found, look for standard rate tax codes
+                for tax_code in tax_codes:
+                    name = tax_code.get('Name', '')
+                    if name.startswith('S') or 'standard' in name.lower():
+                        self._tax_code_cache = {
+                            'value': tax_code['Id'],
+                            'name': name
+                        }
+                        current_app.logger.info(f"Found standard tax code: {name} (ID: {tax_code['Id']})")
+                        return self._tax_code_cache
+                
+                # If still no match, take the first taxable code (not exempt/zero)
+                for tax_code in tax_codes:
+                    name = tax_code.get('Name', '')
+                    # Skip exempt/zero/none codes
+                    if any(x in name.lower() for x in ['exempt', 'zero', 'none', 'no tax']):
+                        continue
+                    self._tax_code_cache = {
+                        'value': tax_code['Id'],
+                        'name': name
+                    }
+                    current_app.logger.info(f"Using first available tax code: {name} (ID: {tax_code['Id']})")
+                    return self._tax_code_cache
+                    
+            current_app.logger.warning("No suitable tax code found in QuickBooks")
+            return None
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting default tax code: {str(e)}")
+            return None
+    
+    # =========================================================================
     # PRODUCT/ITEM SYNC METHODS
     # =========================================================================
     
@@ -309,7 +378,7 @@ class QuickBooksService:
     def find_item_by_name(self, qb_connection, name):
         """Find an existing item by name"""
         # Clean the name for query (escape single quotes)
-        clean_name = name.replace("'", "\\'")[:100]
+        clean_name = name.replace("'", "\\'").replace('"', '\\"')[:100]
         query = f"query?query=SELECT * FROM Item WHERE Name = '{clean_name}'"
         result = self.make_api_request(qb_connection, query)
         
@@ -317,27 +386,67 @@ class QuickBooksService:
             return result['QueryResponse']['Item'][0]
         return None
     
+    def find_item_by_sku(self, qb_connection, sku):
+        """Find an existing item by SKU"""
+        clean_sku = sku.replace("'", "\\'").replace('"', '\\"')[:100]
+        query = f"query?query=SELECT * FROM Item WHERE Sku = '{clean_sku}'"
+        result = self.make_api_request(qb_connection, query)
+        
+        if result.get('QueryResponse', {}).get('Item'):
+            return result['QueryResponse']['Item'][0]
+        return None
+    
+    def find_item_by_sku_or_name(self, qb_connection, sku, name):
+        """
+        Find an existing item by SKU first, then by name.
+        This prevents duplicate products.
+        """
+        # Try SKU first (most reliable)
+        if sku:
+            item = self.find_item_by_sku(qb_connection, sku)
+            if item:
+                current_app.logger.info(f"Found item by SKU: {sku} -> {item.get('Name')}")
+                return item, "sku"
+        
+        # Try name match
+        if name:
+            item = self.find_item_by_name(qb_connection, name)
+            if item:
+                current_app.logger.info(f"Found item by name: {name}")
+                return item, "name"
+        
+        return None, None
+    
     def create_or_update_item(self, qb_connection, item_data):
         """
         Create or update a product/service item in QuickBooks
         
         item_data should contain:
         - name: str (part number or product name)
+        - sku: str (optional, defaults to name)
         - description: str
         - cost: float (what you pay - GST exclusive)
         - selling_price: float (what you charge - GST exclusive)
         - income_account_id: str (for sales)
         - expense_account_id: str (for purchases)
         
-        Note: Prices are GST EXCLUSIVE - QuickBooks will add 5% GST on top
+        Note: Prices are GST EXCLUSIVE - QuickBooks will add GST on top
         """
-        # Check if item exists
-        existing = self.find_item_by_name(qb_connection, item_data['name'])
+        name = item_data['name'][:100]
+        sku = item_data.get('sku', name)[:100]
+        
+        # Check if item exists by SKU or name
+        existing, match_type = self.find_item_by_sku_or_name(qb_connection, sku, name)
+        
+        # Get tax code
+        tax_code = self.get_default_tax_code(qb_connection)
         
         # Build item payload
         item_payload = {
-            "Name": item_data['name'][:100],  # QB limit
+            "Name": name,
+            "Sku": sku,
             "Type": "NonInventory",  # Use NonInventory for services/materials
+            "Active": True,
             "IncomeAccountRef": {
                 "value": item_data.get('income_account_id')
             },
@@ -345,10 +454,14 @@ class QuickBooksService:
                 "value": item_data.get('expense_account_id')
             },
             # GST Settings - prices are EXCLUSIVE of tax
-            "Taxable": True,  # Item is taxable
-            "SalesTaxIncluded": False,  # Sales price does NOT include GST
-            "PurchaseTaxIncluded": False  # Purchase cost does NOT include GST
+            "Taxable": True,
+            "SalesTaxIncluded": False,
+            "PurchaseTaxIncluded": False
         }
+        
+        # Add tax code if found
+        if tax_code:
+            item_payload["SalesTaxCodeRef"] = {"value": tax_code['value']}
         
         # Add description if provided
         if item_data.get('description'):
@@ -368,11 +481,16 @@ class QuickBooksService:
             item_payload["Id"] = existing['Id']
             item_payload["SyncToken"] = existing['SyncToken']
             item_payload["sparse"] = True
-            current_app.logger.info(f"Updating existing QB item: {item_data['name']} (ID: {existing['Id']})")
+            
+            # If item was found by name but has no SKU, add the SKU
+            if match_type == "name" and not existing.get('Sku'):
+                current_app.logger.info(f"Adding SKU '{sku}' to existing item: {name}")
+            
+            current_app.logger.info(f"Updating existing QB item: {name} (ID: {existing['Id']}, matched by {match_type})")
             return self.make_api_request(qb_connection, "item", method='POST', data=item_payload)
         else:
             # Create new item
-            current_app.logger.info(f"Creating new QB item: {item_data['name']}")
+            current_app.logger.info(f"Creating new QB item: {name} (SKU: {sku})")
             return self.make_api_request(qb_connection, "item", method='POST', data=item_payload)
     
     def sync_invoice_items_as_products(self, qb_connection, invoice):
@@ -389,6 +507,8 @@ class QuickBooksService:
         results = {
             'success': True,
             'synced': 0,
+            'updated': 0,
+            'created': 0,
             'skipped': 0,
             'failed': 0,
             'errors': [],
@@ -403,6 +523,7 @@ class QuickBooksService:
             
             item_data = {
                 'name': item.part_number,
+                'sku': item.part_number,  # Use part number as SKU
                 'description': item.description or '',
                 'cost': float(item.cost_per_item) if item.cost_per_item else 0,
                 'selling_price': float(item.selling_price) if item.selling_price else 0,
@@ -579,23 +700,29 @@ Rules:
     # =========================================================================
     
     def get_draft_invoices(self, qb_connection, customer_id: str = None):
-        """Get unsent/draft invoices, optionally filtered by customer"""
-        # Draft invoices have EmailStatus != 'EmailSent' and Balance > 0
-        query = "query?query=SELECT * FROM Invoice WHERE EmailStatus != 'EmailSent'"
+        """
+        Get unsent/draft invoices, optionally filtered by customer.
+        Note: QuickBooks doesn't allow querying by EmailStatus directly,
+        so we fetch invoices and filter in code.
+        """
+        # Query invoices - filter by customer if provided, get recent ones
         if customer_id:
-            query = f"query?query=SELECT * FROM Invoice WHERE CustomerRef = '{customer_id}' AND EmailStatus != 'EmailSent'"
-        query += " MAXRESULTS 100"
+            query = f"query?query=SELECT * FROM Invoice WHERE CustomerRef = '{customer_id}' ORDERBY TxnDate DESC MAXRESULTS 50"
+        else:
+            query = "query?query=SELECT * FROM Invoice ORDERBY TxnDate DESC MAXRESULTS 50"
         
         result = self.make_api_request(qb_connection, query)
         
         invoices = result.get('QueryResponse', {}).get('Invoice', [])
         
-        # Filter to only truly draft invoices (not yet sent)
+        # Filter to only draft invoices (not yet sent/paid)
         draft_invoices = []
         for inv in invoices:
             email_status = inv.get('EmailStatus', '')
-            # Include if not sent
-            if email_status != 'EmailSent':
+            balance = float(inv.get('Balance', 0))
+            
+            # Consider draft if not sent AND has balance (not paid)
+            if email_status != 'EmailSent' and balance > 0:
                 draft_invoices.append(inv)
         
         return draft_invoices
@@ -612,6 +739,9 @@ Rules:
             'description': str (optional)
         }
         """
+        # Get tax code
+        tax_code = self.get_default_tax_code(qb_connection)
+        
         # Build line items with GST
         lines = []
         for idx, item in enumerate(line_items):
@@ -623,12 +753,13 @@ Rules:
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": float(item.get('quantity', 1)),
-                    "TaxCodeRef": {
-                        "value": "5"  # Standard GST - you may need to adjust this
-                    }
+                    "Qty": float(item.get('quantity', 1))
                 }
             }
+            
+            # Add tax code if found
+            if tax_code:
+                line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
             if item.get('unit_price'):
                 line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
@@ -666,6 +797,9 @@ Rules:
         invoice = existing['Invoice']
         existing_lines = invoice.get('Line', [])
         
+        # Get tax code
+        tax_code = self.get_default_tax_code(qb_connection)
+        
         # Find next line ID
         max_id = 0
         for line in existing_lines:
@@ -687,12 +821,13 @@ Rules:
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": float(item.get('quantity', 1)),
-                    "TaxCodeRef": {
-                        "value": "5"  # Standard GST
-                    }
+                    "Qty": float(item.get('quantity', 1))
                 }
             }
+            
+            # Add tax code if found
+            if tax_code:
+                new_line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
             if item.get('unit_price'):
                 new_line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
