@@ -563,12 +563,34 @@ class QuickBooksService:
     # =========================================================================
     
     def get_customers(self, qb_connection, active_only: bool = True):
-        """Get all customers from QuickBooks"""
-        query = "query?query=SELECT * FROM Customer"
-        if active_only:
-            query += " WHERE Active = true"
-        query += " MAXRESULTS 1000"
-        return self.make_api_request(qb_connection, query)
+        """Get ALL customers from QuickBooks using pagination"""
+        all_customers = []
+        start_position = 1
+        page_size = 1000
+        
+        while True:
+            query = f"query?query=SELECT * FROM Customer"
+            if active_only:
+                query += " WHERE Active = true"
+            query += f" STARTPOSITION {start_position} MAXRESULTS {page_size}"
+            
+            result = self.make_api_request(qb_connection, query)
+            customers = result.get('QueryResponse', {}).get('Customer', [])
+            
+            if not customers:
+                break
+                
+            all_customers.extend(customers)
+            current_app.logger.info(f"Loaded {len(all_customers)} customers so far...")
+            
+            # If we got fewer than page_size, we've reached the end
+            if len(customers) < page_size:
+                break
+                
+            start_position += page_size
+        
+        current_app.logger.info(f"Total customers loaded: {len(all_customers)}")
+        return {'QueryResponse': {'Customer': all_customers}}
     
     def find_customer_by_name(self, qb_connection, name: str):
         """Find a customer by display name"""
