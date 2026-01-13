@@ -6,9 +6,24 @@
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Invoices</h1>
-            <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage all your processed invoices</p>
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Invoices</h1>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage all your processed invoices</p>
+            </div>
+            <!-- QuickBooks Connection Status -->
+            <div id="qb-status" class="hidden">
+                <div class="flex items-center px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span class="text-sm text-green-700 dark:text-green-400">QuickBooks Connected</span>
+                </div>
+            </div>
+            <div id="qb-status-disconnected" class="hidden">
+                <a href="/integrations/quickbooks/settings" class="flex items-center px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    <div class="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Connect QuickBooks</span>
+                </a>
+            </div>
         </div>
 
         <!-- Stats Cards -->
@@ -72,7 +87,7 @@
 
         <!-- Filters -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6 border border-gray-200 dark:border-gray-700">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
                     <input type="text" id="search-input" placeholder="Job reference, supplier..." 
@@ -94,6 +109,14 @@
                         <option value="year">This Year</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">QB Status</label>
+                    <select id="qb-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All</option>
+                        <option value="synced">Synced to QB</option>
+                        <option value="not-synced">Not Synced</option>
+                    </select>
+                </div>
                 <div class="flex items-end">
                     <button onclick="exportCSV()" class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition flex items-center justify-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,12 +135,14 @@
                     <thead class="bg-gray-50 dark:bg-gray-900">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Invoice #</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supplier</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Job Reference</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selling</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profit</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">QB</th>
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -168,9 +193,9 @@
     </div>
 </div>
 
-<!-- Invoice Detail Modal -->
+<!-- Invoice Detail Modal with QuickBooks Sync -->
 <div id="invoice-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
         <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <div>
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white" id="modal-title">Invoice Details</h2>
@@ -182,7 +207,86 @@
                 </svg>
             </button>
         </div>
-        <div class="p-6 overflow-y-auto max-h-[60vh]">
+        
+        <!-- Duplicate Warning Banner (if applicable) -->
+        <div id="modal-duplicate-warning" class="hidden bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 p-4">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span class="text-amber-800 dark:text-amber-200 text-sm font-medium">This invoice may be a duplicate</span>
+            </div>
+        </div>
+        
+        <!-- QuickBooks Sync Section -->
+        <div id="qb-sync-section" class="hidden p-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sync to QuickBooks</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Customer Selection -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Customer</label>
+                    <select id="qb-customer-select" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">Select customer...</option>
+                    </select>
+                    <!-- Suggested Match -->
+                    <div id="customer-suggestion" class="hidden mt-1 text-xs text-green-600 dark:text-green-400">
+                        <span class="font-medium">Suggested:</span> <span id="suggested-customer-name"></span> 
+                        <button onclick="useSuggestedCustomer()" class="ml-1 underline hover:no-underline">Use this</button>
+                    </div>
+                </div>
+                
+                <!-- Invoice Action -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Invoice Action</label>
+                    <div id="draft-invoice-info" class="text-sm">
+                        <div class="flex items-center text-gray-600 dark:text-gray-400">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <span id="invoice-action-text">Select customer first</span>
+                        </div>
+                        <div id="draft-invoice-link" class="hidden mt-1">
+                            <a href="#" target="_blank" class="text-xs text-blue-600 hover:underline">View draft invoice in QB →</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sync Button -->
+                <div class="flex items-end">
+                    <button id="sync-to-qb-btn" onclick="syncToQuickBooks()" disabled
+                            class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition flex items-center justify-center text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sync to QuickBooks
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Sync Progress -->
+            <div id="sync-progress" class="hidden mt-4">
+                <div class="flex items-center mb-2">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    <span class="text-sm text-gray-600 dark:text-gray-400" id="sync-status-text">Syncing products...</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div id="sync-progress-bar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <!-- Sync Result -->
+            <div id="sync-result" class="hidden mt-4 p-3 rounded-lg">
+                <div class="flex items-center">
+                    <svg id="sync-result-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+                    <span id="sync-result-text" class="text-sm font-medium"></span>
+                </div>
+                <div id="sync-result-details" class="mt-2 text-xs"></div>
+            </div>
+        </div>
+        
+        <!-- Items Table -->
+        <div class="p-6 overflow-y-auto max-h-[40vh]">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-900">
                     <tr>
@@ -198,18 +302,26 @@
                 </tbody>
             </table>
         </div>
+        
+        <!-- Totals Footer -->
         <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <div class="flex justify-between text-sm">
-                <span class="text-gray-500 dark:text-gray-400">Total Cost:</span>
-                <span class="font-bold text-gray-900 dark:text-white" id="modal-total-cost">£0.00</span>
-            </div>
-            <div class="flex justify-between text-sm mt-1">
-                <span class="text-gray-500 dark:text-gray-400">Total Selling:</span>
-                <span class="font-bold text-gray-900 dark:text-white" id="modal-total-selling">£0.00</span>
-            </div>
-            <div class="flex justify-between text-sm mt-1">
-                <span class="text-gray-500 dark:text-gray-400">Total Profit:</span>
-                <span class="font-bold text-green-600 dark:text-green-400" id="modal-total-profit">£0.00</span>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Total Cost (ex GST)</span>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="modal-total-cost">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Total Selling (ex GST)</span>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="modal-total-selling">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Total Profit</span>
+                    <p class="text-lg font-bold text-green-600 dark:text-green-400" id="modal-total-profit">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">With 5% GST</span>
+                    <p class="text-lg font-bold text-blue-600 dark:text-blue-400" id="modal-total-with-gst">£0.00</p>
+                </div>
             </div>
         </div>
     </div>
@@ -220,14 +332,71 @@ let allInvoices = [];
 let filteredInvoices = [];
 let currentPage = 1;
 const perPage = 20;
+let qbConnected = false;
+let qbCustomers = [];
+let currentInvoice = null;
+let suggestedCustomer = null;
 
 // Load invoices on page load
-document.addEventListener('DOMContentLoaded', loadInvoices);
+document.addEventListener('DOMContentLoaded', () => {
+    loadInvoices();
+    checkQBStatus();
+});
 
 // Filter listeners
 document.getElementById('search-input').addEventListener('input', debounce(applyFilters, 300));
 document.getElementById('supplier-filter').addEventListener('change', applyFilters);
 document.getElementById('date-filter').addEventListener('change', applyFilters);
+document.getElementById('qb-filter').addEventListener('change', applyFilters);
+document.getElementById('qb-customer-select').addEventListener('change', onCustomerChange);
+
+async function checkQBStatus() {
+    try {
+        const response = await fetch('/integrations/api/quickbooks/status');
+        const data = await response.json();
+        
+        qbConnected = data.connected;
+        
+        if (qbConnected) {
+            document.getElementById('qb-status').classList.remove('hidden');
+            document.getElementById('qb-status-disconnected').classList.add('hidden');
+            // Load customers
+            loadQBCustomers();
+        } else {
+            document.getElementById('qb-status').classList.add('hidden');
+            document.getElementById('qb-status-disconnected').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error checking QB status:', error);
+    }
+}
+
+async function loadQBCustomers() {
+    try {
+        const response = await fetch('/integrations/api/quickbooks/customers');
+        const data = await response.json();
+        
+        if (data.customers) {
+            qbCustomers = data.customers;
+            populateCustomerDropdown();
+        }
+    } catch (error) {
+        console.error('Error loading customers:', error);
+    }
+}
+
+function populateCustomerDropdown() {
+    const select = document.getElementById('qb-customer-select');
+    select.innerHTML = '<option value="">Select customer...</option>';
+    
+    qbCustomers.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = customer.Id;
+        option.textContent = customer.DisplayName;
+        option.dataset.name = customer.DisplayName;
+        select.appendChild(option);
+    });
+}
 
 async function loadInvoices() {
     try {
@@ -275,6 +444,7 @@ function applyFilters() {
     const search = document.getElementById('search-input').value.toLowerCase();
     const supplier = document.getElementById('supplier-filter').value;
     const dateRange = document.getElementById('date-filter').value;
+    const qbStatus = document.getElementById('qb-filter').value;
     
     filteredInvoices = allInvoices.filter(inv => {
         // Search filter
@@ -288,6 +458,10 @@ function applyFilters() {
         if (supplier && inv.supplier_name !== supplier) {
             return false;
         }
+        
+        // QB status filter
+        if (qbStatus === 'synced' && !inv.qb_synced_at) return false;
+        if (qbStatus === 'not-synced' && inv.qb_synced_at) return false;
         
         // Date filter
         if (dateRange) {
@@ -339,6 +513,9 @@ function renderInvoices() {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                 ${formatDate(inv.created_at)}
             </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
+                ${inv.invoice_number || '-'}
+            </td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="px-2 py-1 text-xs font-medium rounded-full 
                     ${inv.supplier_name === 'YESSS Electrical' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : ''}
@@ -362,6 +539,20 @@ function renderInvoices() {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(inv.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
                 £${(inv.total_profit || 0).toFixed(2)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                ${inv.qb_synced_at ? `
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        Synced
+                    </span>
+                ` : `
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                        Not synced
+                    </span>
+                `}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-center">
                 <button onclick="event.stopPropagation(); viewInvoice(${inv.id})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">
@@ -392,14 +583,15 @@ async function viewInvoice(id) {
         const data = await response.json();
         
         if (data.success) {
+            currentInvoice = data.invoice;
             const inv = data.invoice;
             
             document.getElementById('modal-title').textContent = inv.job_reference || 'Invoice Details';
-            document.getElementById('modal-subtitle').textContent = `${inv.supplier_name} • ${formatDate(inv.created_at)}`;
+            document.getElementById('modal-subtitle').textContent = `${inv.supplier_name} • ${inv.invoice_number || 'No invoice #'} • ${formatDate(inv.created_at)}`;
             
             document.getElementById('modal-items').innerHTML = inv.items.map(item => `
                 <tr>
-                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">${item.part_number || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white font-mono">${item.part_number || '-'}</td>
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${item.description || '-'}</td>
                     <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center">${item.quantity}</td>
                     <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${(item.total_amount || 0).toFixed(2)}</td>
@@ -410,9 +602,28 @@ async function viewInvoice(id) {
                 </tr>
             `).join('');
             
-            document.getElementById('modal-total-cost').textContent = '£' + (inv.total_cost || 0).toFixed(2);
-            document.getElementById('modal-total-selling').textContent = '£' + (inv.total_selling || 0).toFixed(2);
-            document.getElementById('modal-total-profit').textContent = '£' + (inv.total_profit || 0).toFixed(2);
+            const totalCost = inv.total_cost || 0;
+            const totalSelling = inv.total_selling || 0;
+            const totalProfit = inv.total_profit || 0;
+            const totalWithGST = totalSelling * 1.05;
+            
+            document.getElementById('modal-total-cost').textContent = '£' + totalCost.toFixed(2);
+            document.getElementById('modal-total-selling').textContent = '£' + totalSelling.toFixed(2);
+            document.getElementById('modal-total-profit').textContent = '£' + totalProfit.toFixed(2);
+            document.getElementById('modal-total-with-gst').textContent = '£' + totalWithGST.toFixed(2);
+            
+            // Show/hide QB sync section
+            if (qbConnected) {
+                document.getElementById('qb-sync-section').classList.remove('hidden');
+                // Reset sync UI
+                resetSyncUI();
+                // Get customer suggestions
+                if (inv.job_reference) {
+                    getCustomerSuggestions(inv.job_reference);
+                }
+            } else {
+                document.getElementById('qb-sync-section').classList.add('hidden');
+            }
             
             document.getElementById('invoice-modal').classList.remove('hidden');
         }
@@ -421,8 +632,175 @@ async function viewInvoice(id) {
     }
 }
 
+function resetSyncUI() {
+    document.getElementById('qb-customer-select').value = '';
+    document.getElementById('customer-suggestion').classList.add('hidden');
+    document.getElementById('invoice-action-text').textContent = 'Select customer first';
+    document.getElementById('draft-invoice-link').classList.add('hidden');
+    document.getElementById('sync-to-qb-btn').disabled = true;
+    document.getElementById('sync-progress').classList.add('hidden');
+    document.getElementById('sync-result').classList.add('hidden');
+    suggestedCustomer = null;
+}
+
+async function getCustomerSuggestions(jobReference) {
+    try {
+        const response = await fetch(`/integrations/api/quickbooks/match-customer?job_reference=${encodeURIComponent(jobReference)}`);
+        const data = await response.json();
+        
+        if (data.matches && data.matches.length > 0) {
+            suggestedCustomer = data.matches[0];
+            document.getElementById('suggested-customer-name').textContent = 
+                `${suggestedCustomer.customer_name} (${suggestedCustomer.confidence}% match)`;
+            document.getElementById('customer-suggestion').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error getting customer suggestions:', error);
+    }
+}
+
+function useSuggestedCustomer() {
+    if (suggestedCustomer && suggestedCustomer.customer_id) {
+        document.getElementById('qb-customer-select').value = suggestedCustomer.customer_id;
+        onCustomerChange();
+    }
+}
+
+async function onCustomerChange() {
+    const customerId = document.getElementById('qb-customer-select').value;
+    
+    if (!customerId) {
+        document.getElementById('invoice-action-text').textContent = 'Select customer first';
+        document.getElementById('draft-invoice-link').classList.add('hidden');
+        document.getElementById('sync-to-qb-btn').disabled = true;
+        return;
+    }
+    
+    document.getElementById('sync-to-qb-btn').disabled = false;
+    
+    // Check for draft invoices
+    try {
+        const response = await fetch(`/integrations/api/quickbooks/draft-invoices?customer_id=${customerId}`);
+        const data = await response.json();
+        
+        if (data.drafts && data.drafts.length > 0) {
+            const draft = data.drafts[0];
+            document.getElementById('invoice-action-text').innerHTML = `
+                <span class="text-green-600 dark:text-green-400">
+                    Will add to existing draft invoice #${draft.DocNumber || draft.Id}
+                </span>
+            `;
+        } else {
+            document.getElementById('invoice-action-text').innerHTML = `
+                <span class="text-blue-600 dark:text-blue-400">
+                    Will create new invoice
+                </span>
+            `;
+        }
+    } catch (error) {
+        document.getElementById('invoice-action-text').textContent = 'Will create new invoice';
+    }
+}
+
+async function syncToQuickBooks() {
+    const customerId = document.getElementById('qb-customer-select').value;
+    
+    if (!customerId || !currentInvoice) {
+        alert('Please select a customer');
+        return;
+    }
+    
+    // Show progress
+    document.getElementById('sync-progress').classList.remove('hidden');
+    document.getElementById('sync-result').classList.add('hidden');
+    document.getElementById('sync-to-qb-btn').disabled = true;
+    
+    try {
+        // Step 1: Sync products
+        updateSyncProgress(25, 'Syncing products to QuickBooks...');
+        
+        const productResponse = await fetch(`/integrations/quickbooks/sync-products/${currentInvoice.id}`, {
+            method: 'POST'
+        });
+        const productData = await productResponse.json();
+        
+        updateSyncProgress(50, `Synced ${productData.details?.synced || 0} products...`);
+        
+        // Step 2: Create/update invoice
+        updateSyncProgress(75, 'Creating customer invoice...');
+        
+        const invoiceResponse = await fetch(`/integrations/quickbooks/sync-to-customer/${currentInvoice.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_id: customerId })
+        });
+        const invoiceData = await invoiceResponse.json();
+        
+        updateSyncProgress(100, 'Complete!');
+        
+        // Show result
+        setTimeout(() => {
+            document.getElementById('sync-progress').classList.add('hidden');
+            showSyncResult(invoiceData);
+        }, 500);
+        
+    } catch (error) {
+        console.error('Sync error:', error);
+        document.getElementById('sync-progress').classList.add('hidden');
+        showSyncResult({ success: false, error: error.message });
+    }
+}
+
+function updateSyncProgress(percent, text) {
+    document.getElementById('sync-progress-bar').style.width = percent + '%';
+    document.getElementById('sync-status-text').textContent = text;
+}
+
+function showSyncResult(data) {
+    const resultDiv = document.getElementById('sync-result');
+    const icon = document.getElementById('sync-result-icon');
+    const text = document.getElementById('sync-result-text');
+    const details = document.getElementById('sync-result-details');
+    
+    resultDiv.classList.remove('hidden');
+    
+    if (data.success) {
+        resultDiv.className = 'mt-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+        icon.className = 'w-5 h-5 mr-2 text-green-600';
+        text.textContent = 'Successfully synced to QuickBooks!';
+        text.className = 'text-sm font-medium text-green-800 dark:text-green-200';
+        
+        let detailsHtml = '';
+        if (data.products_synced) {
+            detailsHtml += `<p>Products synced: ${data.products_synced}</p>`;
+        }
+        if (data.invoice_action === 'created_new') {
+            detailsHtml += `<p>New invoice created: #${data.qb_invoice_number || data.qb_invoice_id}</p>`;
+        } else if (data.invoice_action === 'added_to_existing') {
+            detailsHtml += `<p>Added to existing invoice</p>`;
+        }
+        details.innerHTML = detailsHtml;
+        details.className = 'mt-2 text-xs text-green-700 dark:text-green-300';
+        
+        // Reload invoices to update status
+        loadInvoices();
+    } else {
+        resultDiv.className = 'mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+        icon.className = 'w-5 h-5 mr-2 text-red-600';
+        text.textContent = 'Sync failed';
+        text.className = 'text-sm font-medium text-red-800 dark:text-red-200';
+        details.innerHTML = `<p>${data.error || 'Unknown error occurred'}</p>`;
+        details.className = 'mt-2 text-xs text-red-700 dark:text-red-300';
+    }
+    
+    document.getElementById('sync-to-qb-btn').disabled = false;
+}
+
 function closeModal() {
     document.getElementById('invoice-modal').classList.add('hidden');
+    currentInvoice = null;
 }
 
 function prevPage() {
