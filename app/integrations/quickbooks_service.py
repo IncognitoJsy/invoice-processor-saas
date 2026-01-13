@@ -627,8 +627,8 @@ class QuickBooksService:
         if not customers:
             return []
         
-        # Build customer name list
-        customer_names = [c.get('DisplayName', '') for c in customers]
+        # Build customer name list (use FullyQualifiedName to include sub-customers like "TLC Home:Project 1")
+        customer_names = [c.get('FullyQualifiedName', c.get('DisplayName', '')) for c in customers]
         
         # Use Claude to find best matches
         try:
@@ -642,7 +642,7 @@ class QuickBooksService:
             
             message = client.messages.create(
                 model="claude-3-5-sonnet-20241022",
-                max_tokens=1024,
+                max_tokens=4096,
                 messages=[{
                     "role": "user",
                     "content": f"""Match this job reference to the most likely customer(s) from the list.
@@ -650,7 +650,7 @@ class QuickBooksService:
 Job Reference: "{job_reference}"
 
 Customer List:
-{chr(10).join(f'- {name}' for name in customer_names[:100])}
+{chr(10).join(f'- {name}' for name in customer_names)}
 
 Return ONLY valid JSON, no markdown:
 {{
@@ -702,7 +702,7 @@ Rules:
         words = [w for w in job_ref_lower.replace('/', ' ').split() if len(w) > 2]
         
         for customer in customers:
-            name = customer.get('DisplayName', '')
+            name = customer.get('FullyQualifiedName', customer.get('DisplayName', ''))
             name_lower = name.lower()
             
             # Check for word matches
