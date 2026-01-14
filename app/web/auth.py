@@ -32,7 +32,8 @@ def login():
             
             login_user(user, remember=remember)
             
-            # Redirect to next page or dashboard
+            print(f"=== LOGIN REDIRECT: Going to dashboard.index for user {email} ===")
+            
             return redirect(url_for('dashboard.index'))
         else:
             flash('Invalid email or password', 'error')
