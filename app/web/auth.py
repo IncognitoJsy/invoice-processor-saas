@@ -34,7 +34,7 @@ def login():
             
             # Redirect to next page or dashboard
             next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('dashboard.index'))
+            return redirect(url_for('dashboard.index'))
         else:
             flash('Invalid email or password', 'error')
     
