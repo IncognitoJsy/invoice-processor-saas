@@ -9,7 +9,7 @@ from app.extensions import db
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('upload.upload_page'))
+        return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
         email = request.form.get('email')
@@ -22,8 +22,7 @@ def login():
             user.last_login = datetime.utcnow()
             db.session.commit()
             login_user(user, remember=remember)
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('upload.upload_page'))
+            return redirect(url_for('dashboard.index'))
         else:
             flash('Invalid email or password', 'error')
     
@@ -32,7 +31,7 @@ def login():
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('upload.upload_page'))
+        return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
         email = request.form.get('email')
@@ -50,6 +49,7 @@ def register():
             last_name=last_name
         )
         user.set_password(password)
+        user.start_trial()  # Start 7-day free trial
         
         db.session.add(user)
         db.session.commit()
