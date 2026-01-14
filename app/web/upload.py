@@ -32,6 +32,7 @@ def api_upload():
         
         files = request.files.getlist('files')
         use_claude = request.form.get('use_claude', 'true').lower() == 'true'
+        document_type = request.form.get('document_type', 'invoice')
         
         if not files or len(files) == 0:
             return jsonify({'error': 'No files selected'}), 400
@@ -65,7 +66,8 @@ def api_upload():
                             saved_invoice = save_invoice_to_db(
                                 invoice_data, 
                                 filename, 
-                                current_user.id
+                                current_user.id,
+                                document_type
                             )
                             
                             # Prepare result for frontend
@@ -126,7 +128,7 @@ def api_upload():
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
-def save_invoice_to_db(invoice_data, filename, user_id):
+def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice'):
     """Save parsed invoice and items to database"""
     from app.models.invoice import Invoice, InvoiceItem
     from app.extensions import db
@@ -152,6 +154,7 @@ def save_invoice_to_db(invoice_data, filename, user_id):
     # Create invoice record
     invoice = Invoice(
         user_id=user_id,
+        document_type=document_type,
         supplier_name=invoice_data.get('supplier', 'Unknown'),
         invoice_number=invoice_data.get('invoice_number'),
         job_reference=invoice_data.get('job_reference'),

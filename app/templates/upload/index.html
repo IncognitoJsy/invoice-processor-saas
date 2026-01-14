@@ -1,6 +1,6 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Upload Invoice - FluxOps{% endblock %}
+{% block title %}Upload - FluxOps{% endblock %}
 
 {% block content %}
 <div x-data="uploadPage()" class="space-y-8 max-w-7xl mx-auto">
@@ -18,7 +18,7 @@
                         <span>AI-Powered Parsing</span>
                     </div>
                     <h1 class="text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-                        Upload Invoices
+                        Upload Documents
                     </h1>
                     <p class="text-gray-600 dark:text-gray-400 text-lg">
                         Intelligent extraction from YESSS, CEF, and Wholesale Electrics
@@ -37,11 +37,63 @@
     <!-- Upload Area -->
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="p-8">
+            
+            <!-- Document Type Selector -->
+            <div class="mb-8">
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Document Type</label>
+                <div class="flex gap-4">
+                    <!-- Invoice Option -->
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="documentType" value="invoice" x-model="documentType" class="sr-only peer">
+                        <div class="p-6 rounded-xl border-2 transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center transition-colors"
+                                     :class="documentType === 'invoice' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-gray-900 dark:text-white">Supplier Invoice</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Materials you've purchased for a job</p>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                                → Creates <span class="font-semibold text-blue-600 dark:text-blue-400">Customer Invoice</span> in QuickBooks
+                            </div>
+                        </div>
+                    </label>
+                    
+                    <!-- Quote Option -->
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="documentType" value="quote" x-model="documentType" class="sr-only peer">
+                        <div class="p-6 rounded-xl border-2 transition-all peer-checked:border-purple-500 peer-checked:bg-purple-50 dark:peer-checked:bg-purple-900/20 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-700">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center transition-colors"
+                                     :class="documentType === 'quote' ? 'bg-purple-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-gray-900 dark:text-white">Supplier Quote</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Quote for materials before purchase</p>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                                → Creates <span class="font-semibold text-purple-600 dark:text-purple-400">Customer Estimate</span> in QuickBooks
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
             <!-- Drag & Drop Zone -->
             <div @dragover.prevent="dragover = true"
                  @dragleave.prevent="dragover = false"
                  @drop.prevent="handleDrop($event)"
-                 :class="{'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg shadow-blue-500/20': dragover}"
+                 :class="{'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg shadow-blue-500/20': dragover && documentType === 'invoice',
+                          'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg shadow-purple-500/20': dragover && documentType === 'quote'}"
                  class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-16 text-center transition-all duration-300 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/30 group"
                  @click="$refs.fileInput.click()">
                 
@@ -54,7 +106,8 @@
                 
                 <div class="space-y-5">
                     <div class="flex justify-center">
-                        <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-lg">
+                        <div class="w-20 h-20 rounded-2xl flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-lg"
+                             :class="documentType === 'invoice' ? 'bg-gradient-to-br from-blue-500 to-purple-600' : 'bg-gradient-to-br from-purple-500 to-pink-600'">
                             <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
@@ -63,7 +116,7 @@
                     
                     <div>
                         <p class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                            Drop PDF invoices here
+                            Drop PDF <span x-text="documentType === 'invoice' ? 'invoices' : 'quotes'"></span> here
                         </p>
                         <p class="text-gray-500 dark:text-gray-400">
                             or click to browse your files
@@ -99,7 +152,9 @@
                     <div class="flex items-center justify-between">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                             Selected Files
-                            <span class="ml-2 px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm" x-text="files.length"></span>
+                            <span class="ml-2 px-2.5 py-0.5 rounded-full text-sm"
+                                  :class="documentType === 'invoice' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'"
+                                  x-text="files.length"></span>
                         </h3>
                         <button @click="files = []" class="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium">
                             Clear all
@@ -110,7 +165,8 @@
                         <template x-for="(file, index) in files" :key="index">
                             <div class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-md transition-all">
                                 <div class="flex items-center space-x-4">
-                                    <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
+                                         :class="documentType === 'invoice' ? 'bg-gradient-to-br from-red-500 to-pink-600' : 'bg-gradient-to-br from-purple-500 to-indigo-600'">
                                         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                                         </svg>
@@ -134,14 +190,16 @@
                     <!-- Process Button -->
                     <button @click="uploadFiles()" 
                             :disabled="uploading || files.length === 0"
-                            :class="{'opacity-50 cursor-not-allowed': uploading || files.length === 0}"
-                            class="w-full py-4 px-6 bg-gradient-to-r from-blue-600 via-blue-500 to-purple-600 hover:from-blue-700 hover:via-blue-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.01] transition-all relative overflow-hidden group">
+                            :class="{'opacity-50 cursor-not-allowed': uploading || files.length === 0,
+                                     'from-blue-600 via-blue-500 to-purple-600 hover:from-blue-700 hover:via-blue-600 hover:to-purple-700': documentType === 'invoice',
+                                     'from-purple-600 via-purple-500 to-pink-600 hover:from-purple-700 hover:via-purple-600 hover:to-pink-700': documentType === 'quote'}"
+                            class="w-full py-4 px-6 bg-gradient-to-r text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.01] transition-all relative overflow-hidden group">
                         <span class="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></span>
                         <span x-show="!uploading" class="flex items-center justify-center space-x-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                             </svg>
-                            <span>Process <span x-text="files.length"></span> Invoice<span x-show="files.length > 1">s</span></span>
+                            <span>Process <span x-text="files.length"></span> <span x-text="documentType === 'invoice' ? 'Invoice' : 'Quote'"></span><span x-show="files.length > 1">s</span></span>
                         </span>
                         <span x-show="uploading" class="flex items-center justify-center space-x-3">
                             <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -156,15 +214,23 @@
             
             <!-- Processing Status -->
             <template x-if="processing">
-                <div class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+                <div class="mt-8 p-6 rounded-xl border-2"
+                     :class="documentType === 'invoice' ? 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800' : 'bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800'">
                     <div class="flex items-center space-x-4">
-                        <svg class="animate-spin h-8 w-8 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24">
+                        <svg class="animate-spin h-8 w-8"
+                             :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'"
+                             fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         <div>
-                            <p class="font-semibold text-blue-900 dark:text-blue-100 text-lg">Processing invoices...</p>
-                            <p class="text-blue-700 dark:text-blue-300">Extracting line items, prices, and calculating markups</p>
+                            <p class="font-semibold text-lg"
+                               :class="documentType === 'invoice' ? 'text-blue-900 dark:text-blue-100' : 'text-purple-900 dark:text-purple-100'">
+                                Processing <span x-text="documentType === 'invoice' ? 'invoices' : 'quotes'"></span>...
+                            </p>
+                            <p :class="documentType === 'invoice' ? 'text-blue-700 dark:text-blue-300' : 'text-purple-700 dark:text-purple-300'">
+                                Extracting line items, prices, and calculating markups
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -193,18 +259,24 @@
     <template x-if="results.length > 0">
         <div class="space-y-6">
             <!-- Success Header -->
-            <div class="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 rounded-2xl shadow-xl border-2 border-green-200 dark:border-green-800 p-6">
+            <div class="rounded-2xl shadow-xl border-2 p-6"
+                 :class="documentType === 'invoice' ? 'bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 border-green-200 dark:border-green-800' : 'bg-gradient-to-r from-purple-50 via-pink-50 to-rose-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-rose-900/20 border-purple-200 dark:border-purple-800'">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-4">
-                        <div class="w-14 h-14 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg">
+                        <div class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                             :class="documentType === 'invoice' ? 'bg-green-500' : 'bg-purple-500'">
                             <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-green-900 dark:text-green-100">Successfully Processed!</p>
-                            <p class="text-green-700 dark:text-green-300">
-                                <span x-text="results.length"></span> invoice<span x-show="results.length > 1">s</span> parsed and ready for review
+                            <p class="text-2xl font-bold"
+                               :class="documentType === 'invoice' ? 'text-green-900 dark:text-green-100' : 'text-purple-900 dark:text-purple-100'">
+                                Successfully Processed!
+                            </p>
+                            <p :class="documentType === 'invoice' ? 'text-green-700 dark:text-green-300' : 'text-purple-700 dark:text-purple-300'">
+                                <span x-text="results.length"></span> <span x-text="documentType === 'invoice' ? 'invoice' : 'quote'"></span><span x-show="results.length > 1">s</span> parsed and ready
+                                <span x-text="documentType === 'invoice' ? '→ Create Customer Invoices' : '→ Create Customer Estimates'"></span>
                             </p>
                         </div>
                     </div>
@@ -215,16 +287,23 @@
             <template x-for="(result, index) in results" :key="index">
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <!-- Card Header -->
-                    <div class="bg-gradient-to-r from-gray-50 to-blue-50/30 dark:from-gray-800 dark:to-gray-700/50 p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="p-6 border-b border-gray-200 dark:border-gray-700"
+                         :class="documentType === 'invoice' ? 'bg-gradient-to-r from-gray-50 to-blue-50/30 dark:from-gray-800 dark:to-gray-700/50' : 'bg-gradient-to-r from-gray-50 to-purple-50/30 dark:from-gray-800 dark:to-purple-900/20'">
                         <div class="flex items-start justify-between">
                             <div class="flex items-start space-x-4">
-                                <div class="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                                <div class="w-14 h-14 rounded-xl flex items-center justify-center shadow-lg"
+                                     :class="documentType === 'invoice' ? 'bg-gradient-to-br from-blue-500 to-purple-600' : 'bg-gradient-to-br from-purple-500 to-pink-600'">
                                     <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                     </svg>
                                 </div>
                                 <div>
-                                    <p class="text-xl font-bold text-gray-900 dark:text-white" x-text="result.filename"></p>
+                                    <div class="flex items-center space-x-2">
+                                        <p class="text-xl font-bold text-gray-900 dark:text-white" x-text="result.filename"></p>
+                                        <span class="px-2 py-0.5 text-xs font-bold uppercase rounded-full"
+                                              :class="documentType === 'invoice' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'"
+                                              x-text="documentType"></span>
+                                    </div>
                                     <p class="text-gray-600 dark:text-gray-400 font-medium" x-text="result.supplier"></p>
                                     <div class="flex items-center space-x-3 mt-2">
                                         <p class="text-sm text-gray-600 dark:text-gray-400" x-show="result.job_reference">
@@ -246,7 +325,8 @@
                                 </div>
                             </div>
                             <div class="text-right">
-                                <p class="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                                <p class="text-3xl font-bold"
+                                   :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'">
                                     £<span x-text="result.total.toFixed(2)"></span>
                                 </p>
                                 <p class="text-gray-600 dark:text-gray-400 font-medium">
@@ -257,7 +337,8 @@
                     </div>
                     
                     <!-- Invoice Summary Box -->
-                    <div class="p-6 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-900/10 dark:via-purple-900/10 dark:to-pink-900/10 border-t-4 border-blue-500">
+                    <div class="p-6 border-t-4"
+                         :class="documentType === 'invoice' ? 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-900/10 dark:via-purple-900/10 dark:to-pink-900/10 border-blue-500' : 'bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 dark:from-purple-900/10 dark:via-pink-900/10 dark:to-rose-900/10 border-purple-500'">
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <!-- Total Cost -->
                             <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -265,16 +346,23 @@
                                 <p class="text-2xl font-bold text-gray-900 dark:text-white">
                                     £<span x-text="result.total.toFixed(2)"></span>
                                 </p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Supplier invoice</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" x-text="documentType === 'invoice' ? 'Supplier invoice' : 'Supplier quote'"></p>
                             </div>
                             
                             <!-- Total Selling Price -->
-                            <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-xl p-4 border border-blue-300 dark:border-blue-700">
-                                <p class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Total Selling</p>
-                                <p class="text-2xl font-bold text-blue-600 dark:text-blue-400"
+                            <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-xl p-4 border"
+                                 :class="documentType === 'invoice' ? 'border-blue-300 dark:border-blue-700' : 'border-purple-300 dark:border-purple-700'">
+                                <p class="text-xs font-bold uppercase tracking-wide mb-1"
+                                   :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'">
+                                    Total Selling
+                                </p>
+                                <p class="text-2xl font-bold"
+                                   :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'"
                                    x-text="'£' + (result.all_items || result.items).reduce((sum, item) => sum + (item.selling_price * item.quantity), 0).toFixed(2)">
                                 </p>
-                                <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">Customer quote</p>
+                                <p class="text-xs mt-1"
+                                   :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'"
+                                   x-text="documentType === 'invoice' ? 'Customer invoice' : 'Customer estimate'"></p>
                             </div>
                             
                             <!-- Total Profit -->
@@ -304,7 +392,8 @@
                                 Line Items
                             </p>
                             <button @click="result.expanded = !result.expanded" 
-                                    class="px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/30 font-medium transition-all text-sm">
+                                    class="px-4 py-2 rounded-lg font-medium transition-all text-sm"
+                                    :class="documentType === 'invoice' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/30' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/30'">
                                 <span x-text="result.expanded ? '▲ Show Less' : '▼ Show All (' + result.items_count + ')'"></span>
                             </button>
                         </div>
@@ -316,7 +405,9 @@
                                     <div class="space-y-3">
                                         <div>
                                             <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Part Number</p>
-                                            <p class="text-base font-bold text-blue-600 dark:text-blue-400 font-mono" x-text="item.part_number || 'N/A'"></p>
+                                            <p class="text-base font-bold font-mono"
+                                               :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'"
+                                               x-text="item.part_number || 'N/A'"></p>
                                         </div>
                                         <div>
                                             <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Description</p>
@@ -334,9 +425,12 @@
                                             <p class="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase mb-1">Discount</p>
                                             <p class="text-2xl font-bold text-amber-600 dark:text-amber-400" x-text="item.discount ? item.discount + '%' : '0%'"></p>
                                         </div>
-                                        <div class="col-span-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                                            <p class="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase mb-1">Cost Per Unit</p>
-                                            <p class="text-xl font-bold text-blue-600 dark:text-blue-400">
+                                        <div class="col-span-2 p-4 rounded-lg border"
+                                             :class="documentType === 'invoice' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'">
+                                            <p class="text-xs font-bold uppercase mb-1"
+                                               :class="documentType === 'invoice' ? 'text-blue-700 dark:text-blue-400' : 'text-purple-700 dark:text-purple-400'">Cost Per Unit</p>
+                                            <p class="text-xl font-bold"
+                                               :class="documentType === 'invoice' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'">
                                                 £<span x-text="item.cost_per_item ? item.cost_per_item.toFixed(2) : '0.00'"></span>
                                             </p>
                                         </div>
@@ -381,22 +475,9 @@
                             </button>
                         </div>
                         <div class="space-y-2 text-gray-300">
+                            <p><span class="text-purple-400">Document Type:</span> <span class="text-cyan-400" x-text="documentType"></span></p>
                             <p><span class="text-purple-400">Parser Method:</span> <span class="text-green-400" x-text="result.method"></span></p>
                             <p><span class="text-purple-400">Confidence:</span> <span class="text-yellow-400" x-text="result.confidence"></span></p>
-                            <template x-if="result.comparison">
-                                <div class="mt-3 p-3 bg-gray-800 rounded">
-                                    <p class="text-purple-400 font-bold mb-2">Comparison Details:</p>
-                                    <p><span class="text-gray-400">Agreed:</span> <span x-text="result.comparison.agreed ? '✅ Yes' : '❌ No'"></span></p>
-                                    <template x-if="result.comparison.differences && result.comparison.differences.length > 0">
-                                        <div class="mt-2">
-                                            <p class="text-gray-400 mb-1">Differences:</p>
-                                            <template x-for="diff in result.comparison.differences">
-                                                <p class="text-red-400 ml-2" x-text="'• ' + diff"></p>
-                                            </template>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
                         </div>
                     </div>
                 </div>
@@ -418,6 +499,7 @@ function uploadPage() {
         successMessage: '',
         errorMessage: '',
         showDebug: false,
+        documentType: 'invoice', // 'invoice' or 'quote'
         
         init() {
             // Press Shift to toggle debug mode
@@ -461,6 +543,7 @@ function uploadPage() {
             const formData = new FormData();
             this.files.forEach(file => formData.append('files', file));
             formData.append('use_claude', 'true');
+            formData.append('document_type', this.documentType);
             
             try {
                 const response = await fetch('/api/upload', {

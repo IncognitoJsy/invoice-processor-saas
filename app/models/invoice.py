@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import Index
 
 class Invoice(db.Model):
-    """Stored parsed invoice"""
+    """Stored parsed invoice or quote"""
     __tablename__ = 'invoice'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -13,11 +13,14 @@ class Invoice(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     user = db.relationship('User', backref=db.backref('invoices', lazy='dynamic'))
     
+    # Document type: 'invoice' or 'quote'
+    document_type = db.Column(db.String(20), default='invoice', index=True)
+    
     # Supplier info
     supplier_name = db.Column(db.String(255), nullable=False, index=True)
     supplier_email = db.Column(db.String(255))
     
-    # Invoice details
+    # Invoice/Quote details
     invoice_number = db.Column(db.String(255), index=True)
     invoice_date = db.Column(db.Date)
     job_reference = db.Column(db.String(255), index=True)
@@ -49,9 +52,17 @@ class Invoice(db.Model):
     processed_at = db.Column(db.DateTime, default=datetime.utcnow)
     error_message = db.Column(db.Text)
     
-    # QuickBooks sync
+    # QuickBooks sync - for invoices
     qb_bill_id = db.Column(db.String(50))
     qb_synced_at = db.Column(db.DateTime)
+    
+    # QuickBooks sync - for quotes/estimates
+    qb_estimate_id = db.Column(db.String(50))
+    qb_estimate_synced_at = db.Column(db.DateTime)
+    
+    # Customer matching (for quotes that become estimates)
+    matched_customer_id = db.Column(db.String(50))  # QB Customer ID
+    matched_customer_name = db.Column(db.String(255))  # QB Customer Name
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -61,12 +72,22 @@ class Invoice(db.Model):
     items = db.relationship('InvoiceItem', backref='invoice', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
-        return f'<Invoice {self.supplier_name} - {self.job_reference} - £{self.total_cost}>'
+        doc_type = self.document_type or 'invoice'
+        return f'<{doc_type.title()} {self.supplier_name} - {self.job_reference} - £{self.total_cost}>'
+    
+    @property
+    def is_quote(self):
+        return self.document_type == 'quote'
+    
+    @property
+    def is_invoice(self):
+        return self.document_type == 'invoice' or self.document_type is None
     
     def to_dict(self):
         """Convert to dictionary for JSON responses"""
         return {
             'id': self.id,
+            'document_type': self.document_type or 'invoice',
             'supplier_name': self.supplier_name,
             'invoice_number': self.invoice_number,
             'job_reference': self.job_reference,
@@ -79,12 +100,16 @@ class Invoice(db.Model):
             'is_consolidated': self.is_consolidated,
             'order_number': self.order_number,
             'qb_bill_id': self.qb_bill_id,
-            'qb_synced_at': self.qb_synced_at.isoformat() if self.qb_synced_at else None
+            'qb_synced_at': self.qb_synced_at.isoformat() if self.qb_synced_at else None,
+            'qb_estimate_id': self.qb_estimate_id,
+            'qb_estimate_synced_at': self.qb_estimate_synced_at.isoformat() if self.qb_estimate_synced_at else None,
+            'matched_customer_id': self.matched_customer_id,
+            'matched_customer_name': self.matched_customer_name
         }
 
 
 class InvoiceItem(db.Model):
-    """Individual line item from an invoice"""
+    """Individual line item from an invoice or quote"""
     __tablename__ = 'invoice_item'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -132,4 +157,5 @@ class InvoiceItem(db.Model):
 Index('idx_invoice_user_created', Invoice.user_id, Invoice.created_at.desc())
 Index('idx_invoice_supplier_date', Invoice.supplier_name, Invoice.created_at.desc())
 Index('idx_invoice_job_ref', Invoice.job_reference)
+Index('idx_invoice_doc_type', Invoice.document_type)
 Index('idx_item_part_number', InvoiceItem.part_number)
