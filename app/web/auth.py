@@ -33,7 +33,6 @@ def login():
             login_user(user, remember=remember)
             
             # Redirect to next page or dashboard
-            next_page = request.args.get('next')
             return redirect(url_for('dashboard.index'))
         else:
             flash('Invalid email or password', 'error')
