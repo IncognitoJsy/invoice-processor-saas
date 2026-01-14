@@ -79,6 +79,7 @@ def register():
             last_name=last_name
         )
         user.set_password(password)
+        user.start_trial()  # Start 7-day free trial
         
         db.session.add(user)
         db.session.commit()
