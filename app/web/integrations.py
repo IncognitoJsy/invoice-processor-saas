@@ -91,6 +91,9 @@ def quickbooks_callback():
         db.session.commit()
     
     flash(f'Successfully connected to QuickBooks: {connection.company_name or realm_id}', 'success')
+    # If user is in setup wizard, return there
+    if not current_user.setup_completed:
+        return redirect(url_for('setup.step', step=2))
     return redirect(url_for('integrations.quickbooks_settings'))
 
 
