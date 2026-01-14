@@ -70,7 +70,9 @@ def step(step):
         return render_template('setup/step1_business.html')
     
     elif step == 2:
-        return render_template('setup/step2_quickbooks.html')
+        qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+        qb_connected = qb and qb.access_token
+        return render_template('setup/step2_quickbooks.html', qb_connected=qb_connected)
     
     elif step == 3:
         # Check if QuickBooks is connected
