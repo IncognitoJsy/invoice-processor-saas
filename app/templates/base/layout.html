@@ -1,6 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false', userMenuOpen: false, loading: false }"
-      :class="{ 'dark': darkMode }">
+<html lang="en" x-data="{ 
+    darkMode: localStorage.getItem('darkMode') !== 'false', 
+    userMenuOpen: false, 
+    loading: false,
+    showTour: {{ 'true' if current_user.is_authenticated and current_user.setup_completed and not current_user.tour_completed else 'false' }}
+}" :class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -130,16 +134,16 @@
                 
                 <!-- Navigation Links -->
                 <div class="hidden md:flex items-center space-x-8">
-                    <a href="/dashboard" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
+                    <a href="/dashboard" data-tour="dashboard" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
                         Dashboard
                     </a>
-                    <a href="/upload" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
+                    <a href="/upload" data-tour="upload" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
                         Upload
                     </a>
-                    <a href="/invoices" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
+                    <a href="/invoices" data-tour="invoices" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
                         Invoices
                     </a>
-                    <a href="/quotes" class="text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-medium transition">
+                    <a href="/quotes" data-tour="quotes" class="text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-medium transition">
                         Quotes
                     </a>
                     <a href="/queue" class="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition">
@@ -176,6 +180,7 @@
                     {% if current_user.is_authenticated %}
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" 
+                                data-tour="integrations"
                                 class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                             <div class="w-8 h-8 bg-gradient-to-br from-primary-500 to-purple-500 rounded-full flex items-center justify-center">
                                 <span class="text-white text-sm font-bold">
@@ -225,6 +230,14 @@
                                 Integrations
                             </a>
                             
+                            <!-- Restart Tour Option -->
+                            <button @click="showTour = true; open = false" class="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Restart Tour
+                            </button>
+                            
                             <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
                             
                             <a href="/auth/logout" class="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -263,6 +276,207 @@
             </div>
         </div>
     </footer>
+    
+    <!-- Onboarding Tour -->
+    {% if current_user.is_authenticated %}
+    <template x-if="showTour">
+        <div x-data="onboardingTour()" x-show="active" x-cloak>
+            <!-- Backdrop overlay -->
+            <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[200]" @click="skipTour()"></div>
+            
+            <!-- Spotlight highlight -->
+            <div x-show="currentStep" 
+                 x-transition
+                 class="fixed z-[201] ring-4 ring-primary-500 ring-offset-4 ring-offset-transparent rounded-xl pointer-events-none transition-all duration-300"
+                 :style="spotlightStyle">
+            </div>
+            
+            <!-- Tooltip -->
+            <div x-show="currentStep"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-150"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="fixed z-[202] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm transition-all duration-300"
+                 :style="tooltipStyle">
+                
+                <!-- Step indicator -->
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Step <span x-text="stepIndex + 1"></span> of <span x-text="steps.length"></span>
+                    </span>
+                    <button @click="skipTour()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Content -->
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2" x-text="currentStep?.title"></h3>
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-6" x-text="currentStep?.description"></p>
+                
+                <!-- Progress dots -->
+                <div class="flex justify-center space-x-2 mb-6">
+                    <template x-for="(step, index) in steps" :key="index">
+                        <div class="w-2 h-2 rounded-full transition-colors"
+                             :class="index === stepIndex ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'"></div>
+                    </template>
+                </div>
+                
+                <!-- Navigation buttons -->
+                <div class="flex justify-between">
+                    <button x-show="stepIndex > 0"
+                            @click="prevStep()"
+                            class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+                        ← Back
+                    </button>
+                    <div x-show="stepIndex === 0"></div>
+                    
+                    <button @click="nextStep()"
+                            class="px-6 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition">
+                        <span x-text="stepIndex === steps.length - 1 ? 'Get Started' : 'Next →'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <script>
+    function onboardingTour() {
+        return {
+            active: true,
+            stepIndex: 0,
+            
+            steps: [
+                {
+                    target: '[data-tour="upload"]',
+                    title: '📤 Upload Invoices',
+                    description: 'Upload supplier invoices (PDF or images) and our AI will automatically extract all the line items, prices, and details.',
+                    position: 'bottom'
+                },
+                {
+                    target: '[data-tour="invoices"]',
+                    title: '📄 Manage Invoices',
+                    description: 'View all your processed invoices, edit line items, apply markup, and get them ready to sync.',
+                    position: 'bottom'
+                },
+                {
+                    target: '[data-tour="quotes"]',
+                    title: '📝 Quotes & Estimates',
+                    description: 'Upload supplier quotes and turn them into customer estimates with your markup applied.',
+                    position: 'bottom'
+                },
+                {
+                    target: '[data-tour="integrations"]',
+                    title: '🔗 Connect QuickBooks',
+                    description: 'Link your QuickBooks account to sync products, invoices, and estimates automatically.',
+                    position: 'left'
+                },
+                {
+                    target: '[data-tour="dashboard"]',
+                    title: '📊 Your Dashboard',
+                    description: 'Track your recent activity, see sync status, and manage your workflow all in one place.',
+                    position: 'bottom'
+                }
+            ],
+            
+            get currentStep() {
+                return this.steps[this.stepIndex];
+            },
+            
+            get targetElement() {
+                if (!this.currentStep) return null;
+                return document.querySelector(this.currentStep.target);
+            },
+            
+            get spotlightStyle() {
+                const el = this.targetElement;
+                if (!el) return 'display: none';
+                
+                const rect = el.getBoundingClientRect();
+                const padding = 8;
+                
+                return `
+                    top: ${rect.top - padding}px;
+                    left: ${rect.left - padding}px;
+                    width: ${rect.width + padding * 2}px;
+                    height: ${rect.height + padding * 2}px;
+                `;
+            },
+            
+            get tooltipStyle() {
+                const el = this.targetElement;
+                if (!el) return 'display: none';
+                
+                const rect = el.getBoundingClientRect();
+                const position = this.currentStep.position || 'bottom';
+                const tooltipWidth = 320;
+                const tooltipHeight = 220;
+                const offset = 16;
+                
+                let top, left;
+                
+                switch (position) {
+                    case 'bottom':
+                        top = rect.bottom + offset;
+                        left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+                        break;
+                    case 'top':
+                        top = rect.top - tooltipHeight - offset;
+                        left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+                        break;
+                    case 'left':
+                        top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+                        left = rect.left - tooltipWidth - offset;
+                        break;
+                    case 'right':
+                        top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+                        left = rect.right + offset;
+                        break;
+                }
+                
+                // Keep tooltip on screen
+                left = Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
+                top = Math.max(16, Math.min(top, window.innerHeight - tooltipHeight - 16));
+                
+                return `top: ${top}px; left: ${left}px; width: ${tooltipWidth}px;`;
+            },
+            
+            nextStep() {
+                if (this.stepIndex < this.steps.length - 1) {
+                    this.stepIndex++;
+                } else {
+                    this.completeTour();
+                }
+            },
+            
+            prevStep() {
+                if (this.stepIndex > 0) {
+                    this.stepIndex--;
+                }
+            },
+            
+            skipTour() {
+                this.completeTour();
+            },
+            
+            completeTour() {
+                this.active = false;
+                // Mark tour as completed
+                fetch('/api/user/complete-tour', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                }).catch(() => {});
+                // Also set in localStorage as backup
+                localStorage.setItem('tourCompleted', 'true');
+            }
+        };
+    }
+    </script>
+    {% endif %}
     
     <!-- Global Loading Helper Script -->
     <script>
