@@ -1,6 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false', userMenuOpen: false, loading: false }"
-      :class="{ 'dark': darkMode }">
+<html lang="en" x-data="{ 
+    darkMode: localStorage.getItem('darkMode') !== 'false', 
+    userMenuOpen: false, 
+    loading: false,
+    tourStep: {% if current_user.is_authenticated and current_user.setup_completed and not current_user.tour_completed %}0{% else %}-1{% endif %}
+}" :class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -225,6 +229,14 @@
                                 Integrations
                             </a>
                             
+                            <!-- Restart Tour Option -->
+                            <button @click="tourStep = 0; open = false" class="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Restart Tour
+                            </button>
+                            
                             <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
                             
                             <a href="/auth/logout" class="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -263,6 +275,132 @@
             </div>
         </div>
     </footer>
+    
+    <!-- Simple Onboarding Tour Modal -->
+    {% if current_user.is_authenticated %}
+    <template x-if="tourStep >= 0">
+        <div class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <!-- Backdrop -->
+            <div class="absolute inset-0 bg-gray-900/70" @click="tourStep = -1; fetch('/api/user/complete-tour', { method: 'POST' })"></div>
+            
+            <!-- Tour Card -->
+            <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 z-10"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100">
+                
+                <!-- Close button -->
+                <button @click="tourStep = -1; fetch('/api/user/complete-tour', { method: 'POST' })" 
+                        class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+                
+                <!-- Step 0: Welcome -->
+                <div x-show="tourStep === 0">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-gradient-to-br from-primary-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">Welcome to FluxOps! 👋</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">Let's take a quick tour of the key features.</p>
+                    </div>
+                </div>
+                
+                <!-- Step 1: Upload -->
+                <div x-show="tourStep === 1">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">📤 Upload Invoices</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">Upload supplier invoices (PDF or images) and our AI will automatically extract all the line items, prices, and details.</p>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Invoices -->
+                <div x-show="tourStep === 2">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">📄 Manage Invoices</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">View all your processed invoices, edit line items, apply markup, and get them ready to sync to QuickBooks.</p>
+                    </div>
+                </div>
+                
+                <!-- Step 3: Quotes -->
+                <div x-show="tourStep === 3">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">📝 Quotes & Estimates</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">Upload supplier quotes and turn them into customer estimates with your markup applied automatically.</p>
+                    </div>
+                </div>
+                
+                <!-- Step 4: QuickBooks -->
+                <div x-show="tourStep === 4">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">🔗 Connect QuickBooks</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">Link your QuickBooks account to sync products, invoices, and estimates automatically. Find it under your profile menu → Integrations.</p>
+                    </div>
+                </div>
+                
+                <!-- Step 5: Done -->
+                <div x-show="tourStep === 5">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-gradient-to-br from-primary-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">You're all set! 🎉</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">You can restart this tour anytime from the menu. Happy invoicing!</p>
+                    </div>
+                </div>
+                
+                <!-- Progress dots -->
+                <div class="flex justify-center space-x-2 mb-6">
+                    <template x-for="i in 6">
+                        <div class="w-2 h-2 rounded-full transition-colors"
+                             :class="tourStep === i - 1 ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'"></div>
+                    </template>
+                </div>
+                
+                <!-- Navigation -->
+                <div class="flex justify-between">
+                    <button x-show="tourStep > 0" 
+                            @click="tourStep--"
+                            class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+                        ← Back
+                    </button>
+                    <div x-show="tourStep === 0"></div>
+                    
+                    <button @click="tourStep < 5 ? tourStep++ : (tourStep = -1, fetch('/api/user/complete-tour', { method: 'POST' }))"
+                            class="px-6 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition">
+                        <span x-text="tourStep === 5 ? 'Get Started' : 'Next →'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+    {% endif %}
     
     <!-- Global Loading Helper Script -->
     <script>
