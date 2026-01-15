@@ -1037,3 +1037,169 @@ Rules:
             results['success'] = False
         
         return results
+
+        # =========================================================================
+    # ESTIMATE MANAGEMENT (for Quotes)
+    # =========================================================================
+    
+    def create_estimate(self, qb_connection, customer_id: str, line_items: list, memo: str = None, expiry_days: int = 30):
+        """
+        Create a new estimate (quote) for a customer
+        
+        line_items should be list of:
+        {
+            'item_id': str (QuickBooks Item ID),
+            'quantity': float,
+            'unit_price': float (optional, uses item default if not provided),
+            'description': str (optional)
+        }
+        """
+        from datetime import datetime, timedelta
+        
+        # Get tax code
+        tax_code = self.get_default_tax_code(qb_connection)
+        
+        # Build line items with GST
+        lines = []
+        for idx, item in enumerate(line_items):
+            line = {
+                "Id": str(idx + 1),
+                "DetailType": "SalesItemLineDetail",
+                "Amount": round(float(item.get('quantity', 1)) * float(item.get('unit_price', 0)), 2),
+                "SalesItemLineDetail": {
+                    "ItemRef": {
+                        "value": item['item_id']
+                    },
+                    "Qty": float(item.get('quantity', 1))
+                }
+            }
+            
+            # Add tax code if found
+            if tax_code:
+                line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
+            
+            if item.get('unit_price'):
+                line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
+            
+            if item.get('description'):
+                line["Description"] = item['description'][:4000]
+            
+            lines.append(line)
+        
+        estimate_data = {
+            "CustomerRef": {
+                "value": customer_id
+            },
+            "Line": lines,
+            "GlobalTaxCalculation": "TaxExcluded",  # Prices are GST exclusive
+            "TxnDate": datetime.utcnow().strftime('%Y-%m-%d'),
+            "ExpirationDate": (datetime.utcnow() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
+        }
+        
+        if memo:
+            estimate_data["PrivateNote"] = memo[:4000]
+        
+        return self.make_api_request(qb_connection, "estimate", method='POST', data=estimate_data)
+    
+    def get_estimates(self, qb_connection, customer_id: str = None, status: str = None):
+        """
+        Get estimates, optionally filtered by customer and/or status.
+        
+        status can be: 'Pending', 'Accepted', 'Closed', 'Rejected'
+        """
+        query = "query?query=SELECT * FROM Estimate"
+        conditions = []
+        
+        if customer_id:
+            conditions.append(f"CustomerRef = '{customer_id}'")
+        
+        if status:
+            conditions.append(f"TxnStatus = '{status}'")
+        
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        query += " ORDERBY TxnDate DESC MAXRESULTS 100"
+        
+        result = self.make_api_request(qb_connection, query)
+        return result.get('QueryResponse', {}).get('Estimate', [])
+    
+    def sync_quote_to_estimate(self, qb_connection, fluxops_quote, customer_id: str):
+        """
+        Full sync for quotes: Update products AND create customer estimate
+        
+        1. Sync all products (update prices in QuickBooks)
+        2. Create estimate for customer
+        
+        Returns detailed result
+        """
+        from app.models.invoice import InvoiceItem
+        from app.extensions import db
+        
+        results = {
+            'success': True,
+            'products_synced': 0,
+            'products_failed': 0,
+            'estimate_action': 'created',
+            'qb_estimate_id': None,
+            'errors': []
+        }
+        
+        items = InvoiceItem.query.filter_by(invoice_id=fluxops_quote.id).all()
+        
+        if not items:
+            return {'success': False, 'error': 'No items to sync'}
+        
+        # Step 1: Sync all products (this updates QB prices)
+        product_results = self.sync_invoice_items_as_products(qb_connection, fluxops_quote)
+        results['products_synced'] = product_results.get('synced', 0)
+        results['products_failed'] = product_results.get('failed', 0)
+        results['errors'].extend(product_results.get('errors', []))
+        
+        # Build map of part numbers to QB item IDs
+        product_map = {}
+        for prod in product_results.get('products', []):
+            product_map[prod['part_number']] = prod['qb_id']
+        
+        # Step 2: Build line items for QB estimate
+        line_items = []
+        for item in items:
+            if item.part_number not in product_map:
+                continue
+            
+            line_items.append({
+                'item_id': product_map[item.part_number],
+                'quantity': float(item.quantity) if item.quantity else 1,
+                'unit_price': float(item.selling_price) if item.selling_price else 0,
+                'description': item.description or ''
+            })
+        
+        if not line_items:
+            results['errors'].append('No products synced successfully - cannot create estimate')
+            results['success'] = False
+            return results
+        
+        # Step 3: Create the estimate
+        estimate_result = self.create_estimate(
+            qb_connection,
+            customer_id,
+            line_items,
+            memo=f"Quote from supplier: {fluxops_quote.supplier_name}" if fluxops_quote.supplier_name else None
+        )
+        
+        if estimate_result.get('Estimate'):
+            results['qb_estimate_id'] = estimate_result['Estimate']['Id']
+            results['qb_estimate_number'] = estimate_result['Estimate'].get('DocNumber')
+            
+            # Update the FluxOps quote with QB reference
+            fluxops_quote.qb_estimate_id = estimate_result['Estimate']['Id']
+            fluxops_quote.qb_estimate_synced_at = datetime.utcnow()
+            fluxops_quote.matched_customer_id = customer_id
+            db.session.commit()
+            
+            current_app.logger.info(f"Created QB Estimate {results['qb_estimate_id']} for quote {fluxops_quote.id}")
+        else:
+            results['errors'].append(f"Estimate error: {estimate_result.get('error', 'Unknown')}")
+            results['success'] = False
+        
+        return results
