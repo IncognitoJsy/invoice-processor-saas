@@ -4,6 +4,7 @@ from flask import Flask, redirect, url_for, render_template
 from app.config import config
 from app.extensions import db, migrate, login_manager, limiter
 
+
 def create_app(config_name='default'):
     """Application factory pattern"""
     app = Flask(__name__)
@@ -42,6 +43,7 @@ def create_app(config_name='default'):
     
     return app
 
+
 def configure_logging(app):
     """Configure application logging"""
     if not app.debug:
@@ -58,11 +60,13 @@ def configure_logging(app):
         app.logger.setLevel(logging.INFO)
         app.logger.info('Invoice Processor startup')
 
+
 def register_blueprints(app):
     """Register Flask blueprints"""
     from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup
     from app.web import quotes
-    
+    from app.web import user_api
+    from app.web import tasks
     
     # Auth (must be first!)
     app.register_blueprint(auth.bp)
@@ -77,6 +81,11 @@ def register_blueprints(app):
     app.register_blueprint(queue.bp)
     app.register_blueprint(settings.bp)
     app.register_blueprint(upload.bp)
+    app.register_blueprint(user_api.bp)
+    
+    # Scheduled tasks (called by external cron)
+    app.register_blueprint(tasks.bp)
+
 
 def register_error_handlers(app):
     """Register error handlers with nice templates"""
@@ -102,10 +111,12 @@ def register_error_handlers(app):
             return {'error': 'Internal server error'}, 500
         return render_template('errors/500.html'), 500
 
+
 @login_manager.user_loader
 def load_user(user_id):
     """Load user for Flask-Login"""
     from app.models.user import User
     return User.query.get(int(user_id))
+
 
 login_manager.login_view = 'auth.login'
