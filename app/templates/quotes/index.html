@@ -798,7 +798,6 @@ function showSyncResult(data) {
         text.className = 'text-sm font-medium text-purple-800 dark:text-purple-200';
         let detailsHtml = '';
         if (data.products_synced) detailsHtml += '<p>Products synced: ' + data.products_synced + '</p>';
-        if (data.qb_estimate_id) detailsHtml += '<p>Estimate ID: ' + data.qb_estimate_id + '</p>';
         details.innerHTML = detailsHtml;
         details.className = 'mt-2 text-xs text-purple-700 dark:text-purple-300';
         loadQuotes();

@@ -1184,7 +1184,7 @@ Rules:
             qb_connection,
             customer_id,
             line_items,
-            memo=f"Quote from supplier: {fluxops_quote.supplier_name}" if fluxops_quote.supplier_name else None
+            memo=None
         )
         
         if estimate_result.get('Estimate'):
