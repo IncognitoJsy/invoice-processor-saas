@@ -28,23 +28,30 @@ class InvoiceParserService:
             self.logger.warning(f"Claude parser not available: {str(e)}")
             self.claude_available = False
     
-    def parse(self, pdf_path: str, use_claude: bool = True, user_id: int = None) -> List[Dict]:
+    def parse(self, pdf_path: str, use_claude: bool = True, user_id: int = None, document_type: str = 'invoice') -> List[Dict]:
         """
         Parse invoice - returns LIST of invoices (for consolidated support)
         Single invoice returns list with 1 item
         Consolidated returns list with multiple items
         
-        If user_id is provided, checks for duplicate invoices
+        Args:
+            pdf_path: Path to PDF file
+            use_claude: Whether to use Claude API
+            user_id: If provided, checks for duplicate invoices
+            document_type: 'invoice' or 'quote' - validates PDF matches this type
         """
         
         print("\n" + "="*80)
         self.logger.info(f"=== MASTER PARSER STARTED ===")
         self.logger.info(f"File: {pdf_path}")
         self.logger.info(f"Use Claude: {use_claude}")
+        self.logger.info(f"Document Type: {document_type}")
         print("="*80 + "\n")
         
-        # Try custom parsers first
-        custom_result = self._try_custom_parsers(pdf_path)
+        # Try custom parsers first (only for invoices, not quotes)
+        custom_result = {'success': False}
+        if document_type == 'invoice':
+            custom_result = self._try_custom_parsers(pdf_path)
         
         # If Claude not requested, return custom result as list
         if not use_claude or not self.claude_available:
@@ -52,31 +59,43 @@ class InvoiceParserService:
             if custom_result.get('success'):
                 results = [custom_result]
             else:
-                results = [{'success': False, 'error': custom_result.get('error')}]
+                results = [{'success': False, 'error': custom_result.get('error', 'Parser not available')}]
             
             # Check for duplicates if user_id provided
             if user_id:
                 results = self._check_duplicates(results, user_id)
             return results
         
-        # Try Claude parser
-        print(f"\n🤖 CLAUDE PARSER: Running...")
-        claude_result = self.claude_parser.parse(pdf_path)
+        # Try Claude parser with document type validation
+        print(f"\n🤖 CLAUDE PARSER: Running (expecting {document_type})...")
+        claude_result = self.claude_parser.parse(pdf_path, expected_document_type=document_type)
+        
+        # Check for document type mismatch error
+        if claude_result.get('document_type_mismatch'):
+            print(f"\n❌ DOCUMENT TYPE MISMATCH!")
+            print(f"   Expected: {claude_result.get('expected_document_type')}")
+            print(f"   Detected: {claude_result.get('detected_document_type')}")
+            return [claude_result]  # Return error to frontend
+        
+        # Check for credit note
+        if claude_result.get('is_credit_note'):
+            print(f"\n❌ CREDIT NOTE DETECTED - Skipping")
+            return [claude_result]
         
         # Check if consolidated
         if claude_result.get('consolidated'):
-            print(f"✅ Detected CONSOLIDATED invoice with {len(claude_result.get('invoices', []))} orders")
+            print(f"✅ Detected CONSOLIDATED {document_type} with {len(claude_result.get('invoices', []))} orders")
             if claude_result.get('skipped_credits', 0) > 0:
                 print(f"⚠️  Skipped {claude_result['skipped_credits']} credit note(s)")
-            results = self._handle_consolidated(claude_result, custom_result, pdf_path)
+            results = self._handle_consolidated(claude_result, custom_result, pdf_path, document_type)
         else:
             # Single invoice - do normal comparison
-            print(f"📄 Single invoice detected")
-            compared = self._compare_single(custom_result, claude_result)
+            print(f"📄 Single {document_type} detected")
+            compared = self._compare_single(custom_result, claude_result, document_type)
             results = [compared]  # Wrap in list
         
-        # Check for duplicates if user_id provided
-        if user_id:
+        # Check for duplicates if user_id provided (only for invoices)
+        if user_id and document_type == 'invoice':
             results = self._check_duplicates(results, user_id)
         
         return results
@@ -121,33 +140,34 @@ class InvoiceParserService:
         
         return invoices
     
-    def _handle_consolidated(self, claude_result: Dict, custom_result: Dict, pdf_path: str) -> List[Dict]:
+    def _handle_consolidated(self, claude_result: Dict, custom_result: Dict, pdf_path: str, document_type: str = 'invoice') -> List[Dict]:
         """Handle consolidated invoice with multiple job references"""
         invoices = claude_result.get('invoices', [])
         
         if not invoices:
-            return [{'success': False, 'error': 'No invoices in consolidated result'}]
+            return [{'success': False, 'error': f'No {document_type}s in consolidated result'}]
         
         results = []
         for idx, invoice in enumerate(invoices):
             print(f"\n📋 Processing Order {idx + 1}/{len(invoices)}")
             print(f"   Job Reference: {invoice.get('job_reference')}")
-            print(f"   Invoice Number: {invoice.get('invoice_number')}")
+            print(f"   {document_type.title()} Number: {invoice.get('invoice_number')}")
             print(f"   Items: {len(invoice.get('items', []))}")
             
             # Add consolidated metadata
             invoice['consolidated'] = True
             invoice['order_number'] = idx + 1
             invoice['total_orders'] = len(invoices)
-            invoice['confidence'] = 'medium'  # Consolidated invoices get medium confidence
+            invoice['confidence'] = 'medium'  # Consolidated documents get medium confidence
             invoice['success'] = True
+            invoice['document_type'] = document_type
             
             results.append(invoice)
         
-        print(f"\n✅ Processed {len(results)} invoices from consolidated PDF\n")
+        print(f"\n✅ Processed {len(results)} {document_type}s from consolidated PDF\n")
         return results
     
-    def _compare_single(self, custom_result: Dict, claude_result: Dict) -> Dict:
+    def _compare_single(self, custom_result: Dict, claude_result: Dict, document_type: str = 'invoice') -> Dict:
         """Compare single invoice results"""
         
         # Check if Claude returned a credit note error
@@ -155,23 +175,27 @@ class InvoiceParserService:
             print("\n⚠️  Document is a CREDIT NOTE - skipping\n")
             return {'success': False, 'error': 'Document is a credit note', 'is_credit_note': True}
         
+        # Check for document type mismatch
+        if claude_result.get('document_type_mismatch'):
+            return claude_result
+        
         if not custom_result.get('success') and claude_result.get('success'):
-            print("\n✅ Only Claude succeeded\n")
-            return {**claude_result, 'method': 'claude_only', 'confidence': 'medium'}
+            print(f"\n✅ Only Claude succeeded\n")
+            return {**claude_result, 'method': 'claude_only', 'confidence': 'medium', 'document_type': document_type}
         
         if custom_result.get('success') and not claude_result.get('success'):
             print("\n✅ Only custom parser succeeded\n")
-            return {**custom_result, 'method': 'custom_only', 'confidence': 'medium'}
+            return {**custom_result, 'method': 'custom_only', 'confidence': 'medium', 'document_type': document_type}
         
         if not custom_result.get('success') and not claude_result.get('success'):
             print("\n❌ Both parsers FAILED\n")
-            return {'success': False, 'error': 'Both parsers failed'}
+            return {'success': False, 'error': claude_result.get('error', 'Both parsers failed')}
         
         # Both succeeded - compare
         comparison = self._compare_results(custom_result, claude_result)
         
         if comparison['match']:
-            print("\n✅ HIGH CONFIDENCE - Both parsers agree!\n")
+            print(f"\n✅ HIGH CONFIDENCE - Both parsers agree!\n")
             return {
                 'success': True,
                 'confidence': 'high',
@@ -180,6 +204,7 @@ class InvoiceParserService:
                 'job_reference': claude_result.get('job_reference'),
                 'supplier': claude_result.get('supplier'),
                 'invoice_number': claude_result.get('invoice_number'),
+                'document_type': document_type,
                 'comparison': comparison
             }
         else:
@@ -193,6 +218,7 @@ class InvoiceParserService:
                 'job_reference': claude_result.get('job_reference'),
                 'supplier': claude_result.get('supplier'),
                 'invoice_number': claude_result.get('invoice_number'),
+                'document_type': document_type,
                 'comparison': comparison
             }
     
