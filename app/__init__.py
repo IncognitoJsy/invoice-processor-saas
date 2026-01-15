@@ -61,6 +61,8 @@ def configure_logging(app):
 def register_blueprints(app):
     """Register Flask blueprints"""
     from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup
+    from app.web import quotes
+    
     
     # Auth (must be first!)
     app.register_blueprint(auth.bp)
@@ -71,6 +73,7 @@ def register_blueprints(app):
     app.register_blueprint(setup.bp)
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(invoices.bp)
+    app.register_blueprint(quotes.bp)
     app.register_blueprint(queue.bp)
     app.register_blueprint(settings.bp)
     app.register_blueprint(upload.bp)

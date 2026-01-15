@@ -1,0 +1,854 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Quotes - FluxOps{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Quotes</h1>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage supplier quotes → Create customer estimates</p>
+            </div>
+            <div id="qb-status" class="hidden">
+                <div class="flex items-center px-4 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                    <div class="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                    <span class="text-sm text-purple-700 dark:text-purple-400">QuickBooks Connected</span>
+                </div>
+            </div>
+            <div id="qb-status-disconnected" class="hidden">
+                <a href="/integrations/quickbooks/settings" class="flex items-center px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    <div class="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Connect QuickBooks</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats Cards - Purple Theme -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Quotes</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-total">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-pink-600 dark:text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Quoted Cost</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-cost">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Selling</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-selling">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center">
+                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Potential Profit</p>
+                        <p class="text-2xl font-bold text-green-600 dark:text-green-400" id="stat-profit">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6 border border-gray-200 dark:border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
+                    <input type="text" id="search-input" placeholder="Job reference, supplier..." class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Supplier</label>
+                    <select id="supplier-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All Suppliers</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Range</label>
+                    <select id="date-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="year">This Year</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">QB Status</label>
+                    <select id="qb-filter" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">All</option>
+                        <option value="synced">Estimate Created</option>
+                        <option value="not-synced">Not Synced</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="exportCSV()" class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quotes Table -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quote #</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Supplier</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Job Reference</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selling</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profit</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">QB Estimate</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quotes-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+                </table>
+            </div>
+            
+            <div id="empty-state" class="hidden py-12 text-center">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No quotes</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by uploading your first supplier quote.</p>
+                <div class="mt-6">
+                    <a href="/upload" class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Upload Quote
+                    </a>
+                </div>
+            </div>
+
+            <div id="loading-state" class="py-12 text-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading quotes...</p>
+            </div>
+        </div>
+
+        <div id="pagination" class="hidden mt-6 flex items-center justify-between">
+            <div class="text-sm text-gray-700 dark:text-gray-300">
+                Showing <span id="showing-start">1</span> to <span id="showing-end">10</span> of <span id="showing-total">0</span> quotes
+            </div>
+            <div class="flex space-x-2">
+                <button id="prev-btn" onclick="prevPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">Previous</button>
+                <button id="next-btn" onclick="nextPage()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quote Detail Modal -->
+<div id="quote-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
+            <div>
+                <div class="flex items-center space-x-2">
+                    <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold uppercase rounded">Quote</span>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white" id="modal-title">Quote Details</h2>
+                </div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1" id="modal-subtitle"></p>
+            </div>
+            <button onclick="closeModal()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- QuickBooks Estimate Section -->
+        <div id="qb-sync-section" class="hidden p-4 bg-purple-50 dark:bg-purple-900/10 border-b border-purple-200 dark:border-purple-800">
+            <h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-3">Create QuickBooks Estimate</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Customer Selection with Search -->
+                <div class="relative">
+                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Customer / Job</label>
+                    <div class="relative" id="customer-dropdown-container">
+                        <input type="text" id="customer-search-input" placeholder="Type to search customers..." autocomplete="off"
+                               class="w-full px-3 py-2 text-sm border border-purple-300 dark:border-purple-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                        <input type="hidden" id="qb-customer-select" value="">
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div id="customer-dropdown" class="hidden absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div>
+                    </div>
+                    <div id="selected-customer-display" class="hidden mt-1 flex items-center justify-between text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
+                        <span id="selected-customer-name" class="truncate"></span>
+                        <button onclick="clearCustomerSelection()" class="ml-2 hover:text-purple-900 dark:hover:text-purple-100 flex-shrink-0">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Action</label>
+                    <div id="estimate-action-info" class="text-sm">
+                        <div class="flex items-center text-gray-600 dark:text-gray-400">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                            </svg>
+                            <span id="estimate-action-text">Select customer first</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-end">
+                    <button id="create-estimate-btn" onclick="createEstimate()" disabled
+                            class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition flex items-center justify-center text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Create Estimate
+                    </button>
+                </div>
+            </div>
+            
+            <div id="sync-progress" class="hidden mt-4">
+                <div class="flex items-center mb-2">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                    <span class="text-sm text-gray-600 dark:text-gray-400" id="sync-status-text">Creating estimate...</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div id="sync-progress-bar" class="bg-purple-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <div id="sync-result" class="hidden mt-4 p-3 rounded-lg">
+                <div class="flex items-center">
+                    <svg id="sync-result-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+                    <span id="sync-result-text" class="text-sm font-medium"></span>
+                </div>
+                <div id="sync-result-details" class="mt-2 text-xs"></div>
+            </div>
+        </div>
+        
+        <div class="p-6 overflow-y-auto max-h-[40vh]">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Part #</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qty</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cost</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Selling</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Profit</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-items" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+            </table>
+        </div>
+        
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Quoted Cost (ex GST)</span>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="modal-total-cost">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Your Selling (ex GST)</span>
+                    <p class="text-lg font-bold text-purple-600 dark:text-purple-400" id="modal-total-selling">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Potential Profit</span>
+                    <p class="text-lg font-bold text-green-600 dark:text-green-400" id="modal-total-profit">£0.00</p>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">With 5% GST</span>
+                    <p class="text-lg font-bold text-blue-600 dark:text-blue-400" id="modal-total-with-gst">£0.00</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allQuotes = [];
+let filteredQuotes = [];
+let currentPage = 1;
+const perPage = 20;
+let qbConnected = false;
+let qbCustomers = [];
+let currentQuote = null;
+let suggestedCustomers = [];
+let selectedCustomerId = null;
+let dropdownOpen = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadQuotes();
+    checkQBStatus();
+    setupCustomerDropdown();
+});
+
+document.getElementById('search-input').addEventListener('input', debounce(applyFilters, 300));
+document.getElementById('supplier-filter').addEventListener('change', applyFilters);
+document.getElementById('date-filter').addEventListener('change', applyFilters);
+document.getElementById('qb-filter').addEventListener('change', applyFilters);
+
+// =====================================================================
+// CUSTOMER DROPDOWN
+// =====================================================================
+
+function setupCustomerDropdown() {
+    const searchInput = document.getElementById('customer-search-input');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('focus', () => openDropdown());
+    searchInput.addEventListener('input', debounce(() => filterCustomerDropdown(searchInput.value), 150));
+    
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeDropdown();
+        else if (e.key === 'ArrowDown') { e.preventDefault(); focusNextItem(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusPrevItem(); }
+        else if (e.key === 'Enter') { e.preventDefault(); selectFocusedItem(); }
+    });
+    
+    document.addEventListener('click', (e) => {
+        const container = document.getElementById('customer-dropdown-container');
+        if (container && !container.contains(e.target)) closeDropdown();
+    });
+}
+
+function openDropdown() {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (dropdown) {
+        dropdown.classList.remove('hidden');
+        dropdownOpen = true;
+        filterCustomerDropdown(document.getElementById('customer-search-input').value);
+    }
+}
+
+function closeDropdown() {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+        dropdownOpen = false;
+    }
+}
+
+function getCustomerDisplayName(customer) {
+    return customer.FullyQualifiedName || customer.DisplayName;
+}
+
+function isSubCustomer(customer) {
+    const fullName = customer.FullyQualifiedName || '';
+    return fullName.includes(':');
+}
+
+function getIndentLevel(customer) {
+    const fullName = customer.FullyQualifiedName || '';
+    return (fullName.match(/:/g) || []).length;
+}
+
+function filterCustomerDropdown(searchTerm) {
+    const dropdown = document.getElementById('customer-dropdown');
+    if (!dropdown) return;
+    
+    const term = searchTerm.toLowerCase().trim();
+    
+    let sortedCustomers = [...qbCustomers].sort((a, b) => {
+        const nameA = (a.FullyQualifiedName || a.DisplayName).toUpperCase();
+        const nameB = (b.FullyQualifiedName || b.DisplayName).toUpperCase();
+        return nameA.localeCompare(nameB);
+    });
+    
+    let html = '';
+    
+    if (suggestedCustomers.length > 0 && term === '') {
+        html += '<div class="px-3 py-2 text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-b border-gray-200 dark:border-gray-700">⭐ Suggested Matches</div>';
+        suggestedCustomers.forEach(match => {
+            const customer = qbCustomers.find(c => c.Id === match.customer_id);
+            if (customer) {
+                const displayName = getCustomerDisplayName(customer);
+                const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                html += '<div class="customer-option px-3 py-2 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center justify-between" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+                    '<span class="text-sm text-gray-900 dark:text-white font-medium truncate">⭐ ' + displayName + '</span>' +
+                    '<span class="text-xs text-purple-600 dark:text-purple-400 flex-shrink-0 ml-2">' + match.confidence + '%</span>' +
+                '</div>';
+            }
+        });
+        html += '<div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">All Customers</div>';
+    }
+    
+    let filtered = sortedCustomers;
+    if (term) {
+        filtered = sortedCustomers.filter(c => {
+            const displayName = (c.DisplayName || '').toLowerCase();
+            const fullName = (c.FullyQualifiedName || '').toLowerCase();
+            return displayName.includes(term) || fullName.includes(term);
+        });
+    }
+    
+    filtered.slice(0, 100).forEach(customer => {
+        if (term === '' && suggestedCustomers.some(s => s.customer_id === customer.Id)) return;
+        
+        const displayName = getCustomerDisplayName(customer);
+        const isSub = isSubCustomer(customer);
+        const indentLevel = getIndentLevel(customer);
+        const paddingClass = indentLevel > 0 ? 'pl-' + (3 + indentLevel * 4) : 'pl-3';
+        const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const textClass = isSub ? 'text-gray-700 dark:text-gray-300' : 'text-gray-900 dark:text-white font-medium';
+        
+        html += '<div class="customer-option ' + paddingClass + ' pr-3 py-2 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20" data-id="' + customer.Id + '" data-name="' + escapedName + '" onclick="selectCustomer(\'' + customer.Id + '\', \'' + escapedName + '\')">' +
+            '<span class="text-sm ' + textClass + ' truncate">' + (isSub ? '<span class="text-gray-400 mr-1">↳</span>' : '') + displayName + '</span>' +
+        '</div>';
+    });
+    
+    if (filtered.length === 0) {
+        html = '<div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">No customers found</div>';
+    }
+    
+    dropdown.innerHTML = html;
+}
+
+function selectCustomer(id, name) {
+    selectedCustomerId = id;
+    document.getElementById('qb-customer-select').value = id;
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('selected-customer-display').classList.remove('hidden');
+    document.getElementById('selected-customer-name').textContent = name;
+    closeDropdown();
+    onCustomerChange();
+}
+
+function clearCustomerSelection() {
+    selectedCustomerId = null;
+    document.getElementById('qb-customer-select').value = '';
+    document.getElementById('selected-customer-display').classList.add('hidden');
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('estimate-action-text').textContent = 'Select customer first';
+    document.getElementById('create-estimate-btn').disabled = true;
+}
+
+function focusNextItem() {
+    const items = document.querySelectorAll('.customer-option');
+    const focused = document.querySelector('.customer-option.focused');
+    if (!focused && items.length > 0) {
+        items[0].classList.add('focused', 'bg-purple-50', 'dark:bg-purple-900/20');
+    } else if (focused) {
+        const idx = Array.from(items).indexOf(focused);
+        focused.classList.remove('focused', 'bg-purple-50', 'dark:bg-purple-900/20');
+        if (idx < items.length - 1) {
+            items[idx + 1].classList.add('focused', 'bg-purple-50', 'dark:bg-purple-900/20');
+            items[idx + 1].scrollIntoView({ block: 'nearest' });
+        }
+    }
+}
+
+function focusPrevItem() {
+    const items = document.querySelectorAll('.customer-option');
+    const focused = document.querySelector('.customer-option.focused');
+    if (focused) {
+        const idx = Array.from(items).indexOf(focused);
+        focused.classList.remove('focused', 'bg-purple-50', 'dark:bg-purple-900/20');
+        if (idx > 0) {
+            items[idx - 1].classList.add('focused', 'bg-purple-50', 'dark:bg-purple-900/20');
+            items[idx - 1].scrollIntoView({ block: 'nearest' });
+        }
+    }
+}
+
+function selectFocusedItem() {
+    const focused = document.querySelector('.customer-option.focused');
+    if (focused) selectCustomer(focused.dataset.id, focused.dataset.name);
+}
+
+// =====================================================================
+// QUICKBOOKS
+// =====================================================================
+
+async function checkQBStatus() {
+    try {
+        const response = await fetch('/integrations/api/quickbooks/status');
+        const data = await response.json();
+        qbConnected = data.connected;
+        if (qbConnected) {
+            document.getElementById('qb-status').classList.remove('hidden');
+            document.getElementById('qb-status-disconnected').classList.add('hidden');
+            loadQBCustomers();
+        } else {
+            document.getElementById('qb-status').classList.add('hidden');
+            document.getElementById('qb-status-disconnected').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error checking QB status:', error);
+    }
+}
+
+async function loadQBCustomers() {
+    try {
+        const response = await fetch('/integrations/api/quickbooks/customers');
+        const data = await response.json();
+        if (data.customers) {
+            qbCustomers = data.customers;
+        }
+    } catch (error) {
+        console.error('Error loading customers:', error);
+    }
+}
+
+// =====================================================================
+// QUOTES
+// =====================================================================
+
+async function loadQuotes() {
+    try {
+        const response = await fetch('/api/quotes');
+        const data = await response.json();
+        if (data.success) {
+            allQuotes = data.quotes;
+            filteredQuotes = [...allQuotes];
+            updateStats(data.stats);
+            populateSupplierFilter(data.suppliers);
+            renderQuotes();
+        }
+    } catch (error) {
+        console.error('Error loading quotes:', error);
+    } finally {
+        document.getElementById('loading-state').classList.add('hidden');
+    }
+}
+
+function updateStats(stats) {
+    document.getElementById('stat-total').textContent = stats.total_quotes || 0;
+    document.getElementById('stat-cost').textContent = '£' + (stats.total_cost || 0).toFixed(2);
+    document.getElementById('stat-selling').textContent = '£' + (stats.total_selling || 0).toFixed(2);
+    document.getElementById('stat-profit').textContent = '£' + (stats.total_profit || 0).toFixed(2);
+}
+
+function populateSupplierFilter(suppliers) {
+    const select = document.getElementById('supplier-filter');
+    suppliers.forEach(supplier => {
+        const option = document.createElement('option');
+        option.value = supplier;
+        option.textContent = supplier;
+        select.appendChild(option);
+    });
+}
+
+function applyFilters() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const supplier = document.getElementById('supplier-filter').value;
+    const dateRange = document.getElementById('date-filter').value;
+    const qbStatus = document.getElementById('qb-filter').value;
+    
+    filteredQuotes = allQuotes.filter(q => {
+        if (search && !q.job_reference?.toLowerCase().includes(search) && 
+            !q.supplier_name?.toLowerCase().includes(search) &&
+            !q.invoice_number?.toLowerCase().includes(search)) return false;
+        if (supplier && q.supplier_name !== supplier) return false;
+        if (qbStatus === 'synced' && !q.qb_estimate_id) return false;
+        if (qbStatus === 'not-synced' && q.qb_estimate_id) return false;
+        if (dateRange) {
+            const qDate = new Date(q.created_at);
+            const now = new Date();
+            if (dateRange === 'today' && qDate.toDateString() !== now.toDateString()) return false;
+            else if (dateRange === 'week' && qDate < new Date(now - 7 * 24 * 60 * 60 * 1000)) return false;
+            else if (dateRange === 'month' && qDate < new Date(now - 30 * 24 * 60 * 60 * 1000)) return false;
+            else if (dateRange === 'year' && qDate < new Date(now - 365 * 24 * 60 * 60 * 1000)) return false;
+        }
+        return true;
+    });
+    currentPage = 1;
+    renderQuotes();
+}
+
+function renderQuotes() {
+    const tbody = document.getElementById('quotes-table');
+    const emptyState = document.getElementById('empty-state');
+    const pagination = document.getElementById('pagination');
+    
+    if (filteredQuotes.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        pagination.classList.add('hidden');
+        return;
+    }
+    emptyState.classList.add('hidden');
+    
+    const start = (currentPage - 1) * perPage;
+    const end = start + perPage;
+    const pageQuotes = filteredQuotes.slice(start, end);
+    
+    tbody.innerHTML = pageQuotes.map(q => `
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="viewQuote(${q.id})">
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">${formatDate(q.created_at)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-purple-600 dark:text-purple-400 font-mono">${q.invoice_number || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 text-xs font-medium rounded-full 
+                    ${q.supplier_name === 'YESSS Electrical' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : ''}
+                    ${q.supplier_name === 'CEF' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : ''}
+                    ${q.supplier_name === 'Wholesale Electrics' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : ''}
+                    ${!['YESSS Electrical', 'CEF', 'Wholesale Electrics'].includes(q.supplier_name) ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' : ''}">${q.supplier_name}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">${q.job_reference || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${q.items_count} items</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">£${(q.total_cost || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-purple-600 dark:text-purple-400 text-right font-medium">£${(q.total_selling || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(q.total_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">£${(q.total_profit || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                ${q.qb_estimate_id ? '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Estimate</span>' : '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">Not synced</span>'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <button onclick="event.stopPropagation(); viewQuote(${q.id})" class="text-purple-600 hover:text-purple-800 dark:text-purple-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+    
+    const totalPages = Math.ceil(filteredQuotes.length / perPage);
+    pagination.classList.toggle('hidden', totalPages <= 1);
+    document.getElementById('showing-start').textContent = start + 1;
+    document.getElementById('showing-end').textContent = Math.min(end, filteredQuotes.length);
+    document.getElementById('showing-total').textContent = filteredQuotes.length;
+    document.getElementById('prev-btn').disabled = currentPage === 1;
+    document.getElementById('next-btn').disabled = currentPage === totalPages;
+}
+
+// =====================================================================
+// MODAL & ESTIMATE SYNC
+// =====================================================================
+
+async function viewQuote(id) {
+    try {
+        const response = await fetch(`/api/quotes/${id}`);
+        const data = await response.json();
+        if (data.success) {
+            currentQuote = data.quote;
+            const q = data.quote;
+            document.getElementById('modal-title').textContent = q.job_reference || 'Quote Details';
+            document.getElementById('modal-subtitle').textContent = `${q.supplier_name} • ${q.invoice_number || 'No quote #'} • ${formatDate(q.created_at)}`;
+            
+            document.getElementById('modal-items').innerHTML = q.items.map(item => `
+                <tr>
+                    <td class="px-4 py-3 text-sm text-purple-600 dark:text-purple-400 font-mono">${item.part_number || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${item.description || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center">${item.quantity}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£${(item.total_amount || 0).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-purple-600 dark:text-purple-400 text-right font-medium">£${((item.selling_price || 0) * item.quantity).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-right font-medium ${(item.profit_per_item || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">£${((item.profit_per_item || 0) * item.quantity).toFixed(2)}</td>
+                </tr>
+            `).join('');
+            
+            const totalCost = q.total_cost || 0;
+            const totalSelling = q.total_selling || 0;
+            const totalProfit = q.total_profit || 0;
+            document.getElementById('modal-total-cost').textContent = '£' + totalCost.toFixed(2);
+            document.getElementById('modal-total-selling').textContent = '£' + totalSelling.toFixed(2);
+            document.getElementById('modal-total-profit').textContent = '£' + totalProfit.toFixed(2);
+            document.getElementById('modal-total-with-gst').textContent = '£' + (totalSelling * 1.05).toFixed(2);
+            
+            if (qbConnected) {
+                document.getElementById('qb-sync-section').classList.remove('hidden');
+                resetSyncUI();
+                if (q.job_reference) getCustomerSuggestions(q.job_reference);
+            } else {
+                document.getElementById('qb-sync-section').classList.add('hidden');
+            }
+            document.getElementById('quote-modal').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error loading quote:', error);
+    }
+}
+
+function resetSyncUI() {
+    selectedCustomerId = null;
+    suggestedCustomers = [];
+    document.getElementById('qb-customer-select').value = '';
+    document.getElementById('customer-search-input').value = '';
+    document.getElementById('selected-customer-display').classList.add('hidden');
+    document.getElementById('estimate-action-text').textContent = 'Select customer first';
+    document.getElementById('create-estimate-btn').disabled = true;
+    document.getElementById('sync-progress').classList.add('hidden');
+    document.getElementById('sync-result').classList.add('hidden');
+}
+
+async function getCustomerSuggestions(jobReference) {
+    try {
+        const response = await fetch(`/integrations/api/quickbooks/match-customer?job_reference=${encodeURIComponent(jobReference)}`);
+        const data = await response.json();
+        if (data.matches && data.matches.length > 0) {
+            suggestedCustomers = data.matches;
+            if (suggestedCustomers[0].confidence >= 80) {
+                const match = suggestedCustomers[0];
+                selectCustomer(match.customer_id, match.customer_name);
+            }
+        }
+    } catch (error) {
+        console.error('Error getting customer suggestions:', error);
+    }
+}
+
+function onCustomerChange() {
+    const customerId = document.getElementById('qb-customer-select').value;
+    if (!customerId) {
+        document.getElementById('estimate-action-text').textContent = 'Select customer first';
+        document.getElementById('create-estimate-btn').disabled = true;
+        return;
+    }
+    document.getElementById('create-estimate-btn').disabled = false;
+    document.getElementById('estimate-action-text').innerHTML = '<span class="text-purple-600 dark:text-purple-400">Will create new estimate for customer</span>';
+}
+
+async function createEstimate() {
+    const customerId = document.getElementById('qb-customer-select').value;
+    if (!customerId || !currentQuote) { alert('Please select a customer'); return; }
+    
+    document.getElementById('sync-progress').classList.remove('hidden');
+    document.getElementById('sync-result').classList.add('hidden');
+    document.getElementById('create-estimate-btn').disabled = true;
+    
+    try {
+        updateSyncProgress(25, 'Syncing products to QuickBooks...');
+        
+        // First sync products
+        const productResponse = await fetch(`/integrations/quickbooks/sync-products/${currentQuote.id}`, { method: 'POST' });
+        const productData = await productResponse.json();
+        
+        updateSyncProgress(50, `Synced ${productData.details?.synced || 0} products...`);
+        updateSyncProgress(75, 'Creating customer estimate...');
+        
+        // Create estimate
+        const estimateResponse = await fetch(`/integrations/quickbooks/create-estimate/${currentQuote.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_id: customerId })
+        });
+        const estimateData = await estimateResponse.json();
+        
+        updateSyncProgress(100, 'Complete!');
+        setTimeout(() => {
+            document.getElementById('sync-progress').classList.add('hidden');
+            showSyncResult(estimateData);
+        }, 500);
+    } catch (error) {
+        console.error('Sync error:', error);
+        document.getElementById('sync-progress').classList.add('hidden');
+        showSyncResult({ success: false, error: error.message });
+    }
+}
+
+function updateSyncProgress(percent, text) {
+    document.getElementById('sync-progress-bar').style.width = percent + '%';
+    document.getElementById('sync-status-text').textContent = text;
+}
+
+function showSyncResult(data) {
+    const resultDiv = document.getElementById('sync-result');
+    const icon = document.getElementById('sync-result-icon');
+    const text = document.getElementById('sync-result-text');
+    const details = document.getElementById('sync-result-details');
+    resultDiv.classList.remove('hidden');
+    
+    if (data.success) {
+        resultDiv.className = 'mt-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+        icon.className = 'w-5 h-5 mr-2 text-purple-600';
+        text.textContent = 'Estimate created in QuickBooks!';
+        text.className = 'text-sm font-medium text-purple-800 dark:text-purple-200';
+        let detailsHtml = '';
+        if (data.products_synced) detailsHtml += '<p>Products synced: ' + data.products_synced + '</p>';
+        if (data.qb_estimate_id) detailsHtml += '<p>Estimate ID: ' + data.qb_estimate_id + '</p>';
+        details.innerHTML = detailsHtml;
+        details.className = 'mt-2 text-xs text-purple-700 dark:text-purple-300';
+        loadQuotes();
+    } else {
+        resultDiv.className = 'mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+        icon.className = 'w-5 h-5 mr-2 text-red-600';
+        text.textContent = 'Failed to create estimate';
+        text.className = 'text-sm font-medium text-red-800 dark:text-red-200';
+        details.innerHTML = '<p>' + (data.error || 'Unknown error occurred') + '</p>';
+        details.className = 'mt-2 text-xs text-red-700 dark:text-red-300';
+    }
+    document.getElementById('create-estimate-btn').disabled = false;
+}
+
+function closeModal() {
+    document.getElementById('quote-modal').classList.add('hidden');
+    currentQuote = null;
+    closeDropdown();
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; renderQuotes(); } }
+function nextPage() { const totalPages = Math.ceil(filteredQuotes.length / perPage); if (currentPage < totalPages) { currentPage++; renderQuotes(); } }
+
+async function exportCSV() {
+    try {
+        const response = await fetch('/api/quotes/export');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `quotes_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (error) { console.error('Error exporting:', error); }
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); };
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('quote-modal').addEventListener('click', (e) => { if (e.target.id === 'quote-modal') closeModal(); });
+</script>
+{% endblock %}
