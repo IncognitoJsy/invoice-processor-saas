@@ -57,7 +57,7 @@ def api_upload():
                     file.save(filepath)
                     
                     # Parse invoice(s) - returns LIST
-                    parsed_invoices = master_parser.parse(filepath, use_claude=use_claude)
+                    parsed_invoices = master_parser.parse(filepath, use_claude=use_claude, document_type=document_type)
                     
                     # Save each invoice to database
                     for invoice_data in parsed_invoices:

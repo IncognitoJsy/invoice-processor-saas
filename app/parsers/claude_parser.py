@@ -23,10 +23,17 @@ class ClaudeInvoiceParser:
         )
         self.logger = logging.getLogger(__name__)
     
-    def parse(self, pdf_path: str) -> Dict:
-        """Parse invoice using Claude API - handles consolidated invoices"""
+    def parse(self, pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
+        """
+        Parse invoice using Claude API - handles consolidated invoices
+        
+        Args:
+            pdf_path: Path to PDF file
+            expected_document_type: 'invoice' or 'quote' - what the user selected
+        """
         try:
             self.logger.info(f"Claude parsing: {pdf_path}")
+            self.logger.info(f"Expected document type: {expected_document_type}")
             
             # Read PDF file as binary and encode to base64
             with open(pdf_path, 'rb') as f:
@@ -59,7 +66,7 @@ class ClaudeInvoiceParser:
             response_text = message.content[0].text
             self.logger.info(f"Claude response received: {len(response_text)} chars")
             
-            return self._parse_response(response_text, pdf_path)
+            return self._parse_response(response_text, pdf_path, expected_document_type)
             
         except Exception as e:
             self.logger.error(f"Claude parsing error: {str(e)}")
@@ -72,25 +79,29 @@ class ClaudeInvoiceParser:
     
     def _get_extraction_prompt(self) -> str:
         """Get the prompt for invoice extraction"""
-        return """You are an expert at extracting data from electrical supplier invoices (YESSS, CEF, Wholesale Electrics, etc).
+        return """You are an expert at extracting data from electrical supplier invoices and quotations (YESSS, CEF, Wholesale Electrics, etc).
 
-CRITICAL: This PDF may contain MULTIPLE invoices (consolidated invoice). Each invoice has its own job reference and should be treated separately.
+CRITICAL: First, identify what TYPE of document this is by looking for keywords:
+- QUOTATION, QUOTE, ESTIMATE, PROFORMA = This is a QUOTE
+- INVOICE, TAX INVOICE, BILL = This is an INVOICE  
+- CREDIT, CREDIT NOTE = This is a CREDIT NOTE
 
-CRITICAL: This PDF may also contain CREDIT NOTES mixed with invoices. You MUST identify each document type.
+CRITICAL: This PDF may contain MULTIPLE invoices/quotes (consolidated). Each has its own job reference and should be treated separately.
 
-Extract all invoices and return ONLY valid JSON with no markdown formatting, no code blocks, no explanation:
+Extract all documents and return ONLY valid JSON with no markdown formatting, no code blocks, no explanation:
 
 {
+    "detected_document_type": "invoice" or "quote" or "credit_note",
     "invoices": [
         {
-            "document_type": "invoice" or "credit_note",
+            "document_type": "invoice" or "quote" or "credit_note",
             "supplier": "name of supplier (e.g. YESSS Electrical, CEF, Wholesale Electrics)",
-            "invoice_number": "EXACT invoice number as shown on document - THIS IS CRITICAL",
-            "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD)",
+            "invoice_number": "EXACT invoice/quote number as shown on document - THIS IS CRITICAL",
+            "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD, SARAH HOLT)",
             "total_net_amount": 2788.74,
             "items": [
                 {
-                    "part_number": "exact part number from invoice (e.g. JFG320U, WMSSU83, 221-415)",
+                    "part_number": "exact part number from document (e.g. JFG320U, WMSSU83, 221-415, HV3PROAAUB075T2)",
                     "description": "complete item description, including all details even if multi-line",
                     "quantity": 2.0,
                     "original_unit_price": 1541.12,
@@ -102,40 +113,40 @@ Extract all invoices and return ONLY valid JSON with no markdown formatting, no 
     ]
 }
 
-INVOICE NUMBER EXTRACTION - VERY IMPORTANT:
-1. **CEF**: Invoice number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
-2. **YESSS**: Invoice number is directly under "INVOICE NUMBER" text, starts with "093" (e.g., 0931234567)
-3. **Wholesale Electrics**: Invoice number is below "INVOICE NUMBER" text, starts with "IN" (e.g., IN123456)
-4. Extract the EXACT invoice number - do not modify or abbreviate it
+DOCUMENT TYPE DETECTION - VERY IMPORTANT:
+1. **QUOTE/QUOTATION**: Look for "QUOTATION", "QUOTE", "ESTIMATE", "PROFORMA" prominently displayed at top
+2. **INVOICE**: Look for "INVOICE", "TAX INVOICE", "BILL" prominently displayed
+3. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts
+4. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
+5. Set each document's "document_type" accordingly
 
-DOCUMENT TYPE DETECTION:
-5. **INVOICE**: Normal purchase document - process normally
-6. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts, or reference to returned goods
-7. Mark document_type as "credit_note" if it's a credit - we will skip these
+INVOICE/QUOTE NUMBER EXTRACTION - VERY IMPORTANT:
+6. **CEF**: Number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
+7. **YESSS Invoices**: Number is under "INVOICE NUMBER", starts with "093" (e.g., 0931234567)
+8. **YESSS Quotes**: Number is under "DOCUMENT NUMBER", format like "093QO69883"
+9. **Wholesale Electrics**: Number is below "INVOICE NUMBER", starts with "IN" (e.g., IN123456)
+10. Extract the EXACT number - do not modify or abbreviate it
 
-CRITICAL RULES FOR CONSOLIDATED INVOICES:
-8. **DETECT MULTIPLE ORDERS**: Look for job reference changes (e.g., "TLC" then "LA MAISON DE ST JEAN")
-9. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
-10. **GROUP ITEMS CORRECTLY**: Each invoice object should only contain items for that specific job reference
-11. **CALCULATE TOTALS PER INVOICE**: total_net_amount should be the sum of all items for that specific job
-12. **IGNORE BLANK PAGES**: Skip empty pages between invoices
+CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
+11. **DETECT MULTIPLE ORDERS**: Look for job reference changes
+12. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
+13. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
+14. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
 
 STANDARD RULES:
-13. Extract EVERY SINGLE item from the invoice - do not skip any
-14. Part numbers must be EXACT as shown on invoice
-15. Descriptions must be COMPLETE - include all text even if it spans multiple lines
-16. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
-17. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
-18. original_unit_price is the price BEFORE discount is applied
-19. total_amount is the final line total AFTER discount
-20. If quantity is not explicitly shown, it's usually 1
-21. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
+15. Extract EVERY SINGLE item from the document - do not skip any
+16. Part numbers must be EXACT as shown on document
+17. Descriptions must be COMPLETE - include all text even if it spans multiple lines
+18. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
+19. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
+20. original_unit_price is the price BEFORE discount is applied
+21. total_amount is the final line total AFTER discount
+22. If quantity is not explicitly shown, it's usually 1
+23. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
-EXAMPLE: If you see three different job references (TLC, LA MAISON, DAVID), create THREE separate invoice objects in the array.
-
-Double-check your work - missing items, wrong invoice numbers, or wrong grouping costs real money!"""
+Double-check your work - missing items, wrong document type, or wrong grouping costs real money!"""
     
-    def _parse_response(self, text: str, pdf_path: str) -> Dict:
+    def _parse_response(self, text: str, pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
         """Parse Claude's JSON response - handles both single and consolidated invoices"""
         try:
             # Clean up response - remove markdown code blocks if present
@@ -147,15 +158,56 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
             # Parse JSON
             data = json.loads(text)
             
+            # Check detected document type vs expected
+            detected_type = data.get('detected_document_type', 'invoice').lower()
+            
+            # Normalize detected type
+            if detected_type in ['quote', 'quotation', 'estimate', 'proforma']:
+                detected_type = 'quote'
+            elif detected_type in ['invoice', 'tax invoice', 'bill']:
+                detected_type = 'invoice'
+            elif detected_type in ['credit', 'credit_note', 'credit note']:
+                detected_type = 'credit_note'
+            
+            self.logger.info(f"Detected document type: {detected_type}, Expected: {expected_document_type}")
+            
+            # Validate document type matches what user selected
+            if detected_type == 'credit_note':
+                return {
+                    'success': False,
+                    'error': 'This document is a Credit Note and cannot be processed.',
+                    'is_credit_note': True,
+                    'detected_document_type': detected_type
+                }
+            
+            if detected_type != expected_document_type:
+                # Mismatch - return error with helpful message
+                if detected_type == 'quote' and expected_document_type == 'invoice':
+                    return {
+                        'success': False,
+                        'error': 'This appears to be a QUOTATION, not an Invoice. Please select "Supplier Quote" and upload again.',
+                        'document_type_mismatch': True,
+                        'detected_document_type': detected_type,
+                        'expected_document_type': expected_document_type
+                    }
+                elif detected_type == 'invoice' and expected_document_type == 'quote':
+                    return {
+                        'success': False,
+                        'error': 'This appears to be an INVOICE, not a Quote. Please select "Supplier Invoice" and upload again.',
+                        'document_type_mismatch': True,
+                        'detected_document_type': detected_type,
+                        'expected_document_type': expected_document_type
+                    }
+            
             # Check if this is consolidated format (multiple invoices)
             if 'invoices' in data and isinstance(data['invoices'], list):
-                self.logger.info(f"Detected consolidated invoice with {len(data['invoices'])} documents")
-                return self._process_consolidated_invoices(data['invoices'], pdf_path)
+                self.logger.info(f"Detected consolidated document with {len(data['invoices'])} entries")
+                return self._process_consolidated_invoices(data['invoices'], pdf_path, expected_document_type)
             
             # Legacy single invoice format
             elif 'items' in data:
-                self.logger.info("Detected single invoice format")
-                return self._process_single_invoice(data)
+                self.logger.info("Detected single document format")
+                return self._process_single_invoice(data, expected_document_type)
             
             else:
                 return {'success': False, 'error': 'No items or invoices found in response'}
@@ -174,7 +226,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
                 'error': f'Failed to process response: {str(e)}'
             }
     
-    def _process_consolidated_invoices(self, invoices: List[Dict], pdf_path: str) -> Dict:
+    def _process_consolidated_invoices(self, invoices: List[Dict], pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
         """Process consolidated invoices - returns multiple invoice results, skips credit notes"""
         results = []
         skipped_credits = 0
@@ -205,7 +257,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
                     'job_reference': invoice_data.get('job_reference'),
                     'supplier': invoice_data.get('supplier', 'Unknown'),
                     'invoice_number': invoice_number,
-                    'document_type': 'invoice',
+                    'document_type': expected_document_type,
                     'method': 'claude_api',
                     'consolidated': True,
                     'order_number': idx + 1,
@@ -213,7 +265,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
                 })
                 
             except Exception as e:
-                self.logger.error(f"Error processing invoice {idx + 1}: {str(e)}")
+                self.logger.error(f"Error processing document {idx + 1}: {str(e)}")
                 continue
         
         if skipped_credits > 0:
@@ -222,7 +274,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
         if not results:
             if skipped_credits > 0:
                 return {'success': False, 'error': f'All {skipped_credits} documents were credit notes - nothing to process'}
-            return {'success': False, 'error': 'No valid invoices processed from consolidated PDF'}
+            return {'success': False, 'error': 'No valid documents processed from consolidated PDF'}
         
         # Return as multiple invoices
         return {
@@ -230,10 +282,11 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
             'consolidated': True,
             'invoices': results,
             'skipped_credits': skipped_credits,
-            'method': 'claude_api'
+            'method': 'claude_api',
+            'document_type': expected_document_type
         }
     
-    def _process_single_invoice(self, data: Dict) -> Dict:
+    def _process_single_invoice(self, data: Dict, expected_document_type: str = 'invoice') -> Dict:
         """Process single invoice format (legacy/fallback)"""
         # Check if this is a credit note
         doc_type = data.get('document_type', 'invoice').lower()
@@ -261,7 +314,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
             'job_reference': data.get('job_reference'),
             'supplier': data.get('supplier', 'Unknown'),
             'invoice_number': invoice_number,
-            'document_type': 'invoice',
+            'document_type': expected_document_type,
             'method': 'claude_api',
             'consolidated': False
         }
@@ -291,7 +344,7 @@ Double-check your work - missing items, wrong invoice numbers, or wrong grouping
             # YESSS: Should start with 093
             if not invoice_number.startswith('093'):
                 # Try to extract 093 number
-                match = re.search(r'(093\d+)', invoice_number)
+                match = re.search(r'(093\w+)', invoice_number)
                 if match:
                     invoice_number = match.group(1)
                     
