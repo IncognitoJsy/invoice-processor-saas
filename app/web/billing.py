@@ -106,6 +106,17 @@ def success():
             
             current_app.logger.info(f"User {current_user.id} subscribed to {plan}")
             
+            # Send welcome email
+            try:
+                from app.services.email_service import get_email_service
+                email_service = get_email_service()
+                dashboard_url = request.host_url + 'dashboard'
+                plan_name = 'Basic' if plan == 'basic' else 'Pro'
+                email_service.send_welcome_paid(current_user, plan_name, dashboard_url)
+                current_app.logger.info(f"Welcome email sent to {current_user.email}")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send welcome email: {str(e)}")
+            
         except Exception as e:
             current_app.logger.error(f"Error processing subscription success: {str(e)}")
     
@@ -181,7 +192,9 @@ def webhook():
     
     current_app.logger.info(f"Stripe webhook received: {event_type}")
     
-    if event_type == 'customer.subscription.updated':
+    if event_type == 'checkout.session.completed':
+        handle_checkout_completed(data)
+    elif event_type == 'customer.subscription.updated':
         handle_subscription_updated(data)
     elif event_type == 'customer.subscription.deleted':
         handle_subscription_deleted(data)
@@ -191,6 +204,36 @@ def webhook():
         handle_payment_succeeded(data)
     
     return jsonify({'received': True})
+
+
+def handle_checkout_completed(session):
+    """Handle checkout.session.completed webhook - send welcome email"""
+    from app.models.user import User
+    
+    customer_id = session.get('customer')
+    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+    
+    if not user:
+        current_app.logger.warning(f"No user found for customer {customer_id}")
+        return
+    
+    # Get plan from metadata or subscription
+    plan = session.get('metadata', {}).get('plan', 'basic')
+    plan_name = 'Basic' if plan == 'basic' else 'Pro'
+    
+    # Send welcome email (webhook is more reliable than success page)
+    try:
+        from app.services.email_service import get_email_service
+        email_service = get_email_service()
+        
+        # Build dashboard URL
+        base_url = os.getenv('APP_URL', 'https://invoice-processor-saas-production.up.railway.app')
+        dashboard_url = f"{base_url}/dashboard"
+        
+        email_service.send_welcome_paid(user, plan_name, dashboard_url)
+        current_app.logger.info(f"Welcome email sent to {user.email} via webhook")
+    except Exception as e:
+        current_app.logger.error(f"Failed to send welcome email via webhook: {str(e)}")
 
 
 def handle_subscription_updated(subscription):
