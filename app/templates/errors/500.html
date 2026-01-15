@@ -1,0 +1,23 @@
+{% extends "base/layout.html" %}
+{% block title %}Server Error - FluxOps{% endblock %}
+{% block content %}
+<div class="min-h-[60vh] flex items-center justify-center">
+    <div class="text-center">
+        <div class="mb-8">
+            <span class="text-8xl font-bold bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent">500</span>
+        </div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Something went wrong</h1>
+        <p class="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
+            We're experiencing some technical difficulties. Our team has been notified and we're working on it.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="/dashboard" class="px-6 py-3 bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition">
+                Go to Dashboard
+            </a>
+            <button onclick="location.reload()" class="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                Try Again
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

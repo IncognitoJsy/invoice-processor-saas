@@ -79,15 +79,28 @@ def register_blueprints(app):
     app.register_blueprint(upload.bp)
 
 def register_error_handlers(app):
-    """Register error handlers"""
+    """Register error handlers with nice templates"""
+    from flask import request
+    
     @app.errorhandler(404)
     def not_found_error(error):
-        return {'error': 'Not found'}, 404
+        # Return JSON for API requests, HTML for browser requests
+        if request.path.startswith('/api/') or request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+            return {'error': 'Not found'}, 404
+        return render_template('errors/404.html'), 404
+    
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        if request.path.startswith('/api/') or request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+            return {'error': 'Forbidden'}, 403
+        return render_template('errors/403.html'), 403
     
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
-        return {'error': 'Internal server error'}, 500
+        if request.path.startswith('/api/') or request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+            return {'error': 'Internal server error'}, 500
+        return render_template('errors/500.html'), 500
 
 @login_manager.user_loader
 def load_user(user_id):
