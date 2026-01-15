@@ -432,3 +432,49 @@ def quickbooks_sync_to_customer(invoice_id):
             'success': False,
             'error': '; '.join(result.get('errors', ['Unknown error']))
         }), 400
+
+
+@bp.route('/quickbooks/create-estimate/<int:quote_id>', methods=['POST'])
+@login_required
+def quickbooks_create_estimate(quote_id):
+    """Create a QuickBooks Estimate from a FluxOps quote"""
+    from app.models.invoice import Invoice
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+    
+    data = request.get_json() or {}
+    customer_id = data.get('customer_id')
+    
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Customer ID required'}), 400
+    
+    # Get quote (stored in Invoice table with document_type='quote')
+    quote = Invoice.query.filter_by(id=quote_id, user_id=current_user.id, document_type='quote').first()
+    if not quote:
+        return jsonify({'success': False, 'error': 'Quote not found'}), 404
+    
+    # Get QuickBooks connection
+    connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'success': False, 'error': 'QuickBooks not connected'}), 400
+    
+    if not connection.default_income_account_id or not connection.default_expense_account_id:
+        return jsonify({'success': False, 'error': 'Please configure income and expense accounts in QuickBooks settings'}), 400
+    
+    # Create estimate in QuickBooks
+    qb = QuickBooksService(current_user)
+    result = qb.sync_quote_to_estimate(connection, quote, customer_id)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'products_synced': result.get('products_synced', 0),
+            'products_failed': result.get('products_failed', 0),
+            'qb_estimate_id': result.get('qb_estimate_id'),
+            'qb_estimate_number': result.get('qb_estimate_number')
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': '; '.join(result.get('errors', ['Unknown error']))
+        }), 400
