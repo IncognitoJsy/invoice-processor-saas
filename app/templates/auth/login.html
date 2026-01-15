@@ -12,7 +12,7 @@
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-400{% else %}bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-400{% endif %}">
+                <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-400{% elif category == 'info' %}bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400{% else %}bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-400{% endif %}">
                     {{ message }}
                 </div>
                 {% endfor %}
@@ -45,10 +45,13 @@
                     </div>
                 </div>
                 
-                <div class="flex items-center">
-                    <input type="checkbox" name="remember" id="remember" 
-                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
-                    <label for="remember" class="ml-2 text-sm text-gray-600 dark:text-gray-400">Remember me</label>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <input type="checkbox" name="remember" id="remember" 
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="remember" class="ml-2 text-sm text-gray-600 dark:text-gray-400">Remember me</label>
+                    </div>
+                    <a href="{{ url_for('auth.forgot_password') }}" class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400">Forgot password?</a>
                 </div>
                 
                 <button type="submit" class="w-full py-3 bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition">
