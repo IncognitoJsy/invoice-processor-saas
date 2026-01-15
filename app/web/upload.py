@@ -118,8 +118,10 @@ def api_upload():
                 'errors': errors if errors else []
             })
         else:
+            # Return the first specific error if available
+            error_message = errors[0] if errors else 'No invoices processed'
             return jsonify({
-                'error': 'No invoices processed',
+                'error': error_message,
                 'details': errors
             }), 400
             
