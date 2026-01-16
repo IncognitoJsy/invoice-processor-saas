@@ -133,16 +133,23 @@ CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
 13. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
 14. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
 
+CRITICAL PRICING RULES FOR WHOLESALE ELECTRICS:
+15. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
+16. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
+17. Extract total_amount as the BEFORE-discount amount from the Amount column
+18. Extract discount as just the number (e.g. "51" not "51%")
+19. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
+
 STANDARD RULES:
-15. Extract EVERY SINGLE item from the document - do not skip any
-16. Part numbers must be EXACT as shown on document
-17. Descriptions must be COMPLETE - include all text even if it spans multiple lines
-18. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
-19. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
-20. original_unit_price is the price BEFORE discount is applied
-21. total_amount is the final line total AFTER discount
-22. If quantity is not explicitly shown, it's usually 1
-23. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
+20. Extract EVERY SINGLE item from the document - do not skip any
+21. Part numbers must be EXACT as shown on document
+22. Descriptions must be COMPLETE - include all text even if it spans multiple lines
+23. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
+24. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
+25. original_unit_price is the price BEFORE discount is applied
+26. total_amount is the line total shown in the Amount column
+27. If quantity is not explicitly shown, it's usually 1
+28. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
 Double-check your work - missing items, wrong document type, or wrong grouping costs real money!"""
     
@@ -240,7 +247,9 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                     skipped_credits += 1
                     continue
                 
-                items = self._transform_items(invoice_data.get('items', []))
+                # Get supplier to determine pricing logic
+                supplier = invoice_data.get('supplier', 'Unknown')
+                items = self._transform_items(invoice_data.get('items', []), supplier)
                 
                 if not items:
                     continue
@@ -248,14 +257,14 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                 # Validate and clean invoice number
                 invoice_number = self._clean_invoice_number(
                     invoice_data.get('invoice_number'),
-                    invoice_data.get('supplier', '')
+                    supplier
                 )
                 
                 results.append({
                     'success': True,
                     'items': items,
                     'job_reference': invoice_data.get('job_reference'),
-                    'supplier': invoice_data.get('supplier', 'Unknown'),
+                    'supplier': supplier,
                     'invoice_number': invoice_number,
                     'document_type': expected_document_type,
                     'method': 'claude_api',
@@ -297,7 +306,9 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                 'is_credit_note': True
             }
         
-        items = self._transform_items(data.get('items', []))
+        # Get supplier to determine pricing logic
+        supplier = data.get('supplier', 'Unknown')
+        items = self._transform_items(data.get('items', []), supplier)
         
         if not items:
             return {'success': False, 'error': 'No items found'}
@@ -305,14 +316,14 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
         # Validate and clean invoice number
         invoice_number = self._clean_invoice_number(
             data.get('invoice_number'),
-            data.get('supplier', '')
+            supplier
         )
         
         return {
             'success': True,
             'items': items,
             'job_reference': data.get('job_reference'),
-            'supplier': data.get('supplier', 'Unknown'),
+            'supplier': supplier,
             'invoice_number': invoice_number,
             'document_type': expected_document_type,
             'method': 'claude_api',
@@ -360,22 +371,32 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
         
         return invoice_number
     
-    def _transform_items(self, items: List[Dict]) -> List[Dict]:
-        """Transform items to our internal format with pricing"""
+    def _transform_items(self, items: List[Dict], supplier: str = 'Unknown') -> List[Dict]:
+        """Transform items to our internal format with pricing - FIXED for Wholesale discount"""
         transformed = []
+        supplier_lower = supplier.lower() if supplier else ''
+        is_wholesale = 'wholesale' in supplier_lower
         
         for item in items:
             try:
-                # Calculate cost per item
                 quantity = float(item['quantity'])
-                total_amount = float(item['total_amount'])
-                cost_per_item = round(total_amount / quantity, 2) if quantity > 0 else 0
+                total_amount = float(item['total_amount'])  # This is BEFORE discount for Wholesale
                 
-                # Get discount
+                # Get discount percentage
                 discount = str(item.get('discount', '0')).replace('%', '')
                 discount_val = float(discount) if discount else 0
                 
-                # Apply pricing logic based on discount
+                # FIXED: Apply discount to get actual cost
+                # For Wholesale Electrics, total_amount is BEFORE discount
+                # We need to apply the discount to get the real cost
+                if discount_val > 0:
+                    discounted_total = total_amount * (1 - discount_val / 100)
+                else:
+                    discounted_total = total_amount
+                
+                cost_per_item = round(discounted_total / quantity, 2) if quantity > 0 else 0
+                
+                # Apply markup based on discount tier
                 if discount_val == 0:
                     markup = 0.20
                 elif 1 <= discount_val <= 30:
@@ -395,7 +416,7 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                     'original_unit_price': float(item.get('original_unit_price', 0)),
                     'discount': discount,
                     'cost_per_item': cost_per_item,
-                    'total_amount': total_amount,
+                    'total_amount': discounted_total,  # Store the DISCOUNTED total
                     'selling_price': selling_price,
                     'markup_percent': int(markup * 100),
                     'profit_per_item': profit_per_item
