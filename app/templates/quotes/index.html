@@ -3,13 +3,13 @@
 {% block title %}Quotes - FluxOps{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+<div x-data="quotesPage()" class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
         <div class="mb-8 flex justify-between items-center">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Quotes</h1>
-                <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage supplier quotes → Create customer estimates</p>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">Upload supplier quotes → Create customer estimates</p>
             </div>
             <div id="qb-status" class="hidden">
                 <div class="flex items-center px-4 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
@@ -22,6 +22,172 @@
                     <div class="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
                     <span class="text-sm text-gray-600 dark:text-gray-400">Connect QuickBooks</span>
                 </a>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-8 overflow-hidden">
+            <!-- Collapsible Header -->
+            <button @click="uploadExpanded = !uploadExpanded" 
+                    class="w-full p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="text-lg font-semibold text-gray-900 dark:text-white">Upload Supplier Quote</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Drop PDF quotes from YESSS, CEF, or Wholesale Electrics</p>
+                    </div>
+                </div>
+                <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{'rotate-180': uploadExpanded}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            
+            <!-- Upload Area (Collapsible) -->
+            <div x-show="uploadExpanded" x-collapse class="border-t border-gray-200 dark:border-gray-700">
+                <div class="p-6">
+                    <!-- Drag & Drop Zone -->
+                    <div @dragover.prevent="dragover = true"
+                         @dragleave.prevent="dragover = false"
+                         @drop.prevent="handleDrop($event)"
+                         :class="{'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg shadow-purple-500/20': dragover}"
+                         class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-12 text-center transition-all duration-300 cursor-pointer hover:border-purple-400 dark:hover:border-purple-500 hover:bg-gray-50 dark:hover:bg-gray-700/30 group"
+                         @click="$refs.fileInput.click()">
+                        
+                        <input type="file" 
+                               x-ref="fileInput" 
+                               @change="handleFileSelect($event)"
+                               accept=".pdf"
+                               multiple
+                               class="hidden">
+                        
+                        <div class="space-y-4">
+                            <div class="flex justify-center">
+                                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center transform transition-transform group-hover:scale-110 shadow-lg">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <p class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Drop PDF quotes here</p>
+                                <p class="text-gray-500 dark:text-gray-400 text-sm">or click to browse</p>
+                            </div>
+                            
+                            <div class="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-500">
+                                <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">PDF only</span>
+                                <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">Multiple files</span>
+                                <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">→ Create Estimates</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Selected Files -->
+                    <template x-if="files.length > 0">
+                        <div class="mt-6 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                    Selected Files
+                                    <span class="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs" x-text="files.length"></span>
+                                </h3>
+                                <button @click="files = []" class="text-xs text-red-600 dark:text-red-400 hover:text-red-700">Clear all</button>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <template x-for="(file, index) in files" :key="index">
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="file.name"></p>
+                                                <p class="text-xs text-gray-500" x-text="formatFileSize(file.size)"></p>
+                                            </div>
+                                        </div>
+                                        <button @click="files.splice(index, 1)" class="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <button @click="uploadFiles()" 
+                                    :disabled="uploading"
+                                    :class="{'opacity-50 cursor-not-allowed': uploading}"
+                                    class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg transition-all">
+                                <span x-show="!uploading" class="flex items-center justify-center space-x-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    <span>Process <span x-text="files.length"></span> Quote<span x-show="files.length > 1">s</span></span>
+                                </span>
+                                <span x-show="uploading" class="flex items-center justify-center space-x-2">
+                                    <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>Processing...</span>
+                                </span>
+                            </button>
+                        </div>
+                    </template>
+                    
+                    <!-- Upload Success Message -->
+                    <div x-show="uploadSuccess" x-transition class="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-purple-800 dark:text-purple-200" x-text="uploadMessage"></p>
+                                <p class="text-sm text-purple-600 dark:text-purple-400">Quote appears in the table below</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Upload Error Message -->
+                    <div x-show="uploadError" x-transition class="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-red-800 dark:text-red-200">Upload Failed</p>
+                                <p class="text-sm text-red-600 dark:text-red-400" x-text="errorMessage"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Document Type Warning -->
+                    <div x-show="wrongDocType" x-transition class="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-amber-800 dark:text-amber-200">This looks like an Invoice, not a Quote</p>
+                                <p class="text-sm text-amber-600 dark:text-amber-400">
+                                    <a href="/invoices" class="underline hover:text-amber-800">Go to Invoices tab</a> to upload supplier invoices
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -149,16 +315,8 @@
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                 </svg>
-                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No quotes</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by uploading your first supplier quote.</p>
-                <div class="mt-6">
-                    <a href="/upload" class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                        Upload Quote
-                    </a>
-                </div>
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No quotes yet</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload your first quote using the form above.</p>
             </div>
 
             <div id="loading-state" class="py-12 text-center">
@@ -308,6 +466,87 @@
 </div>
 
 <script>
+// Alpine.js data for upload functionality
+function quotesPage() {
+    return {
+        files: [],
+        dragover: false,
+        uploading: false,
+        uploadExpanded: true,
+        uploadSuccess: false,
+        uploadError: false,
+        uploadMessage: '',
+        errorMessage: '',
+        wrongDocType: false,
+        
+        handleDrop(e) {
+            this.dragover = false;
+            const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+            this.files = [...this.files, ...droppedFiles];
+        },
+        
+        handleFileSelect(e) {
+            const selectedFiles = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+            this.files = [...this.files, ...selectedFiles];
+        },
+        
+        formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        },
+        
+        async uploadFiles() {
+            this.uploading = true;
+            this.uploadSuccess = false;
+            this.uploadError = false;
+            this.wrongDocType = false;
+            
+            const formData = new FormData();
+            this.files.forEach(file => formData.append('files', file));
+            formData.append('use_claude', 'true');
+            formData.append('document_type', 'quote');
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.uploadSuccess = true;
+                    this.uploadMessage = `Successfully processed ${data.results?.length || 1} quote(s)!`;
+                    this.files = [];
+                    // Reload the quotes table
+                    loadQuotes();
+                    // Collapse upload after success
+                    setTimeout(() => {
+                        this.uploadExpanded = false;
+                    }, 2000);
+                } else {
+                    // Check if it's a document type mismatch
+                    if (data.error && data.error.toLowerCase().includes('invoice')) {
+                        this.wrongDocType = true;
+                    } else {
+                        this.uploadError = true;
+                        this.errorMessage = data.error || 'Processing failed';
+                    }
+                }
+            } catch (err) {
+                this.uploadError = true;
+                this.errorMessage = 'Failed to connect to server';
+            } finally {
+                this.uploading = false;
+            }
+        }
+    }
+}
+
+// Rest of the original JavaScript
 let allQuotes = [];
 let filteredQuotes = [];
 let currentPage = 1;
@@ -330,10 +569,7 @@ document.getElementById('supplier-filter').addEventListener('change', applyFilte
 document.getElementById('date-filter').addEventListener('change', applyFilters);
 document.getElementById('qb-filter').addEventListener('change', applyFilters);
 
-// =====================================================================
-// CUSTOMER DROPDOWN
-// =====================================================================
-
+// Customer dropdown functions
 function setupCustomerDropdown() {
     const searchInput = document.getElementById('customer-search-input');
     if (!searchInput) return;
@@ -498,10 +734,7 @@ function selectFocusedItem() {
     if (focused) selectCustomer(focused.dataset.id, focused.dataset.name);
 }
 
-// =====================================================================
-// QUICKBOOKS
-// =====================================================================
-
+// QuickBooks functions
 async function checkQBStatus() {
     try {
         const response = await fetch('/integrations/api/quickbooks/status');
@@ -532,10 +765,7 @@ async function loadQBCustomers() {
     }
 }
 
-// =====================================================================
-// QUOTES
-// =====================================================================
-
+// Quote functions
 async function loadQuotes() {
     try {
         const response = await fetch('/api/quotes');
@@ -563,6 +793,7 @@ function updateStats(stats) {
 
 function populateSupplierFilter(suppliers) {
     const select = document.getElementById('supplier-filter');
+    select.innerHTML = '<option value="">All Suppliers</option>';
     suppliers.forEach(supplier => {
         const option = document.createElement('option');
         option.value = supplier;
@@ -654,10 +885,7 @@ function renderQuotes() {
     document.getElementById('next-btn').disabled = currentPage === totalPages;
 }
 
-// =====================================================================
-// MODAL & ESTIMATE SYNC
-// =====================================================================
-
+// Modal functions
 async function viewQuote(id) {
     try {
         const response = await fetch(`/api/quotes/${id}`);
@@ -751,14 +979,12 @@ async function createEstimate() {
     try {
         updateSyncProgress(25, 'Syncing products to QuickBooks...');
         
-        // First sync products
         const productResponse = await fetch(`/integrations/quickbooks/sync-products/${currentQuote.id}`, { method: 'POST' });
         const productData = await productResponse.json();
         
         updateSyncProgress(50, `Synced ${productData.details?.synced || 0} products...`);
         updateSyncProgress(75, 'Creating customer estimate...');
         
-        // Create estimate
         const estimateResponse = await fetch(`/integrations/quickbooks/create-estimate/${currentQuote.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
