@@ -46,6 +46,13 @@ def api_upload():
         
         master_parser = InvoiceParserService()
         
+        # Get user markup settings to pass to parser
+        user_markup_settings = {
+            'is_admin': current_user.is_admin,
+            'default_markup': current_user.default_markup or 50.0
+        }
+        current_app.logger.info(f"User markup settings: admin={user_markup_settings['is_admin']}, markup={user_markup_settings['default_markup']}%")
+        
         for file in files:
             if file and file.filename and allowed_file(file.filename):
                 try:
@@ -56,8 +63,13 @@ def api_upload():
                     os.makedirs('temp_uploads', exist_ok=True)
                     file.save(filepath)
                     
-                    # Parse invoice(s) - returns LIST
-                    parsed_invoices = master_parser.parse(filepath, use_claude=use_claude, document_type=document_type)
+                    # Parse invoice(s) - returns LIST, now with user markup settings
+                    parsed_invoices = master_parser.parse(
+                        filepath, 
+                        use_claude=use_claude, 
+                        document_type=document_type,
+                        user_markup_settings=user_markup_settings
+                    )
                     
                     # Save each invoice to database
                     for invoice_data in parsed_invoices:

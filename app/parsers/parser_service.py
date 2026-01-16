@@ -28,7 +28,7 @@ class InvoiceParserService:
             self.logger.warning(f"Claude parser not available: {str(e)}")
             self.claude_available = False
     
-    def parse(self, pdf_path: str, use_claude: bool = True, user_id: int = None, document_type: str = 'invoice') -> List[Dict]:
+    def parse(self, pdf_path: str, use_claude: bool = True, user_id: int = None, document_type: str = 'invoice', user_markup_settings: Dict = None) -> List[Dict]:
         """
         Parse invoice - returns LIST of invoices (for consolidated support)
         Single invoice returns list with 1 item
@@ -39,19 +39,25 @@ class InvoiceParserService:
             use_claude: Whether to use Claude API
             user_id: If provided, checks for duplicate invoices
             document_type: 'invoice' or 'quote' - validates PDF matches this type
+            user_markup_settings: Dict with 'is_admin' and 'default_markup' keys
         """
+        
+        # Default markup settings if not provided
+        if user_markup_settings is None:
+            user_markup_settings = {'is_admin': False, 'default_markup': 50.0}
         
         print("\n" + "="*80)
         self.logger.info(f"=== MASTER PARSER STARTED ===")
         self.logger.info(f"File: {pdf_path}")
         self.logger.info(f"Use Claude: {use_claude}")
         self.logger.info(f"Document Type: {document_type}")
+        self.logger.info(f"User Markup Settings: admin={user_markup_settings.get('is_admin')}, markup={user_markup_settings.get('default_markup')}%")
         print("="*80 + "\n")
         
         # Try custom parsers first (only for invoices, not quotes)
         custom_result = {'success': False}
         if document_type == 'invoice':
-            custom_result = self._try_custom_parsers(pdf_path)
+            custom_result = self._try_custom_parsers(pdf_path, user_markup_settings)
         
         # If Claude not requested, return custom result as list
         if not use_claude or not self.claude_available:
@@ -66,9 +72,9 @@ class InvoiceParserService:
                 results = self._check_duplicates(results, user_id)
             return results
         
-        # Try Claude parser with document type validation
+        # Try Claude parser with document type validation and user markup settings
         print(f"\n🤖 CLAUDE PARSER: Running (expecting {document_type})...")
-        claude_result = self.claude_parser.parse(pdf_path, expected_document_type=document_type)
+        claude_result = self.claude_parser.parse(pdf_path, expected_document_type=document_type, user_markup_settings=user_markup_settings)
         
         # Check for document type mismatch error
         if claude_result.get('document_type_mismatch'):
@@ -222,12 +228,16 @@ class InvoiceParserService:
                 'comparison': comparison
             }
     
-    def _try_custom_parsers(self, pdf_path: str) -> Dict:
+    def _try_custom_parsers(self, pdf_path: str, user_markup_settings: Dict = None) -> Dict:
         """Try all custom parsers"""
         for parser in self.custom_parsers:
             try:
                 if parser.detect(pdf_path):
-                    result = parser.parse(pdf_path)
+                    # Pass user markup settings if parser supports it
+                    if hasattr(parser, 'parse') and user_markup_settings:
+                        result = parser.parse(pdf_path, user_markup_settings=user_markup_settings)
+                    else:
+                        result = parser.parse(pdf_path)
                     if result.get('success'):
                         return {**result, 'method': f'custom_{parser.__class__.__name__}'}
             except Exception as e:

@@ -23,17 +23,22 @@ class ClaudeInvoiceParser:
         )
         self.logger = logging.getLogger(__name__)
     
-    def parse(self, pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
+    def parse(self, pdf_path: str, expected_document_type: str = 'invoice', user_markup_settings: Dict = None) -> Dict:
         """
         Parse invoice using Claude API - handles consolidated invoices
         
         Args:
             pdf_path: Path to PDF file
             expected_document_type: 'invoice' or 'quote' - what the user selected
+            user_markup_settings: Dict with 'is_admin' and 'default_markup' keys
         """
         try:
             self.logger.info(f"Claude parsing: {pdf_path}")
             self.logger.info(f"Expected document type: {expected_document_type}")
+            self.logger.info(f"User markup settings: {user_markup_settings}")
+            
+            # Store markup settings for use in transform
+            self.user_markup_settings = user_markup_settings or {'is_admin': False, 'default_markup': 50.0}
             
             # Read PDF file as binary and encode to base64
             with open(pdf_path, 'rb') as f:
@@ -371,11 +376,31 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
         
         return invoice_number
     
+    def _get_admin_tiered_markup(self, discount_val: float) -> float:
+        """Get markup for admin user based on discount tiers"""
+        if discount_val == 0:
+            return 0.20  # 20% markup
+        elif 1 <= discount_val <= 30:
+            return 0.40  # 40% markup
+        elif 30 < discount_val <= 70:
+            return 0.50  # 50% markup
+        else:
+            return 0.70  # 70% markup
+    
     def _transform_items(self, items: List[Dict], supplier: str = 'Unknown') -> List[Dict]:
-        """Transform items to our internal format with pricing - FIXED for Wholesale discount"""
+        """Transform items to our internal format with pricing
+        
+        Admin users: Use tiered markup based on discount percentage
+        Regular users: Use their flat default_markup setting
+        """
         transformed = []
         supplier_lower = supplier.lower() if supplier else ''
-        is_wholesale = 'wholesale' in supplier_lower
+        
+        # Get user markup settings
+        is_admin = self.user_markup_settings.get('is_admin', False)
+        user_default_markup = self.user_markup_settings.get('default_markup', 50.0) / 100  # Convert to decimal
+        
+        self.logger.info(f"Transform items: is_admin={is_admin}, user_markup={user_default_markup*100}%")
         
         for item in items:
             try:
@@ -386,9 +411,8 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                 discount = str(item.get('discount', '0')).replace('%', '')
                 discount_val = float(discount) if discount else 0
                 
-                # FIXED: Apply discount to get actual cost
+                # Apply discount to get actual cost
                 # For Wholesale Electrics, total_amount is BEFORE discount
-                # We need to apply the discount to get the real cost
                 if discount_val > 0:
                     discounted_total = total_amount * (1 - discount_val / 100)
                 else:
@@ -396,15 +420,13 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                 
                 cost_per_item = round(discounted_total / quantity, 2) if quantity > 0 else 0
                 
-                # Apply markup based on discount tier
-                if discount_val == 0:
-                    markup = 0.20
-                elif 1 <= discount_val <= 30:
-                    markup = 0.40
-                elif 30 < discount_val <= 70:
-                    markup = 0.50
+                # Determine markup based on user type
+                if is_admin:
+                    # Admin uses tiered markup based on discount
+                    markup = self._get_admin_tiered_markup(discount_val)
                 else:
-                    markup = 0.70
+                    # Regular users use their flat markup setting
+                    markup = user_default_markup
                 
                 selling_price = round(cost_per_item * (1 + markup), 2)
                 profit_per_item = round(selling_price - cost_per_item, 2)
