@@ -528,6 +528,17 @@ function uploadPage() {
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         },
         
+        updateFileStatus(index, status, error = null) {
+            // Create a new array to force Alpine reactivity
+            const newFiles = [...this.uploadFiles];
+            newFiles[index] = {
+                ...newFiles[index],
+                status: status,
+                error: error
+            };
+            this.uploadFiles = newFiles;
+        },
+        
         async processFiles() {
             if (this.uploadFiles.length === 0 || this.quotaExceeded) return;
             
@@ -536,18 +547,21 @@ function uploadPage() {
             this.results = [];
             this.currentFileIndex = 0;
             
-            // Reset all statuses to pending
-            for (let i = 0; i < this.uploadFiles.length; i++) {
-                this.uploadFiles[i].status = 'pending';
-                this.uploadFiles[i].error = null;
-            }
+            // Reset all statuses to pending using new array
+            this.uploadFiles = this.uploadFiles.map(f => ({...f, status: 'pending', error: null}));
+            
+            // Small delay to let UI update
+            await new Promise(resolve => setTimeout(resolve, 100));
             
             for (let i = 0; i < this.uploadFiles.length; i++) {
                 this.currentFileIndex = i;
                 const fileObj = this.uploadFiles[i];
                 
                 // Update status to processing
-                this.uploadFiles[i] = {...fileObj, status: 'processing'};
+                this.updateFileStatus(i, 'processing');
+                
+                // Wait for DOM to update
+                await new Promise(resolve => setTimeout(resolve, 50));
                 
                 try {
                     const formData = new FormData();
@@ -563,7 +577,7 @@ function uploadPage() {
                     
                     if (response.ok && data.success) {
                         // Update status to success
-                        this.uploadFiles[i] = {...this.uploadFiles[i], status: 'success'};
+                        this.updateFileStatus(i, 'success');
                         this.results = [...this.results, ...data.results];
                         
                         // Update remaining quota
@@ -573,7 +587,7 @@ function uploadPage() {
                         }
                     } else {
                         // Update status to error
-                        this.uploadFiles[i] = {...this.uploadFiles[i], status: 'error', error: data.error || 'Processing failed'};
+                        this.updateFileStatus(i, 'error', data.error || 'Processing failed');
                         
                         // Check if quota exceeded
                         if (data.quota_exceeded) {
@@ -585,12 +599,12 @@ function uploadPage() {
                     }
                 } catch (err) {
                     // Update status to error
-                    this.uploadFiles[i] = {...this.uploadFiles[i], status: 'error', error: 'Network error'};
+                    this.updateFileStatus(i, 'error', 'Network error');
                     console.error('Upload error:', err);
                 }
                 
                 // Small delay between files for visual feedback
-                await new Promise(resolve => setTimeout(resolve, 200));
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
             
             this.uploading = false;
