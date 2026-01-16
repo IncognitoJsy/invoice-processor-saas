@@ -181,71 +181,71 @@
             </div>
             
             <!-- Selected Files List -->
-            <template x-if="files.length > 0">
+            <template x-if="uploadFiles.length > 0">
                 <div class="mt-8 space-y-4">
                     <div class="flex items-center justify-between">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                             Selected Files
                             <span class="ml-2 px-2.5 py-0.5 rounded-full text-sm"
                                   :class="documentType === 'invoice' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'"
-                                  x-text="files.length"></span>
+                                  x-text="uploadFiles.length"></span>
                         </h3>
-                        <button @click="files = []; fileStatuses = {}" class="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium">
+                        <button @click="clearFiles()" x-show="!uploading" class="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium">
                             Clear all
                         </button>
                     </div>
                     
                     <div class="space-y-3">
-                        <template x-for="(file, index) in files" :key="file.name + index">
-                            <div class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-700/30 rounded-xl border-2 transition-all duration-300"
+                        <template x-for="(fileObj, index) in uploadFiles" :key="fileObj.id">
+                            <div class="flex items-center justify-between p-4 rounded-xl border-2 transition-all duration-500"
                                  :class="{
-                                     'border-green-500 dark:border-green-500 bg-green-50 dark:bg-green-900/20': fileStatuses[file.name] === 'success',
-                                     'border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-900/20': fileStatuses[file.name] === 'error',
-                                     'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': fileStatuses[file.name] === 'processing',
-                                     'border-gray-300 dark:border-gray-600': !fileStatuses[file.name] || fileStatuses[file.name] === 'pending'
+                                     'border-green-500 bg-green-50 dark:bg-green-900/30': fileObj.status === 'success',
+                                     'border-red-500 bg-red-50 dark:bg-red-900/30': fileObj.status === 'error',
+                                     'border-blue-500 bg-blue-50 dark:bg-blue-900/30': fileObj.status === 'processing',
+                                     'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50': fileObj.status === 'pending'
                                  }">
                                 <div class="flex items-center space-x-4">
                                     <!-- Status Icon -->
-                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300"
+                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transition-all duration-500"
                                          :class="{
-                                             'bg-green-500': fileStatuses[file.name] === 'success',
-                                             'bg-red-500': fileStatuses[file.name] === 'error',
-                                             'bg-blue-500 animate-pulse': fileStatuses[file.name] === 'processing',
-                                             'bg-gray-400 dark:bg-gray-600': !fileStatuses[file.name] || fileStatuses[file.name] === 'pending'
+                                             'bg-green-500': fileObj.status === 'success',
+                                             'bg-red-500': fileObj.status === 'error',
+                                             'bg-blue-500': fileObj.status === 'processing',
+                                             'bg-gray-400 dark:bg-gray-500': fileObj.status === 'pending'
                                          }">
-                                        <!-- Pending/Default icon -->
-                                        <svg x-show="!fileStatuses[file.name] || fileStatuses[file.name] === 'pending'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                        <!-- Pending icon -->
+                                        <svg x-show="fileObj.status === 'pending'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                         </svg>
                                         <!-- Processing spinner -->
-                                        <svg x-show="fileStatuses[file.name] === 'processing'" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <svg x-show="fileObj.status === 'processing'" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24">
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
                                         <!-- Success check -->
-                                        <svg x-show="fileStatuses[file.name] === 'success'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg x-show="fileObj.status === 'success'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                                         </svg>
                                         <!-- Error X -->
-                                        <svg x-show="fileStatuses[file.name] === 'error'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg x-show="fileObj.status === 'error'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                         </svg>
                                     </div>
                                     <div>
-                                        <p class="font-medium text-gray-900 dark:text-white" x-text="file.name"></p>
+                                        <p class="font-medium text-gray-900 dark:text-white" x-text="fileObj.name"></p>
                                         <p class="text-sm">
-                                            <span class="text-gray-500 dark:text-gray-400" x-text="formatFileSize(file.size)"></span>
-                                            <span x-show="fileStatuses[file.name] === 'processing'" class="ml-2 text-blue-600 dark:text-blue-400 font-medium">⏳ Processing...</span>
-                                            <span x-show="fileStatuses[file.name] === 'success'" class="ml-2 text-green-600 dark:text-green-400 font-medium">✓ Complete</span>
-                                            <span x-show="fileStatuses[file.name] === 'error'" class="ml-2 text-red-600 dark:text-red-400 font-medium" x-text="'✗ ' + (fileErrors[file.name] || 'Failed')"></span>
-                                            <span x-show="fileStatuses[file.name] === 'pending' && uploading" class="ml-2 text-gray-500 dark:text-gray-400">Waiting...</span>
+                                            <span class="text-gray-500 dark:text-gray-400" x-text="formatFileSize(fileObj.size)"></span>
+                                            <span x-show="fileObj.status === 'pending' && uploading" class="ml-2 text-gray-500 dark:text-gray-400 font-medium">⏳ Waiting...</span>
+                                            <span x-show="fileObj.status === 'processing'" class="ml-2 text-blue-600 dark:text-blue-400 font-medium">⚡ Processing...</span>
+                                            <span x-show="fileObj.status === 'success'" class="ml-2 text-green-600 dark:text-green-400 font-medium">✓ Complete!</span>
+                                            <span x-show="fileObj.status === 'error'" class="ml-2 text-red-600 dark:text-red-400 font-medium" x-text="'✗ ' + (fileObj.error || 'Failed')"></span>
                                         </p>
                                     </div>
                                 </div>
                                 
                                 <button @click="removeFile(index)" 
                                         x-show="!uploading"
-                                        class="p-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                                        class="p-2.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-all">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
@@ -259,22 +259,22 @@
                         <div class="mt-4">
                             <div class="flex justify-between text-sm mb-2">
                                 <span class="font-medium text-gray-700 dark:text-gray-300">
-                                    Processing file <span x-text="currentFileIndex + 1"></span> of <span x-text="files.length"></span>
+                                    Processing file <span x-text="currentFileIndex + 1"></span> of <span x-text="uploadFiles.length"></span>
                                 </span>
-                                <span class="text-gray-500 dark:text-gray-400" x-text="Math.round((currentFileIndex / files.length) * 100) + '%'"></span>
+                                <span class="text-gray-500 dark:text-gray-400" x-text="Math.round(((currentFileIndex + 1) / uploadFiles.length) * 100) + '%'"></span>
                             </div>
-                            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                                <div class="h-3 rounded-full transition-all duration-500"
+                            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                                <div class="h-3 rounded-full transition-all duration-500 ease-out"
                                      :class="documentType === 'invoice' ? 'bg-gradient-to-r from-blue-500 to-purple-600' : 'bg-gradient-to-r from-purple-500 to-pink-600'"
-                                     :style="'width: ' + ((currentFileIndex / files.length) * 100) + '%'"></div>
+                                     :style="'width: ' + (((currentFileIndex + 1) / uploadFiles.length) * 100) + '%'"></div>
                             </div>
                         </div>
                     </template>
                     
                     <!-- Process Button -->
-                    <button @click="uploadFilesSequentially()" 
-                            :disabled="uploading || files.length === 0 || quotaExceeded"
-                            :class="{'opacity-50 cursor-not-allowed': uploading || files.length === 0 || quotaExceeded,
+                    <button @click="processFiles()" 
+                            :disabled="uploading || uploadFiles.length === 0 || quotaExceeded"
+                            :class="{'opacity-50 cursor-not-allowed': uploading || uploadFiles.length === 0 || quotaExceeded,
                                      'from-blue-600 via-blue-500 to-purple-600 hover:from-blue-700 hover:via-blue-600 hover:to-purple-700': documentType === 'invoice',
                                      'from-purple-600 via-purple-500 to-pink-600 hover:from-purple-700 hover:via-purple-600 hover:to-pink-700': documentType === 'quote'}"
                             class="w-full py-4 px-6 bg-gradient-to-r text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.01] transition-all relative overflow-hidden group">
@@ -283,14 +283,14 @@
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                             </svg>
-                            <span>Process <span x-text="files.length"></span> <span x-text="documentType === 'invoice' ? 'Invoice' : 'Quote'"></span><span x-show="files.length > 1">s</span></span>
+                            <span>Process <span x-text="uploadFiles.length"></span> <span x-text="documentType === 'invoice' ? 'Invoice' : 'Quote'"></span><span x-show="uploadFiles.length > 1">s</span></span>
                         </span>
                         <span x-show="uploading" class="flex items-center justify-center space-x-3">
                             <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>Processing <span x-text="currentFileIndex + 1"></span> of <span x-text="files.length"></span>...</span>
+                            <span>Processing <span x-text="currentFileIndex + 1"></span> of <span x-text="uploadFiles.length"></span>...</span>
                         </span>
                     </button>
                 </div>
@@ -454,17 +454,14 @@
 <script>
 function uploadPage() {
     return {
-        files: [],
-        fileStatuses: {},  // Track status per file: 'processing', 'success', 'error'
-        fileErrors: {},    // Track error messages per file
+        // Use array of objects with embedded status for better reactivity
+        uploadFiles: [],
+        fileIdCounter: 0,
         results: [],
         dragover: false,
         uploading: false,
-        processing: false,
-        success: false,
         error: false,
         errorMessage: '',
-        showDebug: false,
         documentType: 'invoice',
         currentFileIndex: 0,
         
@@ -489,20 +486,38 @@ function uploadPage() {
             if (this.quotaExceeded) return;
             this.dragover = false;
             const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
-            this.files = [...this.files, ...droppedFiles];
+            this.addFiles(droppedFiles);
         },
         
         handleFileSelect(e) {
             if (this.quotaExceeded) return;
             const selectedFiles = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
-            this.files = [...this.files, ...selectedFiles];
+            this.addFiles(selectedFiles);
+            // Reset input so same file can be selected again
+            e.target.value = '';
+        },
+        
+        addFiles(files) {
+            for (const file of files) {
+                this.uploadFiles.push({
+                    id: ++this.fileIdCounter,
+                    file: file,
+                    name: file.name,
+                    size: file.size,
+                    status: 'pending',
+                    error: null
+                });
+            }
         },
         
         removeFile(index) {
-            const fileName = this.files[index].name;
-            delete this.fileStatuses[fileName];
-            delete this.fileErrors[fileName];
-            this.files.splice(index, 1);
+            this.uploadFiles.splice(index, 1);
+        },
+        
+        clearFiles() {
+            this.uploadFiles = [];
+            this.results = [];
+            this.error = false;
         },
         
         formatFileSize(bytes) {
@@ -513,31 +528,30 @@ function uploadPage() {
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         },
         
-        async uploadFilesSequentially() {
-            if (this.files.length === 0 || this.quotaExceeded) return;
+        async processFiles() {
+            if (this.uploadFiles.length === 0 || this.quotaExceeded) return;
             
             this.uploading = true;
             this.error = false;
             this.results = [];
             this.currentFileIndex = 0;
             
-            // Reset all file statuses to pending
-            this.fileStatuses = {};
-            this.fileErrors = {};
-            for (const file of this.files) {
-                this.fileStatuses[file.name] = 'pending';
+            // Reset all statuses to pending
+            for (let i = 0; i < this.uploadFiles.length; i++) {
+                this.uploadFiles[i].status = 'pending';
+                this.uploadFiles[i].error = null;
             }
             
-            for (let i = 0; i < this.files.length; i++) {
-                const file = this.files[i];
+            for (let i = 0; i < this.uploadFiles.length; i++) {
                 this.currentFileIndex = i;
+                const fileObj = this.uploadFiles[i];
                 
-                // Update status to processing - use spread to trigger reactivity
-                this.fileStatuses = {...this.fileStatuses, [file.name]: 'processing'};
+                // Update status to processing
+                this.uploadFiles[i] = {...fileObj, status: 'processing'};
                 
                 try {
                     const formData = new FormData();
-                    formData.append('file', file);
+                    formData.append('file', fileObj.file);
                     formData.append('document_type', this.documentType);
                     
                     const response = await fetch('/api/upload/single', {
@@ -548,8 +562,8 @@ function uploadPage() {
                     const data = await response.json();
                     
                     if (response.ok && data.success) {
-                        // Update status to success - use spread to trigger reactivity
-                        this.fileStatuses = {...this.fileStatuses, [file.name]: 'success'};
+                        // Update status to success
+                        this.uploadFiles[i] = {...this.uploadFiles[i], status: 'success'};
                         this.results = [...this.results, ...data.results];
                         
                         // Update remaining quota
@@ -558,44 +572,39 @@ function uploadPage() {
                             this.isUnlimited = data.remaining === 'unlimited';
                         }
                     } else {
-                        // Update status to error - use spread to trigger reactivity
-                        this.fileStatuses = {...this.fileStatuses, [file.name]: 'error'};
-                        this.fileErrors = {...this.fileErrors, [file.name]: data.error || 'Processing failed'};
+                        // Update status to error
+                        this.uploadFiles[i] = {...this.uploadFiles[i], status: 'error', error: data.error || 'Processing failed'};
                         
                         // Check if quota exceeded
                         if (data.quota_exceeded) {
                             this.quotaExceeded = true;
                             this.error = true;
                             this.errorMessage = data.message || 'Invoice quota exceeded';
-                            break; // Stop processing more files
+                            break;
                         }
                     }
                 } catch (err) {
-                    // Update status to error - use spread to trigger reactivity
-                    this.fileStatuses = {...this.fileStatuses, [file.name]: 'error'};
-                    this.fileErrors = {...this.fileErrors, [file.name]: 'Network error'};
+                    // Update status to error
+                    this.uploadFiles[i] = {...this.uploadFiles[i], status: 'error', error: 'Network error'};
                     console.error('Upload error:', err);
                 }
                 
-                // Small delay between files to show progress visually
-                if (i < this.files.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
+                // Small delay between files for visual feedback
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
             
             this.uploading = false;
-            this.currentFileIndex = this.files.length;
             
-            // Refresh quota after all processing
+            // Refresh quota
             await this.checkQuota();
             
-            // Scroll to results if any
+            // Scroll to results
             if (this.results.length > 0) {
                 setTimeout(() => {
-                    document.querySelector('[x-if="results.length > 0"]')?.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'start' 
-                    });
+                    const resultsEl = document.querySelector('[x-if="results.length > 0"]');
+                    if (resultsEl) {
+                        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                 }, 100);
             }
         }
