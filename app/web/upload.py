@@ -14,18 +14,185 @@ ALLOWED_EXTENSIONS = {'pdf'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 @bp.route('/upload')
 @login_required
 def upload_page():
     """Upload page"""
     return render_template('upload/index.html')
 
+
+@bp.route('/api/upload/quota', methods=['GET'])
+@login_required
+def check_quota():
+    """Check user's remaining invoice quota"""
+    remaining = current_user.invoices_remaining
+    can_upload = current_user.can_upload_invoice
+    
+    return jsonify({
+        'can_upload': can_upload,
+        'remaining': remaining if remaining != float('inf') else 'unlimited',
+        'is_unlimited': remaining == float('inf'),
+        'bonus_invoices': current_user.bonus_invoices or 0,
+        'plan': current_user.subscription_plan
+    })
+
+
+@bp.route('/api/upload/single', methods=['POST'])
+@login_required
+def api_upload_single():
+    """Handle single file upload - called sequentially from frontend"""
+    try:
+        # Check quota BEFORE processing
+        if not current_user.can_upload_invoice:
+            remaining = current_user.invoices_remaining
+            if remaining == 0:
+                return jsonify({
+                    'error': 'Invoice quota exceeded',
+                    'quota_exceeded': True,
+                    'message': 'You have used all your invoices for this billing period. Upgrade to Pro for unlimited invoices or purchase additional invoices.',
+                    'remaining': 0
+                }), 403
+            else:
+                return jsonify({
+                    'error': 'No active subscription',
+                    'message': 'Please subscribe to continue processing invoices.'
+                }), 403
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        document_type = request.form.get('document_type', 'invoice')
+        
+        if not file or not file.filename:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Only PDF files are allowed'}), 400
+        
+        from app.parsers.parser_service import InvoiceParserService
+        from app.extensions import db
+        
+        master_parser = InvoiceParserService()
+        
+        # Get user markup settings
+        user_markup_settings = {
+            'is_admin': current_user.is_admin,
+            'default_markup': current_user.default_markup or 50.0
+        }
+        
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filepath = os.path.join('temp_uploads', f"{timestamp}_{filename}")
+        
+        os.makedirs('temp_uploads', exist_ok=True)
+        file.save(filepath)
+        
+        try:
+            # Parse invoice(s) - may return multiple for consolidated PDFs
+            parsed_invoices = master_parser.parse(
+                filepath, 
+                use_claude=True, 
+                document_type=document_type,
+                user_markup_settings=user_markup_settings
+            )
+            
+            results = []
+            errors = []
+            
+            for invoice_data in parsed_invoices:
+                if invoice_data.get('success'):
+                    # Check quota again before saving each invoice
+                    if not current_user.can_upload_invoice:
+                        errors.append('Quota exceeded - some invoices not saved')
+                        break
+                    
+                    # Save to database
+                    saved_invoice = save_invoice_to_db(
+                        invoice_data, 
+                        filename, 
+                        current_user.id,
+                        document_type
+                    )
+                    
+                    # Use quota (deducts from bonus if needed)
+                    current_user.use_invoice_quota(1)
+                    db.session.commit()
+                    
+                    # Prepare result for frontend
+                    items = invoice_data.get('items', [])
+                    total = sum(item.get('total_amount', 0) for item in items)
+                    
+                    result = {
+                        'id': saved_invoice.id,
+                        'filename': filename,
+                        'supplier': invoice_data.get('supplier', 'Unknown'),
+                        'items_count': len(items),
+                        'total': total,
+                        'job_reference': invoice_data.get('job_reference'),
+                        'items': items[:5],
+                        'all_items': items,
+                        'expanded': False,
+                        'success': True,
+                        'method': invoice_data.get('method'),
+                        'confidence': invoice_data.get('confidence'),
+                        'needs_review': invoice_data.get('needs_review', False),
+                        'comparison': invoice_data.get('comparison'),
+                        'saved': True
+                    }
+                    
+                    if invoice_data.get('consolidated'):
+                        result['consolidated'] = True
+                        result['order_number'] = invoice_data.get('order_number')
+                        result['total_orders'] = invoice_data.get('total_orders')
+                    
+                    results.append(result)
+                else:
+                    errors.append(invoice_data.get('error', 'Unknown error'))
+            
+            # Clean up temp file
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            
+            if results:
+                return jsonify({
+                    'success': True,
+                    'processed': len(results),
+                    'results': results,
+                    'errors': errors if errors else [],
+                    'remaining': current_user.invoices_remaining if current_user.invoices_remaining != float('inf') else 'unlimited'
+                })
+            else:
+                error_message = errors[0] if errors else 'No invoices processed'
+                return jsonify({
+                    'error': error_message,
+                    'details': errors
+                }), 400
+                
+        finally:
+            # Ensure temp file cleanup
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                
+    except Exception as e:
+        current_app.logger.error(f"Server error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
 @bp.route('/api/upload', methods=['POST'])
 @login_required
 def api_upload():
-    """Handle file upload, process invoices, and save to database"""
+    """Handle file upload - legacy endpoint for backward compatibility"""
     try:
         current_app.logger.info("=== UPLOAD REQUEST ===")
+        
+        # Check quota BEFORE processing
+        if not current_user.can_upload_invoice:
+            return jsonify({
+                'error': 'Invoice quota exceeded. Please upgrade your plan or purchase additional invoices.',
+                'quota_exceeded': True
+            }), 403
         
         if 'files' not in request.files:
             return jsonify({'error': 'No files provided'}), 400
@@ -36,6 +203,15 @@ def api_upload():
         
         if not files or len(files) == 0:
             return jsonify({'error': 'No files selected'}), 400
+        
+        # Check if user has enough quota for all files
+        remaining = current_user.invoices_remaining
+        if remaining != float('inf') and len(files) > remaining:
+            return jsonify({
+                'error': f'You can only process {remaining} more invoice(s) this period. You selected {len(files)} files.',
+                'quota_exceeded': True,
+                'remaining': remaining
+            }), 403
         
         results = []
         errors = []
@@ -55,6 +231,11 @@ def api_upload():
         
         for file in files:
             if file and file.filename and allowed_file(file.filename):
+                # Re-check quota before each file
+                if not current_user.can_upload_invoice:
+                    errors.append(f"{file.filename}: Quota exceeded")
+                    continue
+                
                 try:
                     filename = secure_filename(file.filename)
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -63,7 +244,7 @@ def api_upload():
                     os.makedirs('temp_uploads', exist_ok=True)
                     file.save(filepath)
                     
-                    # Parse invoice(s) - returns LIST, now with user markup settings
+                    # Parse invoice(s) - returns LIST
                     parsed_invoices = master_parser.parse(
                         filepath, 
                         use_claude=use_claude, 
@@ -74,6 +255,11 @@ def api_upload():
                     # Save each invoice to database
                     for invoice_data in parsed_invoices:
                         if invoice_data.get('success'):
+                            # Check quota again
+                            if not current_user.can_upload_invoice:
+                                errors.append(f"{filename}: Quota exceeded")
+                                break
+                            
                             # Save to database
                             saved_invoice = save_invoice_to_db(
                                 invoice_data, 
@@ -82,29 +268,32 @@ def api_upload():
                                 document_type
                             )
                             
+                            # Use quota
+                            current_user.use_invoice_quota(1)
+                            db.session.commit()
+                            
                             # Prepare result for frontend
                             items = invoice_data.get('items', [])
                             total = sum(item.get('total_amount', 0) for item in items)
                             
                             result = {
-                                'id': saved_invoice.id,  # Database ID
+                                'id': saved_invoice.id,
                                 'filename': filename,
                                 'supplier': invoice_data.get('supplier', 'Unknown'),
                                 'items_count': len(items),
                                 'total': total,
                                 'job_reference': invoice_data.get('job_reference'),
-                                'items': items[:5],  # First 5 for preview
-                                'all_items': items,  # All items for expansion
+                                'items': items[:5],
+                                'all_items': items,
                                 'expanded': False,
                                 'success': True,
                                 'method': invoice_data.get('method'),
                                 'confidence': invoice_data.get('confidence'),
                                 'needs_review': invoice_data.get('needs_review', False),
                                 'comparison': invoice_data.get('comparison'),
-                                'saved': True  # Indicate it's saved to DB
+                                'saved': True
                             }
                             
-                            # Add consolidated metadata
                             if invoice_data.get('consolidated'):
                                 result['consolidated'] = True
                                 result['order_number'] = invoice_data.get('order_number')
@@ -127,10 +316,10 @@ def api_upload():
                 'success': True,
                 'processed': len(results),
                 'results': results,
-                'errors': errors if errors else []
+                'errors': errors if errors else [],
+                'remaining': current_user.invoices_remaining if current_user.invoices_remaining != float('inf') else 'unlimited'
             })
         else:
-            # Return the first specific error if available
             error_message = errors[0] if errors else 'No invoices processed'
             return jsonify({
                 'error': error_message,
