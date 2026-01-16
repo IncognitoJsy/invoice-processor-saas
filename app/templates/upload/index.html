@@ -196,26 +196,25 @@
                     </div>
                     
                     <div class="space-y-3">
-                        <template x-for="(file, index) in files" :key="index">
-                            <div class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-700/30 rounded-xl border transition-all"
+                        <template x-for="(file, index) in files" :key="file.name + index">
+                            <div class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-700/30 rounded-xl border-2 transition-all duration-300"
                                  :class="{
-                                     'border-green-400 dark:border-green-600': fileStatuses[file.name] === 'success',
-                                     'border-red-400 dark:border-red-600': fileStatuses[file.name] === 'error',
-                                     'border-blue-400 dark:border-blue-600 animate-pulse': fileStatuses[file.name] === 'processing',
-                                     'border-gray-200 dark:border-gray-600': !fileStatuses[file.name]
+                                     'border-green-500 dark:border-green-500 bg-green-50 dark:bg-green-900/20': fileStatuses[file.name] === 'success',
+                                     'border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-900/20': fileStatuses[file.name] === 'error',
+                                     'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': fileStatuses[file.name] === 'processing',
+                                     'border-gray-300 dark:border-gray-600': !fileStatuses[file.name] || fileStatuses[file.name] === 'pending'
                                  }">
                                 <div class="flex items-center space-x-4">
                                     <!-- Status Icon -->
-                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
+                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300"
                                          :class="{
                                              'bg-green-500': fileStatuses[file.name] === 'success',
                                              'bg-red-500': fileStatuses[file.name] === 'error',
-                                             'bg-blue-500': fileStatuses[file.name] === 'processing',
-                                             'bg-gradient-to-br from-red-500 to-pink-600': !fileStatuses[file.name] && documentType === 'invoice',
-                                             'bg-gradient-to-br from-purple-500 to-indigo-600': !fileStatuses[file.name] && documentType === 'quote'
+                                             'bg-blue-500 animate-pulse': fileStatuses[file.name] === 'processing',
+                                             'bg-gray-400 dark:bg-gray-600': !fileStatuses[file.name] || fileStatuses[file.name] === 'pending'
                                          }">
-                                        <!-- Default PDF icon -->
-                                        <svg x-show="!fileStatuses[file.name]" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <!-- Pending/Default icon -->
+                                        <svg x-show="!fileStatuses[file.name] || fileStatuses[file.name] === 'pending'" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                                         </svg>
                                         <!-- Processing spinner -->
@@ -234,11 +233,12 @@
                                     </div>
                                     <div>
                                         <p class="font-medium text-gray-900 dark:text-white" x-text="file.name"></p>
-                                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            <span x-text="formatFileSize(file.size)"></span>
-                                            <span x-show="fileStatuses[file.name] === 'processing'" class="ml-2 text-blue-600 dark:text-blue-400">Processing...</span>
-                                            <span x-show="fileStatuses[file.name] === 'success'" class="ml-2 text-green-600 dark:text-green-400">✓ Complete</span>
-                                            <span x-show="fileStatuses[file.name] === 'error'" class="ml-2 text-red-600 dark:text-red-400" x-text="fileErrors[file.name] || 'Failed'"></span>
+                                        <p class="text-sm">
+                                            <span class="text-gray-500 dark:text-gray-400" x-text="formatFileSize(file.size)"></span>
+                                            <span x-show="fileStatuses[file.name] === 'processing'" class="ml-2 text-blue-600 dark:text-blue-400 font-medium">⏳ Processing...</span>
+                                            <span x-show="fileStatuses[file.name] === 'success'" class="ml-2 text-green-600 dark:text-green-400 font-medium">✓ Complete</span>
+                                            <span x-show="fileStatuses[file.name] === 'error'" class="ml-2 text-red-600 dark:text-red-400 font-medium" x-text="'✗ ' + (fileErrors[file.name] || 'Failed')"></span>
+                                            <span x-show="fileStatuses[file.name] === 'pending' && uploading" class="ml-2 text-gray-500 dark:text-gray-400">Waiting...</span>
                                         </p>
                                     </div>
                                 </div>
@@ -519,14 +519,21 @@ function uploadPage() {
             this.uploading = true;
             this.error = false;
             this.results = [];
+            this.currentFileIndex = 0;
+            
+            // Reset all file statuses to pending
             this.fileStatuses = {};
             this.fileErrors = {};
-            this.currentFileIndex = 0;
+            for (const file of this.files) {
+                this.fileStatuses[file.name] = 'pending';
+            }
             
             for (let i = 0; i < this.files.length; i++) {
                 const file = this.files[i];
                 this.currentFileIndex = i;
-                this.fileStatuses[file.name] = 'processing';
+                
+                // Update status to processing - use spread to trigger reactivity
+                this.fileStatuses = {...this.fileStatuses, [file.name]: 'processing'};
                 
                 try {
                     const formData = new FormData();
@@ -541,7 +548,8 @@ function uploadPage() {
                     const data = await response.json();
                     
                     if (response.ok && data.success) {
-                        this.fileStatuses[file.name] = 'success';
+                        // Update status to success - use spread to trigger reactivity
+                        this.fileStatuses = {...this.fileStatuses, [file.name]: 'success'};
                         this.results = [...this.results, ...data.results];
                         
                         // Update remaining quota
@@ -550,8 +558,9 @@ function uploadPage() {
                             this.isUnlimited = data.remaining === 'unlimited';
                         }
                     } else {
-                        this.fileStatuses[file.name] = 'error';
-                        this.fileErrors[file.name] = data.error || 'Processing failed';
+                        // Update status to error - use spread to trigger reactivity
+                        this.fileStatuses = {...this.fileStatuses, [file.name]: 'error'};
+                        this.fileErrors = {...this.fileErrors, [file.name]: data.error || 'Processing failed'};
                         
                         // Check if quota exceeded
                         if (data.quota_exceeded) {
@@ -562,13 +571,15 @@ function uploadPage() {
                         }
                     }
                 } catch (err) {
-                    this.fileStatuses[file.name] = 'error';
-                    this.fileErrors[file.name] = 'Network error';
+                    // Update status to error - use spread to trigger reactivity
+                    this.fileStatuses = {...this.fileStatuses, [file.name]: 'error'};
+                    this.fileErrors = {...this.fileErrors, [file.name]: 'Network error'};
+                    console.error('Upload error:', err);
                 }
                 
-                // Small delay between files to avoid overwhelming the server
+                // Small delay between files to show progress visually
                 if (i < this.files.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await new Promise(resolve => setTimeout(resolve, 300));
                 }
             }
             
