@@ -42,7 +42,9 @@ class XeroService:
         """Generate Xero OAuth authorization URL"""
         from urllib.parse import urlencode
         
+        # Force HTTPS for production
         redirect_uri = url_for('integrations.xero_callback', _external=True)
+        redirect_uri = redirect_uri.replace('http://', 'https://')
         
         logger.info(f"Xero redirect_uri: {redirect_uri}")
         
