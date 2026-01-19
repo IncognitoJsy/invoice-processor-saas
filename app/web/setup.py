@@ -164,7 +164,7 @@ def complete():
         db.session.commit()
         
         logger.info(f"User {current_user.id} completed setup wizard")
-        flash('Setup complete! Welcome to FluxOps.', 'success')
+        flash('Setup complete! Welcome to GoZappify.', 'success')
         return redirect(url_for('dashboard.index'))
     except Exception as e:
         logger.error(f"Error completing setup: {e}")

@@ -1,6 +1,6 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Billing - FluxOps{% endblock %}
+{% block title %}Billing - GoZappify{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
@@ -51,7 +51,7 @@
                         {% if current_user.is_trial_active %}
                             {{ current_user.trial_days_remaining }} days left • {{ current_user.invoices_remaining }} invoices remaining
                         {% else %}
-                            Your trial has expired. Subscribe to continue using FluxOps.
+                            Your trial has expired. Subscribe to continue using GoZappify.
                         {% endif %}
                     </p>
                 </div>
@@ -153,7 +153,7 @@
                     <p class="mt-2 text-gray-500 dark:text-gray-400">For growing businesses</p>
                     
                     <div class="mt-6">
-                        <span class="text-4xl font-bold text-gray-900 dark:text-white">£59</span>
+                        <span class="text-4xl font-bold text-gray-900 dark:text-white">£79</span>
                         <span class="text-gray-500 dark:text-gray-400">/month</span>
                     </div>
                     
@@ -248,7 +248,7 @@
         <!-- Contact -->
         <div class="mt-12 text-center">
             <p class="text-gray-600 dark:text-gray-400">
-                Have questions? <a href="mailto:support@fluxops.io" class="text-blue-600 hover:underline dark:text-blue-400">Contact us</a>
+                Have questions? <a href="mailto:support@gozappify.io" class="text-blue-600 hover:underline dark:text-blue-400">Contact us</a>
             </p>
         </div>
         

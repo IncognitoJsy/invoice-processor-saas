@@ -112,7 +112,7 @@ class User(db.Model, UserMixin):
         if self.is_admin:
             return float('inf')  # Unlimited for admin
         limits = {
-            'trial': 10,
+            'trial': 25,  # Updated from 10 to 25
             'basic': 100,
             'pro': float('inf'),  # Unlimited
             'cancelled': 0

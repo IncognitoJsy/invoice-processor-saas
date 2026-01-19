@@ -7,7 +7,7 @@ from datetime import datetime
 # Email templates
 TEMPLATES = {
     'verify_email': {
-        'subject': 'Verify your FluxOps email',
+        'subject': 'Verify your GoZappify email',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -18,13 +18,13 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Verify your email</h2>
             <p style="margin: 0 0 30px; line-height: 1.6;">
                 Hi {{first_name}},<br><br>
-                Welcome to FluxOps! Please verify your email address to get started.
+                Welcome to GoZappify! Please verify your email address to get started.
             </p>
             <a href="{{verify_url}}" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: 600;">
                 Verify Email
@@ -43,7 +43,7 @@ TEMPLATES = {
     },
     
     'forgot_password': {
-        'subject': 'Reset your FluxOps password',
+        'subject': 'Reset your GoZappify password',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -54,7 +54,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Reset your password</h2>
@@ -79,7 +79,7 @@ TEMPLATES = {
     },
     
     'password_changed': {
-        'subject': 'Your FluxOps password was changed',
+        'subject': 'Your GoZappify password was changed',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -90,13 +90,13 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Password changed</h2>
             <p style="margin: 0 0 20px; line-height: 1.6;">
                 Hi {{first_name}},<br><br>
-                Your FluxOps password was successfully changed on {{changed_at}}.
+                Your GoZappify password was successfully changed on {{changed_at}}.
             </p>
             <p style="margin: 0; line-height: 1.6; color: #fbbf24;">
                 ⚠️ If you didn't make this change, please contact us immediately.
@@ -109,7 +109,7 @@ TEMPLATES = {
     },
     
     'welcome_paid': {
-        'subject': 'Welcome to FluxOps {{plan}}! 🎉',
+        'subject': 'Welcome to GoZappify {{plan}}! 🎉',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -120,13 +120,13 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Welcome to {{plan}}! 🎉</h2>
             <p style="margin: 0 0 30px; line-height: 1.6;">
                 Hi {{first_name}},<br><br>
-                Thank you for subscribing to FluxOps {{plan}}! Your account is now fully activated.
+                Thank you for subscribing to GoZappify {{plan}}! Your account is now fully activated.
             </p>
             <div style="background: #374151; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
                 <p style="margin: 0 0 10px; color: #9ca3af; font-size: 14px;">Your plan includes:</p>
@@ -145,7 +145,7 @@ TEMPLATES = {
     },
     
     'trial_ending': {
-        'subject': 'Your FluxOps trial ends tomorrow',
+        'subject': 'Your GoZappify trial ends tomorrow',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -156,13 +156,13 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Your trial ends tomorrow ⏰</h2>
             <p style="margin: 0 0 30px; line-height: 1.6;">
                 Hi {{first_name}},<br><br>
-                Your 7-day free trial of FluxOps ends tomorrow. To keep using all features, upgrade to a paid plan.
+                Your 7-day free trial of GoZappify ends tomorrow. To keep using all features, upgrade to a paid plan.
             </p>
             <div style="background: #374151; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
@@ -190,7 +190,7 @@ TEMPLATES = {
     },
     
     'trial_expired': {
-        'subject': 'Your FluxOps trial has ended',
+        'subject': 'Your GoZappify trial has ended',
         'html': '''
 <!DOCTYPE html>
 <html>
@@ -201,7 +201,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #6b7280 0%, #374151 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ FluxOps</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Your trial has ended</h2>
@@ -226,7 +226,7 @@ class EmailService:
     
     def __init__(self):
         self.api_key = os.getenv('RESEND_API_KEY')
-        self.from_email = os.getenv('MAIL_FROM', 'FluxOps <onboarding@resend.dev>')
+        self.from_email = os.getenv('MAIL_FROM', 'GoZappify <onboarding@resend.dev>')
         
         if self.api_key:
             resend.api_key = self.api_key

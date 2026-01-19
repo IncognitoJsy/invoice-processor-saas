@@ -81,7 +81,7 @@ def register():
         # Log them in directly
         login_user(user)
         
-        flash('Welcome to FluxOps! Let\'s get you set up.', 'success')
+        flash('Welcome to GoZappify! Let\'s get you set up.', 'success')
         return redirect(url_for('setup.index'))
     
     return render_template('auth/register.html')

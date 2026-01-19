@@ -270,7 +270,7 @@ class QuickBooksService:
         return self.make_api_request(qb_connection, "bill", method='POST', data=bill_data)
     
     def sync_invoice_to_quickbooks(self, qb_connection, invoice):
-        """Sync a FluxOps invoice to QuickBooks as a bill"""
+        """Sync a GoZappify invoice to QuickBooks as a bill"""
         from app.models.invoice import InvoiceItem
         
         items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
@@ -946,7 +946,7 @@ Rules:
         return result
 
     
-    def sync_invoice_to_customer(self, qb_connection, fluxops_invoice, customer_id: str, 
+    def sync_invoice_to_customer(self, qb_connection, gozappify_invoice, customer_id: str, 
                                   use_existing_invoice: bool = True):
         """
         Full sync: Update products AND add to customer invoice
@@ -968,13 +968,13 @@ Rules:
             'errors': []
         }
         
-        items = InvoiceItem.query.filter_by(invoice_id=fluxops_invoice.id).all()
+        items = InvoiceItem.query.filter_by(invoice_id=gozappify_invoice.id).all()
         
         if not items:
             return {'success': False, 'error': 'No items to sync'}
         
         # Step 1: Sync all products
-        product_results = self.sync_invoice_items_as_products(qb_connection, fluxops_invoice)
+        product_results = self.sync_invoice_items_as_products(qb_connection, gozappify_invoice)
         results['products_synced'] = product_results.get('synced', 0)
         results['products_failed'] = product_results.get('failed', 0)
         results['errors'].extend(product_results.get('errors', []))
@@ -1124,7 +1124,7 @@ Rules:
         result = self.make_api_request(qb_connection, query)
         return result.get('QueryResponse', {}).get('Estimate', [])
     
-    def sync_quote_to_estimate(self, qb_connection, fluxops_quote, customer_id: str):
+    def sync_quote_to_estimate(self, qb_connection, gozappify_quote, customer_id: str):
         """
         Full sync for quotes: Update products AND create customer estimate
         
@@ -1145,13 +1145,13 @@ Rules:
             'errors': []
         }
         
-        items = InvoiceItem.query.filter_by(invoice_id=fluxops_quote.id).all()
+        items = InvoiceItem.query.filter_by(invoice_id=gozappify_quote.id).all()
         
         if not items:
             return {'success': False, 'error': 'No items to sync'}
         
         # Step 1: Sync all products (this updates QB prices)
-        product_results = self.sync_invoice_items_as_products(qb_connection, fluxops_quote)
+        product_results = self.sync_invoice_items_as_products(qb_connection, gozappify_quote)
         results['products_synced'] = product_results.get('synced', 0)
         results['products_failed'] = product_results.get('failed', 0)
         results['errors'].extend(product_results.get('errors', []))
@@ -1191,13 +1191,13 @@ Rules:
             results['qb_estimate_id'] = estimate_result['Estimate']['Id']
             results['qb_estimate_number'] = estimate_result['Estimate'].get('DocNumber')
             
-            # Update the FluxOps quote with QB reference
-            fluxops_quote.qb_estimate_id = estimate_result['Estimate']['Id']
-            fluxops_quote.qb_estimate_synced_at = datetime.utcnow()
-            fluxops_quote.matched_customer_id = customer_id
+            # Update the GoZappify quote with QB reference
+            gozappify_quote.qb_estimate_id = estimate_result['Estimate']['Id']
+            gozappify_quote.qb_estimate_synced_at = datetime.utcnow()
+            gozappify_quote.matched_customer_id = customer_id
             db.session.commit()
             
-            current_app.logger.info(f"Created QB Estimate {results['qb_estimate_id']} for quote {fluxops_quote.id}")
+            current_app.logger.info(f"Created QB Estimate {results['qb_estimate_id']} for quote {gozappify_quote.id}")
         else:
             results['errors'].append(f"Estimate error: {estimate_result.get('error', 'Unknown')}")
             results['success'] = False

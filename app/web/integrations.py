@@ -437,7 +437,7 @@ def quickbooks_sync_to_customer(invoice_id):
 @bp.route('/quickbooks/create-estimate/<int:quote_id>', methods=['POST'])
 @login_required
 def quickbooks_create_estimate(quote_id):
-    """Create a QuickBooks Estimate from a FluxOps quote"""
+    """Create a QuickBooks Estimate from a GoZappify quote"""
     from app.models.invoice import Invoice
     from app.models.quickbooks import QuickBooksConnection
     from app.integrations.quickbooks_service import QuickBooksService
