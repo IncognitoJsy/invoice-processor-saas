@@ -40,7 +40,11 @@ class XeroService:
     
     def get_auth_url(self, state: str) -> str:
         """Generate Xero OAuth authorization URL"""
+        from urllib.parse import urlencode
+        
         redirect_uri = url_for('integrations.xero_callback', _external=True)
+        
+        logger.info(f"Xero redirect_uri: {redirect_uri}")
         
         params = {
             'response_type': 'code',
@@ -50,8 +54,10 @@ class XeroService:
             'state': state
         }
         
-        query_string = '&'.join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
-        return f"{self.AUTH_URL}?{query_string}"
+        auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
+        logger.info(f"Xero auth URL: {auth_url}")
+        
+        return auth_url
     
     def exchange_code_for_tokens(self, auth_code: str) -> Optional[Dict]:
         """Exchange authorization code for access and refresh tokens"""
