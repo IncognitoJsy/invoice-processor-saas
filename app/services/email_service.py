@@ -4,6 +4,9 @@ import resend
 from flask import current_app, url_for, render_template_string
 from datetime import datetime
 
+# Logo URL - hosted on the app
+LOGO_URL = "https://gozappify.com/static/images/gozappify-logo-email.png"
+
 # Email templates
 TEMPLATES = {
     'verify_email': {
@@ -18,7 +21,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Verify your email</h2>
@@ -54,7 +57,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Reset your password</h2>
@@ -90,7 +93,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Password changed</h2>
@@ -99,7 +102,7 @@ TEMPLATES = {
                 Your GoZappify password was successfully changed on {{changed_at}}.
             </p>
             <p style="margin: 0; line-height: 1.6; color: #fbbf24;">
-                ⚠️ If you didn't make this change, please contact us immediately.
+                ⚠️ If you didn't make this change, please contact us immediately at support@gozappify.com
             </p>
         </div>
     </div>
@@ -120,7 +123,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Welcome to {{plan}}! 🎉</h2>
@@ -156,7 +159,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Your trial ends tomorrow ⏰</h2>
@@ -165,11 +168,9 @@ TEMPLATES = {
                 Your 7-day free trial of GoZappify ends tomorrow. To keep using all features, upgrade to a paid plan.
             </p>
             <div style="background: #374151; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-                    <div>
-                        <p style="margin: 0; color: white; font-weight: 600;">Basic - £29/month</p>
-                        <p style="margin: 5px 0 0; color: #9ca3af; font-size: 14px;">100 invoices/month</p>
-                    </div>
+                <div style="margin-bottom: 15px;">
+                    <p style="margin: 0; color: white; font-weight: 600;">Basic - £39/month</p>
+                    <p style="margin: 5px 0 0; color: #9ca3af; font-size: 14px;">100 invoices/month</p>
                 </div>
                 <div>
                     <p style="margin: 0; color: white; font-weight: 600;">Pro - £79/month</p>
@@ -180,7 +181,7 @@ TEMPLATES = {
                 Upgrade Now
             </a>
             <p style="margin: 30px 0 0; font-size: 14px; color: #9ca3af;">
-                Questions? Just reply to this email - we're here to help!
+                Questions? Email us at support@gozappify.com - we're here to help!
             </p>
         </div>
     </div>
@@ -201,7 +202,7 @@ TEMPLATES = {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
         <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #6b7280 0%, #374151 100%);">
-            <h1 style="color: white; margin: 0; font-size: 28px;">⚡ GoZappify</h1>
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
         </div>
         <div style="padding: 40px; color: #e5e7eb;">
             <h2 style="color: white; margin: 0 0 20px;">Your trial has ended</h2>
@@ -212,6 +213,9 @@ TEMPLATES = {
             <a href="{{billing_url}}" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: 600;">
                 Reactivate Account
             </a>
+            <p style="margin: 30px 0 0; font-size: 14px; color: #9ca3af;">
+                Questions? Email us at support@gozappify.com
+            </p>
         </div>
     </div>
 </body>
@@ -226,7 +230,7 @@ class EmailService:
     
     def __init__(self):
         self.api_key = os.getenv('RESEND_API_KEY')
-        self.from_email = os.getenv('MAIL_FROM', 'GoZappify <onboarding@resend.dev>')
+        self.from_email = os.getenv('MAIL_FROM', 'GoZappify <noreply@gozappify.com>')
         
         if self.api_key:
             resend.api_key = self.api_key
