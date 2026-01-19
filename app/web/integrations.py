@@ -566,3 +566,373 @@ def quickbooks_create_estimate(quote_id):
             'success': False,
             'error': '; '.join(result.get('errors', ['Unknown error']))
         }), 400
+
+# ==================== XERO ROUTES ====================
+
+@bp.route('/xero/connect')
+@login_required
+def xero_connect():
+    """Initiate Xero OAuth flow"""
+    from app.integrations.xero_service import XeroService
+    
+    xero = XeroService()
+    
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+    session['xero_oauth_state'] = state
+    
+    auth_url = xero.get_auth_url(state=state)
+    return redirect(auth_url)
+
+
+@bp.route('/xero/callback')
+@login_required
+def xero_callback():
+    """Handle Xero OAuth callback"""
+    from app.integrations.xero_service import XeroService
+    from app.models.xero import XeroConnection
+    from app.extensions import db
+    
+    # Verify state
+    state = request.args.get('state')
+    if state != session.get('xero_oauth_state'):
+        flash('Invalid OAuth state. Please try again.', 'error')
+        return redirect(url_for('settings.settings_page'))
+    
+    # Check for errors
+    error = request.args.get('error')
+    if error:
+        flash(f'Xero authorization failed: {error}', 'error')
+        return redirect(url_for('settings.settings_page'))
+    
+    # Get authorization code
+    auth_code = request.args.get('code')
+    
+    if not auth_code:
+        flash('Missing authorization code.', 'error')
+        return redirect(url_for('settings.settings_page'))
+    
+    # Exchange code for tokens
+    xero = XeroService()
+    tokens = xero.exchange_code_for_tokens(auth_code)
+    
+    if not tokens:
+        flash('Failed to exchange authorization code for tokens.', 'error')
+        return redirect(url_for('settings.settings_page'))
+    
+    # Get connected organisations (tenants)
+    connections = xero.get_connections(tokens['access_token'])
+    
+    if not connections:
+        flash('No Xero organisations found. Please ensure you have access to at least one organisation.', 'error')
+        return redirect(url_for('settings.settings_page'))
+    
+    # Use the first organisation (most users only have one)
+    tenant = connections[0]
+    
+    # Check if connection already exists for this user
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    
+    if connection:
+        # Update existing connection
+        connection.tenant_id = tenant['tenantId']
+        connection.tenant_name = tenant.get('tenantName', 'Unknown')
+        connection.access_token = tokens['access_token']
+        connection.refresh_token = tokens['refresh_token']
+        connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
+        connection.is_active = True
+    else:
+        # Create new connection
+        connection = XeroConnection(
+            user_id=current_user.id,
+            tenant_id=tenant['tenantId'],
+            tenant_name=tenant.get('tenantName', 'Unknown'),
+            access_token=tokens['access_token'],
+            refresh_token=tokens['refresh_token'],
+            token_expires_at=datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
+        )
+        db.session.add(connection)
+    
+    db.session.commit()
+    
+    flash(f'Successfully connected to Xero: {connection.tenant_name}', 'success')
+    
+    # If user is in setup wizard, return there
+    if not current_user.setup_completed:
+        return redirect(url_for('setup.step', step=2))
+    
+    return redirect(url_for('integrations.xero_settings'))
+
+
+@bp.route('/xero/disconnect', methods=['POST'])
+@login_required
+def xero_disconnect():
+    """Disconnect Xero"""
+    from app.models.xero import XeroConnection
+    from app.extensions import db
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    
+    if connection:
+        db.session.delete(connection)
+        db.session.commit()
+        flash('Xero disconnected successfully.', 'success')
+    
+    return redirect(url_for('integrations.xero_settings'))
+
+
+@bp.route('/xero/settings')
+@login_required
+def xero_settings():
+    """Xero settings page"""
+    from app.models.xero import XeroConnection
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    expense_accounts = []
+    sales_accounts = []
+    
+    if connection and connection.is_active:
+        from app.integrations.xero_service import XeroService
+        xero = XeroService(current_user)
+        
+        # Get accounts
+        expense_accounts = xero.get_expense_accounts(connection)
+        sales_accounts = xero.get_revenue_accounts(connection)
+    
+    return render_template('integrations/xero.html',
+                         connection=connection,
+                         expense_accounts=expense_accounts,
+                         sales_accounts=sales_accounts)
+
+
+@bp.route('/xero/settings/update', methods=['POST'])
+@login_required
+def xero_update_settings():
+    """Update Xero settings"""
+    from app.models.xero import XeroConnection
+    from app.extensions import db
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    
+    if not connection:
+        return jsonify({'success': False, 'error': 'Not connected to Xero'}), 400
+    
+    # Update settings
+    connection.default_expense_account_code = request.form.get('expense_account_code')
+    connection.default_expense_account_name = request.form.get('expense_account_name')
+    connection.default_sales_account_code = request.form.get('sales_account_code')
+    connection.default_sales_account_name = request.form.get('sales_account_name')
+    connection.auto_sync = request.form.get('auto_sync') == 'on'
+    
+    db.session.commit()
+    
+    flash('Xero settings updated.', 'success')
+    return redirect(url_for('integrations.xero_settings'))
+
+
+@bp.route('/xero/sync/<int:invoice_id>', methods=['POST'])
+@login_required
+def xero_sync_invoice(invoice_id):
+    """Sync a single invoice to Xero as a Bill"""
+    from app.models.invoice import Invoice
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    # Get invoice
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+    
+    # Get Xero connection
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'success': False, 'error': 'Xero not connected'}), 400
+    
+    if not connection.default_expense_account_code:
+        return jsonify({'success': False, 'error': 'Please set a default expense account in Xero settings'}), 400
+    
+    # Sync to Xero
+    xero = XeroService(current_user)
+    result = xero.sync_invoice_to_bill(connection, invoice)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'message': f'Invoice synced to Xero as Bill #{result.get("bill_number", result.get("bill_id"))}'
+        })
+    else:
+        return jsonify({'success': False, 'error': '; '.join(result.get('errors', ['Unknown error']))}), 400
+
+
+@bp.route('/xero/sync-products/<int:invoice_id>', methods=['POST'])
+@login_required
+def xero_sync_products(invoice_id):
+    """Sync invoice line items as Items in Xero"""
+    from app.models.invoice import Invoice
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    # Get invoice
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+    
+    # Get Xero connection
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'success': False, 'error': 'Xero not connected'}), 400
+    
+    if not connection.default_expense_account_code or not connection.default_sales_account_code:
+        return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
+    
+    # Sync products
+    xero = XeroService(current_user)
+    result = xero.sync_products_to_items(connection, invoice)
+    
+    return jsonify({
+        'success': True,
+        'message': f'Synced {result["synced"]} items, {result["failed"]} failed',
+        'synced': result['synced'],
+        'failed': result['failed'],
+        'errors': result['errors']
+    })
+
+
+@bp.route('/api/xero/status')
+@login_required
+def xero_status():
+    """Get Xero connection status"""
+    from app.models.xero import XeroConnection
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    
+    if connection and connection.is_active:
+        return jsonify({
+            'connected': True,
+            'tenant_name': connection.tenant_name,
+            'tenant_id': connection.tenant_id,
+            'auto_sync': connection.auto_sync,
+            'last_sync_at': connection.last_sync_at.isoformat() if connection.last_sync_at else None
+        })
+    
+    return jsonify({'connected': False})
+
+
+@bp.route('/api/xero/customers')
+@login_required
+def xero_customers():
+    """Get all Xero customers"""
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'error': 'Xero not connected'}), 400
+    
+    xero = XeroService(current_user)
+    customers = xero.get_customers(connection)
+    
+    return jsonify({
+        'customers': [
+            {
+                'ContactID': c.get('ContactID'),
+                'Name': c.get('Name'),
+                'FirstName': c.get('FirstName'),
+                'LastName': c.get('LastName'),
+                'EmailAddress': c.get('EmailAddress')
+            }
+            for c in customers
+        ]
+    })
+
+
+@bp.route('/xero/sync-to-customer/<int:invoice_id>', methods=['POST'])
+@login_required
+def xero_sync_to_customer(invoice_id):
+    """Sync invoice to customer - creates items AND customer invoice in Xero"""
+    from app.models.invoice import Invoice
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    data = request.get_json() or {}
+    customer_id = data.get('customer_id')
+    
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Customer ID required'}), 400
+    
+    # Get invoice
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+    
+    # Get Xero connection
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'success': False, 'error': 'Xero not connected'}), 400
+    
+    if not connection.default_sales_account_code or not connection.default_expense_account_code:
+        return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
+    
+    # Perform full sync
+    xero = XeroService(current_user)
+    result = xero.sync_to_customer_invoice(connection, invoice, customer_id)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'products_synced': result.get('products_synced', 0),
+            'products_failed': result.get('products_failed', 0),
+            'xero_invoice_id': result.get('xero_invoice_id'),
+            'xero_invoice_number': result.get('xero_invoice_number')
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': '; '.join(result.get('errors', ['Unknown error']))
+        }), 400
+
+
+@bp.route('/xero/create-quote/<int:quote_id>', methods=['POST'])
+@login_required
+def xero_create_quote(quote_id):
+    """Create a Xero Quote from a GoZappify quote"""
+    from app.models.invoice import Invoice
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    data = request.get_json() or {}
+    customer_id = data.get('customer_id')
+    
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Customer ID required'}), 400
+    
+    # Get quote
+    quote = Invoice.query.filter_by(id=quote_id, user_id=current_user.id, document_type='quote').first()
+    if not quote:
+        return jsonify({'success': False, 'error': 'Quote not found'}), 404
+    
+    # Get Xero connection
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'success': False, 'error': 'Xero not connected'}), 400
+    
+    if not connection.default_sales_account_code or not connection.default_expense_account_code:
+        return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
+    
+    # Create quote in Xero
+    xero = XeroService(current_user)
+    result = xero.sync_quote_to_xero(connection, quote, customer_id)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'products_synced': result.get('products_synced', 0),
+            'products_failed': result.get('products_failed', 0),
+            'xero_quote_id': result.get('xero_quote_id'),
+            'xero_quote_number': result.get('xero_quote_number')
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': '; '.join(result.get('errors', ['Unknown error']))
+        }), 400
