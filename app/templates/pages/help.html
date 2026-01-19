@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help Centre - GoZappify</title>
+    <meta name="description" content="Get help with GoZappify - FAQ, guides, and support for electrical contractor invoice processing.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {"50":"#eff6ff","100":"#dbeafe","200":"#bfdbfe","300":"#93c5fd","400":"#60a5fa","500":"#3b82f6","600":"#2563eb","700":"#1d4ed8","800":"#1e40af","900":"#1e3a8a","950":"#172554"}
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-white/95 backdrop-blur-sm z-50 border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <a href="/" class="flex items-center space-x-3">
+                        <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="navIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#4DD4AC"/>
+                                    <stop offset="50%" style="stop-color:#5BC88F"/>
+                                    <stop offset="100%" style="stop-color:#3B82C4"/>
+                                </linearGradient>
+                                <linearGradient id="navBottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#3B82C4"/>
+                                    <stop offset="100%" style="stop-color:#2563A8"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#navIconGradient)"/>
+                            <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#navBottomGradient)"/>
+                            <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="white"/>
+                            <path d="M38 42 L48 52 L68 28" stroke="#5BC88F" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="text-2xl font-bold text-gray-900">GoZappify</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/auth/login" class="text-gray-600 hover:text-primary-600 font-medium transition">Log In</a>
+                    <a href="/auth/register" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold transition shadow-lg shadow-primary-600/25">
+                        Start Free Trial
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <section class="pt-32 pb-12 bg-white border-b border-gray-200">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">Help Centre</h1>
+            <p class="text-xl text-gray-600">Find answers to common questions about GoZappify</p>
+        </div>
+    </section>
+
+    <!-- FAQ Content -->
+    <section class="py-16">
+        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- Getting Started -->
+            <div class="mb-12">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <span class="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </span>
+                    Getting Started
+                </h2>
+                
+                <div class="space-y-4">
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">How do I get started with GoZappify?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <ol class="list-decimal list-inside space-y-2">
+                                <li>Sign up for a free 7-day trial - no credit card required</li>
+                                <li>Connect your QuickBooks account during setup</li>
+                                <li>Configure your markup percentages in Settings</li>
+                                <li>Upload your first invoice and watch the magic happen!</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">Which suppliers do you support?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p class="mb-3">We currently support invoices from major UK electrical suppliers including:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>YESSS Electrical</li>
+                                <li>CEF (City Electrical Factors)</li>
+                                <li>Wholesale Electrics</li>
+                            </ul>
+                            <p class="mt-3">We're constantly adding support for more suppliers. Contact us if you need a specific supplier added.</p>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">What file formats can I upload?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>GoZappify accepts PDF invoices up to 16MB in size. This includes consolidated invoice PDFs that contain multiple invoices - our AI will automatically split and process each one separately.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Billing & Subscriptions -->
+            <div class="mb-12">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <span class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                        </svg>
+                    </span>
+                    Billing & Subscriptions
+                </h2>
+                
+                <div class="space-y-4">
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">What counts as an invoice?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>Each individual invoice extracted counts toward your monthly limit. If you upload a consolidated PDF containing 5 invoices, that counts as 5 invoices against your allowance.</p>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">What happens if I hit my monthly limit?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>On the Basic plan, you have two options:</p>
+                            <ul class="list-disc list-inside space-y-1 mt-2">
+                                <li>Purchase additional invoices at £0.50 each using the Top Up feature</li>
+                                <li>Upgrade to Pro for unlimited invoices</li>
+                            </ul>
+                            <p class="mt-2">Your allowance resets at the start of each billing period.</p>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">Do purchased top-up invoices expire?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>No! Any extra invoices you purchase never expire and will carry over between billing periods. They're only used after your monthly allowance is exhausted.</p>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">Can I cancel my subscription anytime?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>Yes! You can cancel your subscription at any time from the Billing page. You'll keep access until the end of your current billing period. There are no cancellation fees or long-term commitments.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- QuickBooks Integration -->
+            <div class="mb-12">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <span class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                    </span>
+                    QuickBooks Integration
+                </h2>
+                
+                <div class="space-y-4">
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">How do I connect QuickBooks?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>During setup (or from Settings), click "Connect to QuickBooks" and sign in with your QuickBooks credentials. You'll be asked to authorize GoZappify to access your account. Once connected, you can sync invoices with one click.</p>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">What gets created in QuickBooks when I sync?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>When you sync an invoice to QuickBooks, GoZappify can create:</p>
+                            <ul class="list-disc list-inside space-y-1 mt-2">
+                                <li><strong>Bills</strong> - The supplier invoice as a payable</li>
+                                <li><strong>Products/Services</strong> - Line items with your markup applied</li>
+                                <li><strong>Customer Invoices</strong> - Ready to send to your customers</li>
+                                <li><strong>Estimates</strong> - For quotes you want to send</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">Do you support Xero or Sage?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>Xero integration is coming soon! QuickBooks is currently fully supported. If you'd like to be notified when Xero is available, please contact us at <a href="mailto:support@gozappify.com" class="text-primary-600 hover:underline">support@gozappify.com</a>.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Account & Security -->
+            <div class="mb-12">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                    <span class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </span>
+                    Account & Security
+                </h2>
+                
+                <div class="space-y-4">
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">Is my data secure?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>Yes. We take security seriously:</p>
+                            <ul class="list-disc list-inside space-y-1 mt-2">
+                                <li>All data is encrypted in transit (HTTPS) and at rest</li>
+                                <li>We use secure OAuth connections to QuickBooks</li>
+                                <li>Passwords are hashed and never stored in plain text</li>
+                                <li>We don't share your data with third parties</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div x-data="{ open: false }" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <button @click="open = !open" class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition">
+                            <span class="font-semibold text-gray-900">How do I reset my password?</span>
+                            <svg :class="{ 'rotate-180': open }" class="w-5 h-5 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="px-6 pb-4 text-gray-600">
+                            <p>Click "Forgot Password" on the login page and enter your email address. We'll send you a link to reset your password. The link expires after 1 hour for security.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contact Support -->
+            <div class="bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl p-8 text-center text-white">
+                <h2 class="text-2xl font-bold mb-4">Still have questions?</h2>
+                <p class="text-primary-100 mb-6">Our support team is here to help you get the most out of GoZappify.</p>
+                <a href="mailto:support@gozappify.com" class="inline-flex items-center px-6 py-3 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 transition">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    Contact Support
+                </a>
+            </div>
+            
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="flex items-center space-x-3 mb-4 md:mb-0">
+                    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="footerIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#4DD4AC"/>
+                                <stop offset="50%" style="stop-color:#5BC88F"/>
+                                <stop offset="100%" style="stop-color:#3B82C4"/>
+                            </linearGradient>
+                            <linearGradient id="footerBottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3B82C4"/>
+                                <stop offset="100%" style="stop-color:#2563A8"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#footerIconGradient)"/>
+                        <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#footerBottomGradient)"/>
+                        <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="#111827"/>
+                        <path d="M38 42 L48 52 L68 28" stroke="#5BC88F" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="text-xl font-bold text-white">GoZappify</span>
+                </div>
+                <div class="flex space-x-6 text-gray-400">
+                    <a href="/" class="hover:text-white transition">Home</a>
+                    <a href="/privacy" class="hover:text-white transition">Privacy</a>
+                    <a href="/terms" class="hover:text-white transition">Terms</a>
+                </div>
+            </div>
+            <div class="mt-8 pt-8 border-t border-gray-800 text-center">
+                <p class="text-gray-400">&copy; 2026 GoZappify. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -67,6 +67,7 @@ def register_blueprints(app):
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
+    from app.web import pages
     
     # Auth (must be first!)
     app.register_blueprint(auth.bp)
@@ -82,6 +83,7 @@ def register_blueprints(app):
     app.register_blueprint(settings.bp)
     app.register_blueprint(upload.bp)
     app.register_blueprint(user_api.bp)
+    app.register_blueprint(pages.bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)
