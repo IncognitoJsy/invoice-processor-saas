@@ -8,27 +8,8 @@
     
         <!-- Header -->
         <div class="text-center">
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Billing</h1>
-            <p class="mt-2 text-gray-600 dark:text-gray-400">Manage your subscription and invoices</p>
-        </div>
-        
-        <!-- Tab Navigation -->
-        <div class="border-b border-gray-200 dark:border-gray-700">
-            <nav class="flex space-x-8 justify-center" aria-label="Tabs">
-                <a href="{{ url_for('billing.index') }}" 
-                   class="border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 py-4 px-1 text-sm font-medium">
-                    Plans & Subscription
-                </a>
-                <a href="{{ url_for('billing.topup') }}" 
-                   class="border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 py-4 px-1 text-sm font-medium">
-                    <span class="flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                        Buy More Invoices
-                    </span>
-                </a>
-            </nav>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Buy More Invoices</h1>
+            <p class="mt-2 text-gray-600 dark:text-gray-400">Top up your invoice processing credits</p>
         </div>
         
         {% if not can_purchase %}

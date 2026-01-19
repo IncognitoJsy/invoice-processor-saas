@@ -12,27 +12,6 @@
             <p class="mt-2 text-gray-600 dark:text-gray-400">Manage your subscription and invoices</p>
         </div>
         
-        <!-- Tab Navigation (only show Top Up tab for Basic users) -->
-        {% if current_user.subscription_plan == 'basic' %}
-        <div class="mb-8 border-b border-gray-200 dark:border-gray-700">
-            <nav class="flex space-x-8 justify-center" aria-label="Tabs">
-                <a href="{{ url_for('billing.index') }}" 
-                   class="border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 py-4 px-1 text-sm font-medium">
-                    Plans & Subscription
-                </a>
-                <a href="{{ url_for('billing.topup') }}" 
-                   class="border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 py-4 px-1 text-sm font-medium">
-                    <span class="flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                        Buy More Invoices
-                    </span>
-                </a>
-            </nav>
-        </div>
-        {% endif %}
-        
         <!-- Current Plan Badge (if subscribed) -->
         {% if current_user.subscription_plan in ['basic', 'pro'] %}
         <div class="mb-8 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">

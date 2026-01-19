@@ -163,9 +163,17 @@
                     <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Queue
                     </a>
-                    <a href="/billing" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'billing' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                    <a href="/billing" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'billing' in request.endpoint and 'topup' not in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Billing
                     </a>
+                    {% if current_user.is_authenticated and current_user.subscription_plan == 'basic' %}
+                    <a href="/billing/topup" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'topup' in request.endpoint %}bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300{% else %}text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20{% endif %} transition flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Top Up
+                    </a>
+                    {% endif %}
                 </div>
                 
                 <!-- Right side actions -->
