@@ -1,6 +1,6 @@
 """QuickBooks Integration Routes"""
 from flask import Blueprint, redirect, request, jsonify, render_template, flash, url_for, session, current_app
-from flask_login import login_required, current_user
+from flask_login import login_required, current_user, login_user
 from datetime import datetime, timedelta
 import secrets
 
@@ -18,24 +18,53 @@ def quickbooks_connect():
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
     session['qb_oauth_state'] = state
+    # Store user ID in session so we can retrieve it in callback
+    session['qb_oauth_user_id'] = current_user.id
+    session.modified = True  # Ensure session is saved
     
     auth_url = qb.get_auth_url(state=state)
     return redirect(auth_url)
 
 
 @bp.route('/quickbooks/callback')
-@login_required
 def quickbooks_callback():
-    """Handle QuickBooks OAuth callback"""
+    """Handle QuickBooks OAuth callback
+    
+    NOTE: This route does NOT have @login_required because the session
+    may not persist through the OAuth redirect. Instead, we retrieve
+    the user ID from the session state we stored before the redirect.
+    """
     from app.integrations.quickbooks_service import QuickBooksService
     from app.models.quickbooks import QuickBooksConnection
+    from app.models.user import User
     from app.extensions import db
     
     # Verify state
     state = request.args.get('state')
-    if state != session.get('qb_oauth_state'):
+    stored_state = session.get('qb_oauth_state')
+    user_id = session.get('qb_oauth_user_id')
+    
+    if state != stored_state:
+        current_app.logger.warning(f"OAuth state mismatch: got {state}, expected {stored_state}")
         flash('Invalid OAuth state. Please try again.', 'error')
-        return redirect(url_for('settings.settings_page'))
+        return redirect(url_for('auth.login'))
+    
+    # Get the user from the stored ID
+    if not user_id:
+        current_app.logger.warning("No user ID found in session for QuickBooks callback")
+        flash('Session expired. Please log in and try again.', 'error')
+        return redirect(url_for('auth.login'))
+    
+    user = User.query.get(user_id)
+    if not user:
+        current_app.logger.warning(f"User {user_id} not found for QuickBooks callback")
+        flash('User not found. Please log in and try again.', 'error')
+        return redirect(url_for('auth.login'))
+    
+    # Log the user back in if they're not already
+    if not current_user.is_authenticated:
+        login_user(user)
+        current_app.logger.info(f"Re-authenticated user {user_id} after QuickBooks OAuth")
     
     # Check for errors
     error = request.args.get('error')
@@ -60,7 +89,7 @@ def quickbooks_callback():
         return redirect(url_for('settings.settings_page'))
     
     # Check if connection already exists for this user
-    connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+    connection = QuickBooksConnection.query.filter_by(user_id=user.id).first()
     
     if connection:
         # Update existing connection
@@ -72,7 +101,7 @@ def quickbooks_callback():
     else:
         # Create new connection
         connection = QuickBooksConnection(
-            user_id=current_user.id,
+            user_id=user.id,
             realm_id=realm_id,
             access_token=tokens['access_token'],
             refresh_token=tokens['refresh_token'],
@@ -83,16 +112,21 @@ def quickbooks_callback():
     db.session.commit()
     
     # Get company info
-    qb_service = QuickBooksService(current_user)
+    qb_service = QuickBooksService(user)
     company_info = qb_service.get_company_info(connection)
     
     if company_info.get('CompanyInfo'):
         connection.company_name = company_info['CompanyInfo'].get('CompanyName')
         db.session.commit()
     
+    # Clear OAuth session data
+    session.pop('qb_oauth_state', None)
+    session.pop('qb_oauth_user_id', None)
+    
     flash(f'Successfully connected to QuickBooks: {connection.company_name or realm_id}', 'success')
+    
     # If user is in setup wizard, return there
-    if not current_user.setup_completed:
+    if not user.setup_completed:
         return redirect(url_for('setup.step', step=2))
     return redirect(url_for('integrations.quickbooks_settings'))
 
@@ -221,39 +255,26 @@ def quickbooks_sync_products(invoice_id):
     if not connection or not connection.is_active:
         return jsonify({'success': False, 'error': 'QuickBooks not connected'}), 400
     
-    if not connection.default_income_account_id:
-        return jsonify({'success': False, 'error': 'Please set a default income account in QuickBooks settings'}), 400
+    if not connection.default_expense_account_id or not connection.default_income_account_id:
+        return jsonify({'success': False, 'error': 'Please configure income and expense accounts in QuickBooks settings'}), 400
     
-    if not connection.default_expense_account_id:
-        return jsonify({'success': False, 'error': 'Please set a default expense account in QuickBooks settings'}), 400
-    
-    # Sync products to QuickBooks
+    # Sync products
     qb = QuickBooksService(current_user)
-    result = qb.sync_invoice_items_as_products(connection, invoice)
+    result = qb.sync_products_to_quickbooks(connection, invoice)
     
-    if result.get('success'):
-        return jsonify({
-            'success': True,
-            'message': f"Synced {result['synced']} products to QuickBooks ({result['skipped']} skipped)",
-            'details': result
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': f"Synced {result['synced']} products, {result['failed']} failed",
-            'details': result
-        }), 400
+    return jsonify(result)
 
 
-@bp.route('/quickbooks/sync/bulk', methods=['POST'])
+@bp.route('/quickbooks/bulk-sync', methods=['POST'])
 @login_required
-def quickbooks_sync_bulk():
+def quickbooks_bulk_sync():
     """Sync multiple invoices to QuickBooks"""
     from app.models.invoice import Invoice
     from app.models.quickbooks import QuickBooksConnection
     from app.integrations.quickbooks_service import QuickBooksService
     
-    invoice_ids = request.json.get('invoice_ids', [])
+    data = request.get_json() or {}
+    invoice_ids = data.get('invoice_ids', [])
     
     if not invoice_ids:
         return jsonify({'success': False, 'error': 'No invoices selected'}), 400
@@ -264,10 +285,9 @@ def quickbooks_sync_bulk():
         return jsonify({'success': False, 'error': 'QuickBooks not connected'}), 400
     
     if not connection.default_expense_account_id:
-        return jsonify({'success': False, 'error': 'Please set a default expense account in QuickBooks settings'}), 400
+        return jsonify({'success': False, 'error': 'Please set a default expense account'}), 400
     
     qb = QuickBooksService(current_user)
-    
     results = {'synced': 0, 'failed': 0, 'errors': []}
     
     for invoice_id in invoice_ids:
