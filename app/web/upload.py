@@ -38,6 +38,53 @@ def check_quota():
     })
 
 
+def check_supplier_account_fraud(supplier_name: str, account_number: str, user_id: int) -> dict:
+    """
+    Check if a supplier account number is already used by another user.
+    Only blocks trial users - paid users can use any account.
+    
+    Returns:
+        {
+            'allowed': True/False,
+            'reason': str or None,
+            'message': str or None (user-friendly message if blocked)
+        }
+    """
+    from app.models.supplier_account import SupplierAccount
+    from app.models.user import User
+    
+    user = User.query.get(user_id)
+    
+    # Only apply fraud check to trial users
+    if user.subscription_plan != 'trial':
+        return {'allowed': True, 'reason': 'paid_user'}
+    
+    # Check if account exists for another user
+    check_result = SupplierAccount.check_account(supplier_name, account_number, user_id)
+    
+    if not check_result['allowed']:
+        return {
+            'allowed': False,
+            'reason': 'account_exists',
+            'message': f'This supplier account ({account_number}) has been used with another GoZappify account. To continue processing invoices, please upgrade to a paid subscription.'
+        }
+    
+    return {'allowed': True, 'reason': check_result.get('reason')}
+
+
+def register_supplier_account(supplier_name: str, account_number: str, user_id: int):
+    """Register a supplier account to a user after successful invoice processing"""
+    if not account_number:
+        return None
+    
+    try:
+        from app.models.supplier_account import SupplierAccount
+        return SupplierAccount.register_account(supplier_name, account_number, user_id)
+    except Exception as e:
+        current_app.logger.warning(f"Could not register supplier account: {e}")
+        return None
+
+
 @bp.route('/api/upload/single', methods=['POST'])
 @login_required
 def api_upload_single():
@@ -101,12 +148,39 @@ def api_upload_single():
             results = []
             errors = []
             
+            # Track supplier account for fraud check (same for all invoices in a PDF)
+            supplier_account_checked = False
+            
             for invoice_data in parsed_invoices:
                 if invoice_data.get('success'):
                     # Check quota again before saving each invoice
                     if not current_user.can_upload_invoice:
                         errors.append('Quota exceeded - some invoices not saved')
                         break
+                    
+                    # Fraud check - only on first invoice of the batch (account is same for all)
+                    supplier_name = invoice_data.get('supplier', 'Unknown')
+                    supplier_account_number = invoice_data.get('supplier_account_number')
+                    
+                    if not supplier_account_checked and supplier_account_number:
+                        fraud_check = check_supplier_account_fraud(
+                            supplier_name, 
+                            supplier_account_number, 
+                            current_user.id
+                        )
+                        supplier_account_checked = True
+                        
+                        if not fraud_check['allowed']:
+                            # Clean up temp file
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                            
+                            return jsonify({
+                                'error': fraud_check['message'],
+                                'fraud_detected': True,
+                                'supplier_account': supplier_account_number,
+                                'upgrade_required': True
+                            }), 403
                     
                     # Save to database
                     saved_invoice = save_invoice_to_db(
@@ -115,6 +189,10 @@ def api_upload_single():
                         current_user.id,
                         document_type
                     )
+                    
+                    # Register supplier account after successful save
+                    if supplier_account_number:
+                        register_supplier_account(supplier_name, supplier_account_number, current_user.id)
                     
                     # Use quota (deducts from bonus if needed)
                     current_user.use_invoice_quota(1)
@@ -127,7 +205,7 @@ def api_upload_single():
                     result = {
                         'id': saved_invoice.id,
                         'filename': filename,
-                        'supplier': invoice_data.get('supplier', 'Unknown'),
+                        'supplier': supplier_name,
                         'items_count': len(items),
                         'total': total,
                         'job_reference': invoice_data.get('job_reference'),
@@ -252,6 +330,9 @@ def api_upload():
                         user_markup_settings=user_markup_settings
                     )
                     
+                    # Track supplier account for fraud check
+                    supplier_account_checked = False
+                    
                     # Save each invoice to database
                     for invoice_data in parsed_invoices:
                         if invoice_data.get('success'):
@@ -260,6 +341,22 @@ def api_upload():
                                 errors.append(f"{filename}: Quota exceeded")
                                 break
                             
+                            # Fraud check - only on first invoice of the batch
+                            supplier_name = invoice_data.get('supplier', 'Unknown')
+                            supplier_account_number = invoice_data.get('supplier_account_number')
+                            
+                            if not supplier_account_checked and supplier_account_number:
+                                fraud_check = check_supplier_account_fraud(
+                                    supplier_name, 
+                                    supplier_account_number, 
+                                    current_user.id
+                                )
+                                supplier_account_checked = True
+                                
+                                if not fraud_check['allowed']:
+                                    errors.append(f"{filename}: {fraud_check['message']}")
+                                    break
+                            
                             # Save to database
                             saved_invoice = save_invoice_to_db(
                                 invoice_data, 
@@ -267,6 +364,10 @@ def api_upload():
                                 current_user.id,
                                 document_type
                             )
+                            
+                            # Register supplier account after successful save
+                            if supplier_account_number:
+                                register_supplier_account(supplier_name, supplier_account_number, current_user.id)
                             
                             # Use quota
                             current_user.use_invoice_quota(1)
@@ -279,7 +380,7 @@ def api_upload():
                             result = {
                                 'id': saved_invoice.id,
                                 'filename': filename,
-                                'supplier': invoice_data.get('supplier', 'Unknown'),
+                                'supplier': supplier_name,
                                 'items_count': len(items),
                                 'total': total,
                                 'job_reference': invoice_data.get('job_reference'),

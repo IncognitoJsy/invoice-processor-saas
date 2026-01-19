@@ -97,6 +97,7 @@ Extract all documents and return ONLY valid JSON with no markdown formatting, no
 
 {
     "detected_document_type": "invoice" or "quote" or "credit_note",
+    "supplier_account_number": "the customer's account number with this supplier - VERY IMPORTANT",
     "invoices": [
         {
             "document_type": "invoice" or "quote" or "credit_note",
@@ -118,45 +119,54 @@ Extract all documents and return ONLY valid JSON with no markdown formatting, no
     ]
 }
 
+SUPPLIER ACCOUNT NUMBER EXTRACTION - CRITICAL FOR FRAUD PREVENTION:
+1. **WHOLESALE ELECTRICS**: Look for "Account" field in the header area, usually a 4-digit number (e.g., "6729")
+2. **YESSS ELECTRICAL**: Look for "ACCOUNT NUMBER" field, format like "093/47669" 
+3. **CEF**: Look for "Account Code:" field, usually an 8-digit number (e.g., "86100012")
+4. **OTHER SUPPLIERS**: Look for any field labeled "Account", "Account No", "Account Number", "Customer Account", "A/C No" etc.
+5. This is the CUSTOMER'S account with the supplier, NOT an invoice number
+6. Extract it EXACTLY as shown, including any slashes or formatting
+
 DOCUMENT TYPE DETECTION - VERY IMPORTANT:
-1. **QUOTE/QUOTATION**: Look for "QUOTATION", "QUOTE", "ESTIMATE", "PROFORMA" prominently displayed at top
-2. **INVOICE**: Look for "INVOICE", "TAX INVOICE", "BILL" prominently displayed
-3. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts
-4. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
-5. Set each document's "document_type" accordingly
+7. **QUOTE/QUOTATION**: Look for "QUOTATION", "QUOTE", "ESTIMATE", "PROFORMA" prominently displayed at top
+8. **INVOICE**: Look for "INVOICE", "TAX INVOICE", "BILL" prominently displayed
+9. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts
+10. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
+11. Set each document's "document_type" accordingly
 
 INVOICE/QUOTE NUMBER EXTRACTION - VERY IMPORTANT:
-6. **CEF**: Number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
-7. **YESSS Invoices**: Number is under "INVOICE NUMBER", starts with "093" (e.g., 0931234567)
-8. **YESSS Quotes**: Number is under "DOCUMENT NUMBER", format like "093QO69883"
-9. **Wholesale Electrics**: Number is below "INVOICE NUMBER", starts with "IN" (e.g., IN123456)
-10. Extract the EXACT number - do not modify or abbreviate it
+12. **CEF**: Number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
+13. **YESSS Invoices**: Number is under "INVOICE NUMBER", starts with "093" (e.g., 0931234567)
+14. **YESSS Quotes**: Number is under "DOCUMENT NUMBER", format like "093QO69883"
+15. **Wholesale Electrics**: Number is below "INVOICE NUMBER", starts with "IN" (e.g., IN123456)
+16. Extract the EXACT number - do not modify or abbreviate it
 
 CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
-11. **DETECT MULTIPLE ORDERS**: Look for job reference changes
-12. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
-13. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
-14. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
+17. **DETECT MULTIPLE ORDERS**: Look for job reference changes
+18. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
+19. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
+20. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
+21. **ACCOUNT NUMBER IS SAME**: The supplier_account_number is the same for all invoices in a consolidated PDF
 
 CRITICAL PRICING RULES FOR WHOLESALE ELECTRICS:
-15. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
-16. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
-17. Extract total_amount as the BEFORE-discount amount from the Amount column
-18. Extract discount as just the number (e.g. "51" not "51%")
-19. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
+22. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
+23. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
+24. Extract total_amount as the BEFORE-discount amount from the Amount column
+25. Extract discount as just the number (e.g. "51" not "51%")
+26. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
 
 STANDARD RULES:
-20. Extract EVERY SINGLE item from the document - do not skip any
-21. Part numbers must be EXACT as shown on document
-22. Descriptions must be COMPLETE - include all text even if it spans multiple lines
-23. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
-24. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
-25. original_unit_price is the price BEFORE discount is applied
-26. total_amount is the line total shown in the Amount column
-27. If quantity is not explicitly shown, it's usually 1
-28. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
+27. Extract EVERY SINGLE item from the document - do not skip any
+28. Part numbers must be EXACT as shown on document
+29. Descriptions must be COMPLETE - include all text even if it spans multiple lines
+30. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
+31. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
+32. original_unit_price is the price BEFORE discount is applied
+33. total_amount is the line total shown in the Amount column
+34. If quantity is not explicitly shown, it's usually 1
+35. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
-Double-check your work - missing items, wrong document type, or wrong grouping costs real money!"""
+Double-check your work - missing items, wrong document type, wrong account number, or wrong grouping costs real money!"""
     
     def _parse_response(self, text: str, pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
         """Parse Claude's JSON response - handles both single and consolidated invoices"""
@@ -169,6 +179,11 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
             
             # Parse JSON
             data = json.loads(text)
+            
+            # Extract supplier account number (same for all invoices in the PDF)
+            supplier_account_number = data.get('supplier_account_number')
+            if supplier_account_number:
+                self.logger.info(f"Extracted supplier account number: {supplier_account_number}")
             
             # Check detected document type vs expected
             detected_type = data.get('detected_document_type', 'invoice').lower()
@@ -214,12 +229,12 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
             # Check if this is consolidated format (multiple invoices)
             if 'invoices' in data and isinstance(data['invoices'], list):
                 self.logger.info(f"Detected consolidated document with {len(data['invoices'])} entries")
-                return self._process_consolidated_invoices(data['invoices'], pdf_path, expected_document_type)
+                return self._process_consolidated_invoices(data['invoices'], pdf_path, expected_document_type, supplier_account_number)
             
             # Legacy single invoice format
             elif 'items' in data:
                 self.logger.info("Detected single document format")
-                return self._process_single_invoice(data, expected_document_type)
+                return self._process_single_invoice(data, expected_document_type, supplier_account_number)
             
             else:
                 return {'success': False, 'error': 'No items or invoices found in response'}
@@ -238,7 +253,7 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                 'error': f'Failed to process response: {str(e)}'
             }
     
-    def _process_consolidated_invoices(self, invoices: List[Dict], pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
+    def _process_consolidated_invoices(self, invoices: List[Dict], pdf_path: str, expected_document_type: str = 'invoice', supplier_account_number: str = None) -> Dict:
         """Process consolidated invoices - returns multiple invoice results, skips credit notes"""
         results = []
         skipped_credits = 0
@@ -271,6 +286,7 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
                     'job_reference': invoice_data.get('job_reference'),
                     'supplier': supplier,
                     'invoice_number': invoice_number,
+                    'supplier_account_number': supplier_account_number,  # Same for all in consolidated
                     'document_type': expected_document_type,
                     'method': 'claude_api',
                     'consolidated': True,
@@ -296,11 +312,12 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
             'consolidated': True,
             'invoices': results,
             'skipped_credits': skipped_credits,
+            'supplier_account_number': supplier_account_number,
             'method': 'claude_api',
             'document_type': expected_document_type
         }
     
-    def _process_single_invoice(self, data: Dict, expected_document_type: str = 'invoice') -> Dict:
+    def _process_single_invoice(self, data: Dict, expected_document_type: str = 'invoice', supplier_account_number: str = None) -> Dict:
         """Process single invoice format (legacy/fallback)"""
         # Check if this is a credit note
         doc_type = data.get('document_type', 'invoice').lower()
@@ -324,12 +341,17 @@ Double-check your work - missing items, wrong document type, or wrong grouping c
             supplier
         )
         
+        # Use supplier_account_number from data if not passed
+        if not supplier_account_number:
+            supplier_account_number = data.get('supplier_account_number')
+        
         return {
             'success': True,
             'items': items,
             'job_reference': data.get('job_reference'),
             'supplier': supplier,
             'invoice_number': invoice_number,
+            'supplier_account_number': supplier_account_number,
             'document_type': expected_document_type,
             'method': 'claude_api',
             'consolidated': False
