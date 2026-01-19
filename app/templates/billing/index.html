@@ -7,10 +7,31 @@
     <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <!-- Header -->
-        <div class="text-center mb-12">
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Choose Your Plan</h1>
-            <p class="mt-2 text-gray-600 dark:text-gray-400">Simple pricing to help you manage your invoices</p>
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Billing</h1>
+            <p class="mt-2 text-gray-600 dark:text-gray-400">Manage your subscription and invoices</p>
         </div>
+        
+        <!-- Tab Navigation (only show Top Up tab for Basic users) -->
+        {% if current_user.subscription_plan == 'basic' %}
+        <div class="mb-8 border-b border-gray-200 dark:border-gray-700">
+            <nav class="flex space-x-8 justify-center" aria-label="Tabs">
+                <a href="{{ url_for('billing.index') }}" 
+                   class="border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 py-4 px-1 text-sm font-medium">
+                    Plans & Subscription
+                </a>
+                <a href="{{ url_for('billing.topup') }}" 
+                   class="border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 py-4 px-1 text-sm font-medium">
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Buy More Invoices
+                    </span>
+                </a>
+            </nav>
+        </div>
+        {% endif %}
         
         <!-- Current Plan Badge (if subscribed) -->
         {% if current_user.subscription_plan in ['basic', 'pro'] %}
@@ -35,14 +56,6 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
-                    {% if current_user.subscription_plan == 'basic' %}
-                    <a href="{{ url_for('billing.topup') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                        Buy More Invoices
-                    </a>
-                    {% endif %}
                     <a href="{{ url_for('billing.manage') }}" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
                         Manage Subscription
                     </a>
@@ -71,6 +84,9 @@
             </div>
         </div>
         {% endif %}
+        
+        <!-- Section Title -->
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-8">Choose Your Plan</h2>
         
         <!-- Pricing Cards -->
         <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -127,12 +143,6 @@
                             <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span class="text-gray-700 dark:text-gray-300">Email support</span>
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
                             <span class="text-gray-700 dark:text-gray-300">Buy extra invoices at £0.50 each</span>
                         </li>
                     </ul>
@@ -142,10 +152,6 @@
                         <button disabled class="w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg font-semibold cursor-not-allowed">
                             Current Plan
                         </button>
-                        {% elif current_user.subscription_plan == 'pro' %}
-                        <a href="{{ url_for('billing.manage') }}" class="block w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-center hover:bg-gray-200 dark:hover:bg-gray-600 transition">
-                            Downgrade
-                        </a>
                         {% else %}
                         <a href="{{ url_for('billing.subscribe', plan='basic') }}" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-center transition">
                             Subscribe to Basic
