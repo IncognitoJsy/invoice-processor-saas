@@ -1,0 +1,72 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Purchase Complete - GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    
+    <!-- Success Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-green-500 to-emerald-600 p-8 text-center">
+            <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-white">Purchase Complete!</h1>
+            <p class="text-green-100 mt-2">Your invoice credits have been added</p>
+        </div>
+        
+        <!-- Details -->
+        <div class="p-8">
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-6 mb-6">
+                <div class="text-center">
+                    <p class="text-sm font-medium text-green-700 dark:text-green-300">You purchased</p>
+                    <p class="text-5xl font-bold text-green-600 dark:text-green-400 mt-2">{{ quantity }}</p>
+                    <p class="text-green-700 dark:text-green-300">invoice credits</p>
+                </div>
+            </div>
+            
+            <div class="space-y-4 mb-8">
+                <div class="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span class="text-gray-600 dark:text-gray-400">Total bonus invoices</span>
+                    <span class="font-bold text-gray-900 dark:text-white">{{ total_bonus }}</span>
+                </div>
+                <div class="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span class="text-gray-600 dark:text-gray-400">Total available</span>
+                    <span class="font-bold text-blue-600 dark:text-blue-400">{{ total_remaining }} invoices</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4">
+                <a href="{{ url_for('upload.upload_page') }}" 
+                   class="flex-1 py-3 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-xl text-center transition-all">
+                    <span class="flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <span>Upload Invoices</span>
+                    </span>
+                </a>
+                <a href="{{ url_for('billing.index') }}" 
+                   class="flex-1 py-3 px-6 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl text-center transition-all">
+                    Back to Billing
+                </a>
+            </div>
+        </div>
+        
+        <!-- Footer Note -->
+        <div class="px-8 py-4 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>Your credits never expire and will carry over between billing periods.</span>
+            </div>
+        </div>
+    </div>
+    
+</div>
+{% endblock %}
