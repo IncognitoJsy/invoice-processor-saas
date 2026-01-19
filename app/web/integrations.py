@@ -3,8 +3,67 @@ from flask import Blueprint, redirect, request, jsonify, render_template, flash,
 from flask_login import login_required, current_user, login_user
 from datetime import datetime, timedelta
 import secrets
+import hashlib
+import hmac
+import os
 
 bp = Blueprint('integrations', __name__, url_prefix='/integrations')
+
+
+def generate_oauth_state(user_id):
+    """Generate a secure OAuth state that includes the user ID.
+    
+    Format: {user_id}:{random_token}:{signature}
+    The signature prevents tampering with the user_id.
+    """
+    secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key')
+    random_token = secrets.token_urlsafe(16)
+    
+    # Create message to sign
+    message = f"{user_id}:{random_token}"
+    
+    # Create HMAC signature
+    signature = hmac.new(
+        secret_key.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]  # Use first 16 chars for brevity
+    
+    return f"{user_id}:{random_token}:{signature}"
+
+
+def verify_oauth_state(state):
+    """Verify the OAuth state and extract the user ID.
+    
+    Returns the user_id if valid, None if invalid.
+    """
+    if not state:
+        return None
+    
+    try:
+        parts = state.split(':')
+        if len(parts) != 3:
+            return None
+        
+        user_id, random_token, provided_signature = parts
+        user_id = int(user_id)
+        
+        # Recreate the expected signature
+        secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key')
+        message = f"{user_id}:{random_token}"
+        expected_signature = hmac.new(
+            secret_key.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()[:16]
+        
+        # Constant-time comparison to prevent timing attacks
+        if hmac.compare_digest(provided_signature, expected_signature):
+            return user_id
+        
+        return None
+    except (ValueError, TypeError):
+        return None
 
 
 @bp.route('/quickbooks/connect')
@@ -15,12 +74,15 @@ def quickbooks_connect():
     
     qb = QuickBooksService()
     
-    # Generate state for CSRF protection
-    state = secrets.token_urlsafe(32)
+    # Generate state that includes user ID (doesn't rely on session persistence)
+    state = generate_oauth_state(current_user.id)
+    
+    # Also store in session as backup (may or may not persist)
     session['qb_oauth_state'] = state
-    # Store user ID in session so we can retrieve it in callback
     session['qb_oauth_user_id'] = current_user.id
-    session.modified = True  # Ensure session is saved
+    session.modified = True
+    
+    current_app.logger.info(f"Starting QuickBooks OAuth for user {current_user.id}")
     
     auth_url = qb.get_auth_url(state=state)
     return redirect(auth_url)
@@ -30,46 +92,46 @@ def quickbooks_connect():
 def quickbooks_callback():
     """Handle QuickBooks OAuth callback
     
-    NOTE: This route does NOT have @login_required because the session
-    may not persist through the OAuth redirect. Instead, we retrieve
-    the user ID from the session state we stored before the redirect.
+    This route does NOT have @login_required because the session
+    may not persist through the OAuth redirect. Instead, we extract
+    the user ID from the signed state parameter.
     """
     from app.integrations.quickbooks_service import QuickBooksService
     from app.models.quickbooks import QuickBooksConnection
     from app.models.user import User
     from app.extensions import db
     
-    # Verify state
+    # Get state from callback
     state = request.args.get('state')
-    stored_state = session.get('qb_oauth_state')
-    user_id = session.get('qb_oauth_user_id')
     
-    if state != stored_state:
-        current_app.logger.warning(f"OAuth state mismatch: got {state}, expected {stored_state}")
+    current_app.logger.info(f"QuickBooks callback received with state: {state[:20] if state else 'None'}...")
+    
+    # Verify state and extract user ID
+    user_id = verify_oauth_state(state)
+    
+    if not user_id:
+        current_app.logger.warning(f"Invalid OAuth state received: {state}")
         flash('Invalid OAuth state. Please try again.', 'error')
         return redirect(url_for('auth.login'))
     
-    # Get the user from the stored ID
-    if not user_id:
-        current_app.logger.warning("No user ID found in session for QuickBooks callback")
-        flash('Session expired. Please log in and try again.', 'error')
-        return redirect(url_for('auth.login'))
-    
+    # Get the user
     user = User.query.get(user_id)
     if not user:
         current_app.logger.warning(f"User {user_id} not found for QuickBooks callback")
         flash('User not found. Please log in and try again.', 'error')
         return redirect(url_for('auth.login'))
     
-    # Log the user back in if they're not already
-    if not current_user.is_authenticated:
-        login_user(user)
-        current_app.logger.info(f"Re-authenticated user {user_id} after QuickBooks OAuth")
+    current_app.logger.info(f"QuickBooks callback verified for user {user_id}")
     
-    # Check for errors
+    # Log the user in
+    login_user(user)
+    
+    # Check for errors from QuickBooks
     error = request.args.get('error')
     if error:
         flash(f'QuickBooks authorization failed: {error}', 'error')
+        if not user.setup_completed:
+            return redirect(url_for('setup.step', step=2))
         return redirect(url_for('settings.settings_page'))
     
     # Get authorization code
@@ -78,6 +140,8 @@ def quickbooks_callback():
     
     if not auth_code or not realm_id:
         flash('Missing authorization code or realm ID.', 'error')
+        if not user.setup_completed:
+            return redirect(url_for('setup.step', step=2))
         return redirect(url_for('settings.settings_page'))
     
     # Exchange code for tokens
@@ -86,6 +150,8 @@ def quickbooks_callback():
     
     if not tokens:
         flash('Failed to exchange authorization code for tokens.', 'error')
+        if not user.setup_completed:
+            return redirect(url_for('setup.step', step=2))
         return redirect(url_for('settings.settings_page'))
     
     # Check if connection already exists for this user
@@ -119,9 +185,11 @@ def quickbooks_callback():
         connection.company_name = company_info['CompanyInfo'].get('CompanyName')
         db.session.commit()
     
-    # Clear OAuth session data
+    # Clear OAuth session data (if it exists)
     session.pop('qb_oauth_state', None)
     session.pop('qb_oauth_user_id', None)
+    
+    current_app.logger.info(f"Successfully connected QuickBooks for user {user.id}: {connection.company_name}")
     
     flash(f'Successfully connected to QuickBooks: {connection.company_name or realm_id}', 'success')
     
