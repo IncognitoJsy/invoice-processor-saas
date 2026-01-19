@@ -25,15 +25,28 @@
                         <p class="text-sm text-green-600 dark:text-green-400">
                             {% if current_user.subscription_plan == 'basic' %}
                                 {{ current_user.invoices_remaining }}/100 invoices remaining this month
+                                {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
+                                    (includes {{ current_user.bonus_invoices }} bonus)
+                                {% endif %}
                             {% else %}
                                 Unlimited invoices
                             {% endif %}
                         </p>
                     </div>
                 </div>
-                <a href="{{ url_for('billing.manage') }}" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
-                    Manage Subscription
-                </a>
+                <div class="flex items-center gap-3">
+                    {% if current_user.subscription_plan == 'basic' %}
+                    <a href="{{ url_for('billing.topup') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Buy More Invoices
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('billing.manage') }}" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
+                        Manage Subscription
+                    </a>
+                </div>
             </div>
         </div>
         {% endif %}
@@ -115,6 +128,12 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
                             <span class="text-gray-700 dark:text-gray-300">Email support</span>
+                        </li>
+                        <li class="flex items-center">
+                            <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span class="text-gray-700 dark:text-gray-300">Buy extra invoices at £0.50 each</span>
                         </li>
                     </ul>
                     
@@ -235,7 +254,12 @@
                 
                 <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                     <h3 class="font-semibold text-gray-900 dark:text-white">What happens if I hit my limit?</h3>
-                    <p class="mt-2 text-gray-600 dark:text-gray-400">You can still view your existing invoices, but you won't be able to upload new ones until the next month or you upgrade to Pro.</p>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">On Basic, you can purchase additional invoices at £0.50 each, or upgrade to Pro for unlimited invoices.</p>
+                </div>
+                
+                <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">Do purchased top-up invoices expire?</h3>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">No! Any extra invoices you purchase never expire and will carry over between billing periods.</p>
                 </div>
                 
                 <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -248,7 +272,7 @@
         <!-- Contact -->
         <div class="mt-12 text-center">
             <p class="text-gray-600 dark:text-gray-400">
-                Have questions? <a href="mailto:support@gozappify.io" class="text-blue-600 hover:underline dark:text-blue-400">Contact us</a>
+                Have questions? <a href="mailto:support@gozappify.com" class="text-blue-600 hover:underline dark:text-blue-400">Contact us</a>
             </p>
         </div>
         
