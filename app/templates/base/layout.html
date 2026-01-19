@@ -121,13 +121,30 @@
                 <!-- Logo -->
                 <div class="flex items-center">
                     <a href="/" class="flex items-center space-x-3">
-                        <div class="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-400 rounded-lg flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                            </svg>
-                        </div>
-                        <span class="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 bg-clip-text text-transparent">
-                            GoZappify
+                        <!-- Inline SVG Logo Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-10 h-10">
+                            <defs>
+                                <linearGradient id="headerIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#4DD4AC" />
+                                    <stop offset="50%" style="stop-color:#5BC88F" />
+                                    <stop offset="100%" style="stop-color:#3B82C4" />
+                                </linearGradient>
+                                <linearGradient id="headerBottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#3B82C4" />
+                                    <stop offset="100%" style="stop-color:#2563A8" />
+                                </linearGradient>
+                            </defs>
+                            <g transform="translate(5, 2.5)">
+                                <path d="M45 5 L80 25 L80 50 L45 70 L10 50 L10 25 Z" fill="url(#headerIconGradient)"/>
+                                <path d="M10 50 L45 70 L80 50 L80 75 L45 95 L10 75 Z" fill="url(#headerBottomGradient)"/>
+                                <!-- Inner cutout adapts to light/dark -->
+                                <path d="M45 20 L65 32 L65 48 L45 60 L25 48 L25 32 Z" class="fill-white dark:fill-gray-900"/>
+                                <path d="M33 42 L43 52 L63 28" stroke="#5BC88F" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                            </g>
+                        </svg>
+                        <!-- GoZappify Text -->
+                        <span class="text-xl font-black italic">
+                            <span class="text-gray-900 dark:text-white">Go</span><span class="text-green-500">Z</span><span class="text-gray-900 dark:text-white">appify</span>
                         </span>
                     </a>
                 </div>

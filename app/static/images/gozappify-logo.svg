@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 120" width="500" height="120">
+  <defs>
+    <!-- Gradient for the hexagon icon - teal to green to blue -->
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4DD4AC;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#5BC88F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82C4;stop-opacity:1" />
+    </linearGradient>
+    <!-- Darker blue for bottom of hexagon -->
+    <linearGradient id="bottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82C4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563A8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background (optional - can be removed for transparent) -->
+  <rect width="500" height="120" fill="#1e2a3a"/>
+  
+  <!-- Hexagonal Logo Icon -->
+  <g transform="translate(20, 10)">
+    <!-- Outer hexagon shape - top part (teal/green gradient) -->
+    <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#iconGradient)"/>
+    
+    <!-- Bottom hexagon extension (blue) -->
+    <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#bottomGradient)"/>
+    
+    <!-- Inner cutout (dark background color) -->
+    <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="#1e2a3a"/>
+    
+    <!-- Checkmark -->
+    <path d="M38 42 L48 52 L68 28" stroke="#5BC88F" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- GoZappify Text -->
+  <g transform="translate(125, 75)">
+    <!-- "Go" in white, italic -->
+    <text font-family="Arial Black, Arial, sans-serif" font-size="48" font-weight="900" font-style="italic" fill="#ffffff">Go</text>
+    
+    <!-- "Z" in green, italic -->
+    <text x="62" font-family="Arial Black, Arial, sans-serif" font-size="48" font-weight="900" font-style="italic" fill="#7AC943">Z</text>
+    
+    <!-- "appify" in white, italic -->
+    <text x="92" font-family="Arial Black, Arial, sans-serif" font-size="48" font-weight="900" font-style="italic" fill="#ffffff">appify</text>
+  </g>
+</svg>
