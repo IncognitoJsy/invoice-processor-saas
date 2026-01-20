@@ -34,6 +34,7 @@ class XeroService:
         self.client_id = os.environ.get('XERO_CLIENT_ID')
         self.client_secret = os.environ.get('XERO_CLIENT_SECRET')
         self.user = user
+        self._tax_type_cache = None  # Cache tax type per request
         
         if not self.client_id or not self.client_secret:
             logger.warning("Xero credentials not configured")
@@ -234,6 +235,117 @@ class XeroService:
         accounts = self.get_accounts(connection)
         return [a for a in accounts if a.get('Type') == 'REVENUE' and a.get('Status') == 'ACTIVE']
     
+    # ==================== Tax Types ====================
+    
+    def get_tax_rates(self, connection) -> List[Dict]:
+        """Get all tax rates from Xero"""
+        result = self._make_request('GET', '/TaxRates', connection)
+        return result.get('TaxRates', []) if result else []
+    
+    def get_default_sales_tax_type(self, connection) -> str:
+        """
+        Get the appropriate sales tax type for the organisation.
+        Returns 'NONE' for tax-exempt orgs, otherwise the default sales tax.
+        """
+        if self._tax_type_cache:
+            return self._tax_type_cache
+        
+        try:
+            tax_rates = self.get_tax_rates(connection)
+            
+            if not tax_rates:
+                logger.info("No tax rates found, using NONE")
+                self._tax_type_cache = 'NONE'
+                return 'NONE'
+            
+            # Log available tax rates for debugging
+            logger.info(f"Available tax rates: {[tr.get('Name') for tr in tax_rates]}")
+            
+            # Look for common tax types in order of preference
+            # For Jersey/Guernsey - look for GST or Zero rated
+            for tax_rate in tax_rates:
+                name = tax_rate.get('Name', '').upper()
+                tax_type = tax_rate.get('TaxType', '')
+                status = tax_rate.get('Status', '')
+                
+                if status != 'ACTIVE':
+                    continue
+                
+                # Jersey GST (5%)
+                if 'GST' in name and 'EXEMPT' not in name:
+                    logger.info(f"Found GST tax type: {tax_type}")
+                    self._tax_type_cache = tax_type
+                    return tax_type
+            
+            # Look for Zero Rated (for exempt businesses)
+            for tax_rate in tax_rates:
+                name = tax_rate.get('Name', '').upper()
+                tax_type = tax_rate.get('TaxType', '')
+                status = tax_rate.get('Status', '')
+                
+                if status != 'ACTIVE':
+                    continue
+                    
+                if 'ZERO' in name or 'NO TAX' in name or 'EXEMPT' in name or 'NONE' in name:
+                    logger.info(f"Found zero/exempt tax type: {tax_type}")
+                    self._tax_type_cache = tax_type
+                    return tax_type
+            
+            # UK VAT - OUTPUT2 is standard rated sales
+            for tax_rate in tax_rates:
+                tax_type = tax_rate.get('TaxType', '')
+                if tax_type == 'OUTPUT2':
+                    logger.info("Using UK VAT OUTPUT2")
+                    self._tax_type_cache = 'OUTPUT2'
+                    return 'OUTPUT2'
+            
+            # Fallback - use first active tax rate or NONE
+            for tax_rate in tax_rates:
+                if tax_rate.get('Status') == 'ACTIVE':
+                    tax_type = tax_rate.get('TaxType', 'NONE')
+                    logger.info(f"Using fallback tax type: {tax_type}")
+                    self._tax_type_cache = tax_type
+                    return tax_type
+            
+            self._tax_type_cache = 'NONE'
+            return 'NONE'
+            
+        except Exception as e:
+            logger.error(f"Error getting tax type: {str(e)}")
+            return 'NONE'
+    
+    def get_default_purchase_tax_type(self, connection) -> str:
+        """Get the appropriate purchase tax type for bills"""
+        try:
+            tax_rates = self.get_tax_rates(connection)
+            
+            if not tax_rates:
+                return 'NONE'
+            
+            # Look for input/purchase tax types
+            for tax_rate in tax_rates:
+                name = tax_rate.get('Name', '').upper()
+                tax_type = tax_rate.get('TaxType', '')
+                status = tax_rate.get('Status', '')
+                
+                if status != 'ACTIVE':
+                    continue
+                
+                # Jersey GST on purchases
+                if 'GST' in name and ('INPUT' in name or 'PURCHASE' in name):
+                    return tax_type
+                    
+                # UK VAT INPUT2
+                if tax_type == 'INPUT2':
+                    return 'INPUT2'
+            
+            # Fallback to NONE
+            return 'NONE'
+            
+        except Exception as e:
+            logger.error(f"Error getting purchase tax type: {str(e)}")
+            return 'NONE'
+    
     # ==================== Contacts (Suppliers & Customers) ====================
     
     def get_contacts(self, connection) -> List[Dict]:
@@ -333,6 +445,9 @@ class XeroService:
                     reference: str = None) -> Optional[Dict]:
         """Create a bill (accounts payable invoice)"""
         
+        # Get the appropriate tax type for this organisation
+        purchase_tax_type = self.get_default_purchase_tax_type(connection)
+        
         # Format line items for Xero
         xero_line_items = []
         for item in line_items:
@@ -341,7 +456,7 @@ class XeroService:
                 'Quantity': item.get('quantity', 1),
                 'UnitAmount': item.get('unit_price', 0),
                 'AccountCode': item.get('account_code'),
-                'TaxType': 'INPUT2'  # Standard UK VAT on purchases
+                'TaxType': purchase_tax_type
             }
             if item.get('item_code'):
                 line['ItemCode'] = item['item_code']
@@ -380,6 +495,9 @@ class XeroService:
         if not due_date:
             due_date = (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')
         
+        # Get the appropriate tax type for this organisation
+        sales_tax_type = self.get_default_sales_tax_type(connection)
+        
         # Format line items for Xero
         xero_line_items = []
         for item in line_items:
@@ -388,7 +506,7 @@ class XeroService:
                 'Quantity': item.get('quantity', 1),
                 'UnitAmount': item.get('unit_price', 0),
                 'AccountCode': item.get('account_code'),
-                'TaxType': 'OUTPUT2'  # Standard UK VAT on sales
+                'TaxType': sales_tax_type
             }
             if item.get('item_code'):
                 line['ItemCode'] = item['item_code']
@@ -426,6 +544,9 @@ class XeroService:
         if not expiry_date:
             expiry_date = (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')
         
+        # Get the appropriate tax type for this organisation
+        sales_tax_type = self.get_default_sales_tax_type(connection)
+        
         # Format line items for Xero
         xero_line_items = []
         for item in line_items:
@@ -434,7 +555,7 @@ class XeroService:
                 'Quantity': item.get('quantity', 1),
                 'UnitAmount': item.get('unit_price', 0),
                 'AccountCode': item.get('account_code'),
-                'TaxType': 'OUTPUT2'
+                'TaxType': sales_tax_type
             }
             if item.get('item_code'):
                 line['ItemCode'] = item['item_code']
