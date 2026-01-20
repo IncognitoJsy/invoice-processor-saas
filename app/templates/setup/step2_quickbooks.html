@@ -1,6 +1,6 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Step 2: Connect QuickBooks - GoZappify{% endblock %}
+{% block title %}Step 2: Connect Accounting Software - GoZappify{% endblock %}
 
 {% block content %}
 <div class="min-h-[80vh] flex items-center justify-center py-12">
@@ -24,56 +24,109 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                     </svg>
                 </div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Connect QuickBooks</h1>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Connect Your Accounting Software</h1>
                 <p class="text-gray-600 dark:text-gray-300">Sync invoices directly to your accounting software</p>
             </div>
             
-            <!-- QuickBooks Status -->
-            {% if qb_connected %}
+            <!-- Connected Status (if either is connected) -->
+            {% if qb_connected or xero_connected %}
             <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl p-6 mb-6 text-center">
                 <div class="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
                     <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
                 </div>
+                {% if qb_connected %}
                 <h3 class="font-semibold text-green-800 dark:text-green-200 mb-1">QuickBooks Connected!</h3>
-                <p class="text-sm text-green-600 dark:text-green-400">Your account is linked and ready to sync</p>
+                <p class="text-sm text-green-600 dark:text-green-400">Connected to {{ qb_company_name or 'your QuickBooks account' }}</p>
+                {% elif xero_connected %}
+                <h3 class="font-semibold text-green-800 dark:text-green-200 mb-1">Xero Connected!</h3>
+                <p class="text-sm text-green-600 dark:text-green-400">Connected to {{ xero_tenant_name or 'your Xero account' }}</p>
+                {% endif %}
             </div>
-            {% else %}
-            <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-6">
+            {% endif %}
+            
+            <!-- QuickBooks Option -->
+            {% if not xero_connected %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-4 {% if qb_connected %}ring-2 ring-green-500{% endif %}">
                 <div class="flex items-start space-x-4">
                     <div class="flex-shrink-0">
-                        <img src="https://quickbooks.intuit.com/etc/designs/quickbooks/clientlib/images/favicon.ico" alt="QuickBooks" class="w-10 h-10">
+                        <div class="w-12 h-12 bg-[#2CA01C] rounded-lg flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                            </svg>
+                        </div>
                     </div>
                     <div class="flex-1">
                         <h3 class="font-semibold text-gray-900 dark:text-white mb-1">QuickBooks Online</h3>
-                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Connect to automatically create products and customer invoices</p>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Connect to automatically create products, bills and customer invoices</p>
+                        {% if qb_connected %}
+                        <span class="inline-flex items-center px-3 py-1.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Connected
+                        </span>
+                        {% else %}
                         <a href="{{ url_for('integrations.quickbooks_connect') }}" 
-                           class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition">
+                           class="inline-flex items-center px-5 py-2.5 bg-[#2CA01C] hover:bg-[#248518] text-white rounded-lg font-semibold transition">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                             </svg>
                             Connect QuickBooks
                         </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
             {% endif %}
             
-            <!-- Coming Soon -->
-            <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-6 opacity-60">
+            <!-- Xero Option -->
+            {% if not qb_connected %}
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-6 {% if xero_connected %}ring-2 ring-green-500{% endif %}">
                 <div class="flex items-start space-x-4">
                     <div class="flex-shrink-0">
-                        <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-                            <span class="text-blue-600 dark:text-blue-400 font-bold text-sm">X</span>
+                        <div class="w-12 h-12 bg-[#13B5EA] rounded-lg flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1.243 17.544l-4.251-4.251 1.414-1.414 2.837 2.837 5.656-5.656 1.414 1.414-7.07 7.07z"/>
+                            </svg>
                         </div>
                     </div>
                     <div class="flex-1">
-                        <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Xero <span class="text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full ml-2">Coming Soon</span></h3>
-                        <p class="text-sm text-gray-600 dark:text-gray-300">Xero integration will be available soon</p>
+                        <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Xero</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Connect to automatically create products, bills and customer invoices</p>
+                        {% if xero_connected %}
+                        <span class="inline-flex items-center px-3 py-1.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Connected
+                        </span>
+                        {% else %}
+                        <a href="{{ url_for('integrations.xero_connect') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-[#13B5EA] hover:bg-[#0ea5d3] text-white rounded-lg font-semibold transition">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                            </svg>
+                            Connect Xero
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
+            {% endif %}
+            
+            <!-- Info box if one is already connected -->
+            {% if qb_connected or xero_connected %}
+            <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-6">
+                <p class="text-sm text-blue-700 dark:text-blue-300">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    You can change your accounting software later in Settings.
+                </p>
+            </div>
+            {% endif %}
             
             <!-- Buttons -->
             <div class="flex justify-between pt-4">
@@ -81,7 +134,7 @@
                     ← Back
                 </a>
                 <a href="{{ url_for('setup.step', step=3) }}" class="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition shadow-lg shadow-primary-600/25">
-                    {% if qb_connected %}Continue{% else %}Skip for Now{% endif %} →
+                    {% if qb_connected or xero_connected %}Continue{% else %}Skip for Now{% endif %} →
                 </a>
             </div>
         </div>

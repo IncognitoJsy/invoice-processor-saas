@@ -83,13 +83,15 @@
                     </p>
                 </div>
                 
-                <!-- QuickBooks Accounts Section (only if connected) -->
+                <!-- QuickBooks Accounts Section (only if QuickBooks connected) -->
                 {% if qb_connected %}
                 <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6">
                     <h3 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                        <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
+                        <div class="w-5 h-5 bg-[#2CA01C] rounded mr-2 flex items-center justify-center">
+                            <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
                         QuickBooks Accounts
                     </h3>
                     
@@ -127,10 +129,61 @@
                         </div>
                     </div>
                 </div>
-                {% else %}
+                {% endif %}
+                
+                <!-- Xero Accounts Section (only if Xero connected) -->
+                {% if xero_connected %}
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6">
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                        <div class="w-5 h-5 bg-[#13B5EA] rounded mr-2 flex items-center justify-center">
+                            <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        Xero Accounts
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label for="xero_sales_account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Default Sales Account (for Revenue)
+                            </label>
+                            <select id="xero_sales_account" name="xero_sales_account" 
+                                    class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-600 dark:text-white transition">
+                                <option value="">Select a sales account...</option>
+                                {% for account in xero_sales_accounts %}
+                                <option value="{{ account.Code }}" {% if account.Code == current_xero_sales_account %}selected{% endif %}>
+                                    {{ account.Code }} - {{ account.Name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Where sales revenue goes when syncing products</p>
+                        </div>
+                        
+                        <div>
+                            <label for="xero_expense_account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Default Expense Account (for Purchases)
+                            </label>
+                            <select id="xero_expense_account" name="xero_expense_account" 
+                                    class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-600 dark:text-white transition">
+                                <option value="">Select an expense account...</option>
+                                {% for account in xero_expense_accounts %}
+                                <option value="{{ account.Code }}" {% if account.Code == current_xero_expense_account %}selected{% endif %}>
+                                    {{ account.Code }} - {{ account.Name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Where material costs are tracked</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Not connected info -->
+                {% if not qb_connected and not xero_connected %}
                 <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
                     <p class="text-sm text-blue-700 dark:text-blue-300">
-                        💡 Connect QuickBooks in the previous step to configure your accounting settings.
+                        💡 Connect QuickBooks or Xero in the previous step to configure your accounting settings.
                     </p>
                 </div>
                 {% endif %}

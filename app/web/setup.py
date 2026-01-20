@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.quickbooks import QuickBooksConnection
+from app.models.xero import XeroConnection
 import logging
 import requests
 
@@ -49,6 +50,25 @@ def get_qb_accounts(user_id):
         return [], []
 
 
+def get_xero_accounts(user_id):
+    """Fetch Xero accounts for dropdowns"""
+    from app.integrations.xero_service import XeroService
+    
+    xero_conn = XeroConnection.query.filter_by(user_id=user_id).first()
+    if not xero_conn or not xero_conn.is_active:
+        return [], []
+    
+    try:
+        xero = XeroService()
+        expense_accounts = xero.get_expense_accounts(xero_conn)
+        sales_accounts = xero.get_revenue_accounts(xero_conn)
+        return sales_accounts, expense_accounts
+        
+    except Exception as e:
+        logger.error(f"Error fetching Xero accounts: {e}")
+        return [], []
+
+
 @bp.route('/')
 @login_required
 def index():
@@ -70,15 +90,32 @@ def step(step):
         return render_template('setup/step1_business.html')
     
     elif step == 2:
+        # Check QuickBooks connection
         qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
-        qb_connected = qb and qb.access_token
-        return render_template('setup/step2_quickbooks.html', qb_connected=qb_connected)
+        qb_connected = qb and qb.access_token and qb.is_active
+        qb_company_name = qb.company_name if qb else None
+        
+        # Check Xero connection
+        xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
+        xero_connected = xero and xero.is_active
+        xero_tenant_name = xero.tenant_name if xero else None
+        
+        return render_template('setup/step2_quickbooks.html', 
+                             qb_connected=qb_connected,
+                             qb_company_name=qb_company_name,
+                             xero_connected=xero_connected,
+                             xero_tenant_name=xero_tenant_name)
     
     elif step == 3:
-        # Check if QuickBooks is connected
+        # Check QuickBooks connection
         qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
-        qb_connected = qb and qb.access_token
+        qb_connected = qb and qb.access_token and qb.is_active
         
+        # Check Xero connection
+        xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
+        xero_connected = xero and xero.is_active
+        
+        # QuickBooks accounts
         income_accounts = []
         expense_accounts = []
         current_income = None
@@ -89,15 +126,40 @@ def step(step):
             current_income = qb.default_income_account_id
             current_expense = qb.default_expense_account_id
         
+        # Xero accounts
+        xero_sales_accounts = []
+        xero_expense_accounts = []
+        current_xero_sales = None
+        current_xero_expense = None
+        
+        if xero_connected:
+            xero_sales_accounts, xero_expense_accounts = get_xero_accounts(current_user.id)
+            current_xero_sales = xero.default_sales_account_code
+            current_xero_expense = xero.default_expense_account_code
+        
         return render_template('setup/step3_settings.html',
                              qb_connected=qb_connected,
                              income_accounts=income_accounts,
                              expense_accounts=expense_accounts,
                              current_income_account=current_income,
-                             current_expense_account=current_expense)
+                             current_expense_account=current_expense,
+                             xero_connected=xero_connected,
+                             xero_sales_accounts=xero_sales_accounts,
+                             xero_expense_accounts=xero_expense_accounts,
+                             current_xero_sales_account=current_xero_sales,
+                             current_xero_expense_account=current_xero_expense)
     
     elif step == 4:
-        return render_template('setup/step4_complete.html')
+        # Check connections for summary
+        qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+        qb_connected = qb and qb.access_token and qb.is_active
+        
+        xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
+        xero_connected = xero and xero.is_active
+        
+        return render_template('setup/step4_complete.html',
+                             qb_connected=qb_connected,
+                             xero_connected=xero_connected)
     
     else:
         return redirect(url_for('setup.index'))
@@ -124,15 +186,15 @@ def save_business():
 @bp.route('/save-settings', methods=['POST'])
 @login_required
 def save_settings():
-    """Save markup and QB accounts from step 3"""
+    """Save markup and accounting accounts from step 3"""
     try:
         # Save markup
         markup = request.form.get('default_markup', '50')
         current_user.default_markup = float(markup)
         
-        # Save QB accounts if connected
+        # Save QuickBooks accounts if connected
         qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
-        if qb:
+        if qb and qb.is_active:
             income_account = request.form.get('income_account')
             expense_account = request.form.get('expense_account')
             
@@ -140,6 +202,17 @@ def save_settings():
                 qb.default_income_account_id = income_account
             if expense_account:
                 qb.default_expense_account_id = expense_account
+        
+        # Save Xero accounts if connected
+        xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
+        if xero and xero.is_active:
+            xero_sales_account = request.form.get('xero_sales_account')
+            xero_expense_account = request.form.get('xero_expense_account')
+            
+            if xero_sales_account:
+                xero.default_sales_account_code = xero_sales_account
+            if xero_expense_account:
+                xero.default_expense_account_code = xero_expense_account
         
         db.session.commit()
         
