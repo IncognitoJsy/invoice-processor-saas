@@ -182,8 +182,20 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             
             # Extract supplier account number (same for all invoices in the PDF)
             supplier_account_number = data.get('supplier_account_number')
+            
+            # Get supplier name for validation (from first invoice if consolidated)
+            supplier_for_validation = None
+            if 'invoices' in data and isinstance(data['invoices'], list) and len(data['invoices']) > 0:
+                supplier_for_validation = data['invoices'][0].get('supplier', '')
+            elif 'supplier' in data:
+                supplier_for_validation = data.get('supplier', '')
+            
+            # Validate the account number - reject if it looks like an invoice number
+            if supplier_account_number and supplier_for_validation:
+                supplier_account_number = self._validate_account_number(supplier_account_number, supplier_for_validation)
+            
             if supplier_account_number:
-                self.logger.info(f"Extracted supplier account number: {supplier_account_number}")
+                self.logger.info(f"Validated supplier account number: {supplier_account_number}")
             
             # Check detected document type vs expected
             detected_type = data.get('detected_document_type', 'invoice').lower()
@@ -397,6 +409,62 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 invoice_number = invoice_number.upper()
         
         return invoice_number
+    
+    def _validate_account_number(self, account_number: str, supplier: str) -> str:
+        """Validate and clean supplier account number - reject invoice numbers mistakenly captured
+        
+        This is CRITICAL for fraud prevention. We need to ensure we're capturing the actual
+        customer account number, not an invoice number.
+        
+        Account number patterns:
+        - YESSS: Format like "093/47669" (contains slash, NO "IN")
+        - CEF: 8-digit number like "86100012" (NO "JER")  
+        - Wholesale Electrics: 4-digit number like "6729" (NO "IN" prefix)
+        """
+        if not account_number:
+            return None
+        
+        account_number = str(account_number).strip()
+        supplier_lower = supplier.lower() if supplier else ''
+        
+        # YESSS validation
+        if 'yesss' in supplier_lower:
+            # YESSS account numbers contain "/" (e.g., "093/47669")
+            # Invoice numbers contain "IN" (e.g., "093IN1101998")
+            if 'IN' in account_number.upper():
+                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - looks like an invoice number (contains 'IN')")
+                return None
+            # Valid YESSS account should have format like 093/xxxxx
+            if '/' not in account_number:
+                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - missing expected '/' format")
+                return None
+                
+        # CEF validation  
+        elif 'cef' in supplier_lower:
+            # CEF account numbers are numeric (e.g., "86100012")
+            # Invoice numbers start with "JER"
+            if 'JER' in account_number.upper():
+                self.logger.warning(f"Rejecting CEF account number '{account_number}' - looks like an invoice number (contains 'JER')")
+                return None
+            # Should be mostly numeric
+            if not account_number.replace('-', '').replace(' ', '').isdigit():
+                self.logger.warning(f"Rejecting CEF account number '{account_number}' - should be numeric")
+                return None
+                
+        # Wholesale Electrics validation
+        elif 'wholesale' in supplier_lower:
+            # Wholesale account numbers are short numeric (e.g., "6729")
+            # Invoice numbers start with "IN"
+            if account_number.upper().startswith('IN'):
+                self.logger.warning(f"Rejecting Wholesale account number '{account_number}' - looks like an invoice number (starts with 'IN')")
+                return None
+            # Should be numeric and relatively short
+            if not account_number.replace('-', '').replace(' ', '').isdigit():
+                self.logger.warning(f"Rejecting Wholesale account number '{account_number}' - should be numeric")
+                return None
+        
+        self.logger.info(f"Validated account number: '{account_number}' for supplier: {supplier}")
+        return account_number
     
     def _get_admin_tiered_markup(self, discount_val: float) -> float:
         """Get markup for admin user based on discount tiers"""
