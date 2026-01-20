@@ -129,7 +129,8 @@ class InvoiceItem(db.Model):
     
     # Quantities and pricing
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1)
-    cost_per_item = db.Column(db.Numeric(10, 4), nullable=False)  # Your cost
+    cost_per_item = db.Column(db.Numeric(10, 4), nullable=False)  # Your cost (after discount)
+    original_unit_price = db.Column(db.Numeric(10, 4))  # Price before discount
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)   # qty * cost
     
     # Selling price (with markup)
