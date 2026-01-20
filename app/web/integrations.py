@@ -482,6 +482,7 @@ def quickbooks_sync_to_customer(invoice_id):
     from app.models.invoice import Invoice
     from app.models.quickbooks import QuickBooksConnection
     from app.integrations.quickbooks_service import QuickBooksService
+    from app.extensions import db
     
     data = request.get_json() or {}
     customer_id = data.get('customer_id')
@@ -507,6 +508,10 @@ def quickbooks_sync_to_customer(invoice_id):
     result = qb.sync_invoice_to_customer(connection, invoice, customer_id)
     
     if result.get('success'):
+        # Update invoice sync status
+        invoice.qb_synced_at = datetime.utcnow()
+        db.session.commit()
+        
         return jsonify({
             'success': True,
             'products_synced': result.get('products_synced', 0),
@@ -873,6 +878,7 @@ def xero_sync_to_customer(invoice_id):
     from app.models.invoice import Invoice
     from app.models.xero import XeroConnection
     from app.integrations.xero_service import XeroService
+    from app.extensions import db
     
     data = request.get_json() or {}
     customer_id = data.get('customer_id')
@@ -898,10 +904,16 @@ def xero_sync_to_customer(invoice_id):
     result = xero.sync_to_customer_invoice(connection, invoice, customer_id)
     
     if result.get('success'):
+        # Update invoice sync status
+        invoice.xero_invoice_id = result.get('xero_invoice_id')
+        invoice.xero_synced_at = datetime.utcnow()
+        db.session.commit()
+        
         return jsonify({
             'success': True,
             'products_synced': result.get('products_synced', 0),
             'products_failed': result.get('products_failed', 0),
+            'invoice_action': result.get('invoice_action'),
             'xero_invoice_id': result.get('xero_invoice_id'),
             'xero_invoice_number': result.get('xero_invoice_number')
         })

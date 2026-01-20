@@ -60,6 +60,14 @@ class Invoice(db.Model):
     qb_estimate_id = db.Column(db.String(50))
     qb_estimate_synced_at = db.Column(db.DateTime)
     
+    # Xero sync - for invoices
+    xero_invoice_id = db.Column(db.String(50))
+    xero_synced_at = db.Column(db.DateTime)
+    
+    # Xero sync - for quotes
+    xero_quote_id = db.Column(db.String(50))
+    xero_quote_synced_at = db.Column(db.DateTime)
+    
     # Customer matching (for quotes that become estimates)
     matched_customer_id = db.Column(db.String(50))  # QB Customer ID
     matched_customer_name = db.Column(db.String(255))  # QB Customer Name
@@ -78,10 +86,6 @@ class Invoice(db.Model):
     @property
     def is_quote(self):
         return self.document_type == 'quote'
-    
-    @property
-    def is_invoice(self):
-        return self.document_type == 'invoice' or self.document_type is None
     
     def to_dict(self):
         """Convert to dictionary for JSON responses"""
@@ -103,6 +107,10 @@ class Invoice(db.Model):
             'qb_synced_at': self.qb_synced_at.isoformat() if self.qb_synced_at else None,
             'qb_estimate_id': self.qb_estimate_id,
             'qb_estimate_synced_at': self.qb_estimate_synced_at.isoformat() if self.qb_estimate_synced_at else None,
+            'xero_invoice_id': self.xero_invoice_id,
+            'xero_synced_at': self.xero_synced_at.isoformat() if self.xero_synced_at else None,
+            'xero_quote_id': self.xero_quote_id,
+            'xero_quote_synced_at': self.xero_quote_synced_at.isoformat() if self.xero_quote_synced_at else None,
             'matched_customer_id': self.matched_customer_id,
             'matched_customer_name': self.matched_customer_name
         }
@@ -116,28 +124,20 @@ class InvoiceItem(db.Model):
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False, index=True)
     
     # Product details
-    part_number = db.Column(db.String(255), index=True)
+    part_number = db.Column(db.String(100), index=True)
     description = db.Column(db.Text)
     
-    # Quantities
-    quantity = db.Column(db.Numeric(10, 2), nullable=False)
+    # Quantities and pricing
+    quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1)
+    cost_per_item = db.Column(db.Numeric(10, 4), nullable=False)  # Your cost
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)   # qty * cost
     
-    # Pricing (from supplier)
-    original_unit_price = db.Column(db.Numeric(10, 2))  # Before discount
-    discount_percent = db.Column(db.Numeric(5, 2))  # Discount %
-    cost_per_item = db.Column(db.Numeric(10, 2), nullable=False)  # After discount
-    total_amount = db.Column(db.Numeric(10, 2), nullable=False)  # Line total (cost)
-    
-    # Your pricing (to customer)
-    selling_price = db.Column(db.Numeric(10, 2))  # Per unit
-    markup_percent = db.Column(db.Numeric(5, 2))  # Your markup %
-    profit_per_item = db.Column(db.Numeric(10, 2))  # Profit per unit
-    
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Selling price (with markup)
+    selling_price = db.Column(db.Numeric(10, 4))  # Price per item you charge
+    profit_per_item = db.Column(db.Numeric(10, 4))  # selling - cost per item
     
     def __repr__(self):
-        return f'<InvoiceItem {self.part_number} x{self.quantity}>'
+        return f'<InvoiceItem {self.part_number}: {self.quantity} x £{self.cost_per_item}>'
     
     def to_dict(self):
         """Convert to dictionary for JSON responses"""
