@@ -13,17 +13,31 @@ class YesssInvoiceParser(BaseInvoiceParser):
     def __init__(self):
         super().__init__()
         self.supplier_name = 'YESSS'
+        # Default markup settings - will be overridden by parse()
+        self.user_markup_settings = {'is_admin': False, 'default_markup': 50.0}
 
     
     def calculate_markup(self, discount_percent):
-        if discount_percent == 0:
-            return 0.20
-        elif 1 <= discount_percent <= 30:
-            return 0.40
-        elif 30 < discount_percent <= 70:
-            return 0.50
+        """
+        Calculate markup based on user settings.
+        Admin users: Use tiered markup based on discount percentage
+        Regular users: Use their flat default_markup setting
+        """
+        is_admin = self.user_markup_settings.get('is_admin', False)
+        
+        if is_admin:
+            # Admin tiered markup based on discount
+            if discount_percent == 0:
+                return 0.20
+            elif 1 <= discount_percent <= 30:
+                return 0.40
+            elif 30 < discount_percent <= 70:
+                return 0.50
+            else:
+                return 0.70
         else:
-            return 0.70
+            # Regular users use their flat markup setting
+            return self.user_markup_settings.get('default_markup', 50.0) / 100
 
     def detect(self, filepath: str) -> bool:
         """Detect if this is a YESSS invoice"""
@@ -59,8 +73,6 @@ class YesssInvoiceParser(BaseInvoiceParser):
                 if len(job_ref) > 2 and 'EACH' not in job_ref and 'DESCRIPTION' not in job_ref:
                     return job_ref
         
-        return None
-
         return None
 
     def is_start_of_new_item(self, line: str) -> bool:
@@ -228,8 +240,21 @@ class YesssInvoiceParser(BaseInvoiceParser):
             logger.error(f"Error extracting item: {str(e)}")
         return None
 
-    def parse(self, pdf_path: str) -> Dict:
-        """Parse YESSS invoice"""
+    def parse(self, pdf_path: str, user_markup_settings: Dict = None) -> Dict:
+        """Parse YESSS invoice
+        
+        Args:
+            pdf_path: Path to PDF file
+            user_markup_settings: Dict with 'is_admin' and 'default_markup' keys
+        """
+        # Store markup settings for use in calculate_markup()
+        if user_markup_settings:
+            self.user_markup_settings = user_markup_settings
+        else:
+            self.user_markup_settings = {'is_admin': False, 'default_markup': 50.0}
+        
+        logger.info(f"YESSS Parser: is_admin={self.user_markup_settings.get('is_admin')}, markup={self.user_markup_settings.get('default_markup')}%")
+        
         items = []
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -270,6 +295,7 @@ class YesssInvoiceParser(BaseInvoiceParser):
                 job_reference = self.extract_job_reference(text)
                 
             return {
+                'success': True,
                 'supplier': 'YESSS',
                 'items': items,
                 'invoice_number': None,
@@ -279,4 +305,4 @@ class YesssInvoiceParser(BaseInvoiceParser):
             }
         except Exception as e:
             logger.error(f"Error processing PDF: {str(e)}")
-            return {'supplier': 'YESSS', 'items': []}
+            return {'success': False, 'supplier': 'YESSS', 'items': [], 'error': str(e)}

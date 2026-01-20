@@ -10,6 +10,8 @@ class CEFInvoiceParser:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        # Default markup settings - will be overridden by parse()
+        self.user_markup_settings = {'is_admin': False, 'default_markup': 50.0}
 
     def detect(self, pdf_path: str) -> bool:
         """Detect if this is a CEF invoice"""
@@ -21,8 +23,21 @@ class CEFInvoiceParser:
             self.logger.error(f"Error detecting CEF invoice: {str(e)}")
             return False
 
-    def parse(self, pdf_path: str) -> Dict:
-        """Main parse method called by upload handler"""
+    def parse(self, pdf_path: str, user_markup_settings: Dict = None) -> Dict:
+        """Main parse method called by upload handler
+        
+        Args:
+            pdf_path: Path to PDF file
+            user_markup_settings: Dict with 'is_admin' and 'default_markup' keys
+        """
+        # Store markup settings for use in calculate_new_prices()
+        if user_markup_settings:
+            self.user_markup_settings = user_markup_settings
+        else:
+            self.user_markup_settings = {'is_admin': False, 'default_markup': 50.0}
+        
+        self.logger.info(f"CEF Parser: is_admin={self.user_markup_settings.get('is_admin')}, markup={self.user_markup_settings.get('default_markup')}%")
+        
         try:
             items = self.extract_pdf_data(pdf_path)
             job_ref = self.extract_job_reference(pdf_path)
@@ -62,34 +77,54 @@ class CEFInvoiceParser:
             }
 
     def _get_markup_percent(self, discount: str) -> int:
-        """Get markup percentage based on discount"""
-        try:
-            discount_val = float(discount)
-        except:
-            discount_val = 0
+        """Get markup percentage based on user settings"""
+        is_admin = self.user_markup_settings.get('is_admin', False)
         
-        if discount_val == 0:
-            return 20
-        elif 1 <= discount_val <= 30:
-            return 40
-        elif 30 < discount_val <= 70:
-            return 50
+        if is_admin:
+            # Admin tiered markup based on discount
+            try:
+                discount_val = float(discount)
+            except:
+                discount_val = 0
+            
+            if discount_val == 0:
+                return 20
+            elif 1 <= discount_val <= 30:
+                return 40
+            elif 30 < discount_val <= 70:
+                return 50
+            else:
+                return 70
         else:
-            return 70
+            # Regular users use their flat markup setting
+            return int(self.user_markup_settings.get('default_markup', 50.0))
 
     def calculate_new_prices(self, item: Dict) -> Dict:
-        """Calculate new prices based on discount rules"""
+        """Calculate new prices based on user settings
+        
+        Admin users: Use tiered markup based on discount percentage
+        Regular users: Use their flat default_markup setting
+        """
         cost_per_item = item['cost_per_item']
         discount = float(item.get('discount', 0))
         new_purchase_price = cost_per_item
-        if discount == 0:
-            markup = 0.20
-        elif 1 <= discount <= 30:
-            markup = 0.40
-        elif 30 < discount <= 70:
-            markup = 0.50
+        
+        is_admin = self.user_markup_settings.get('is_admin', False)
+        
+        if is_admin:
+            # Admin tiered markup based on discount
+            if discount == 0:
+                markup = 0.20
+            elif 1 <= discount <= 30:
+                markup = 0.40
+            elif 30 < discount <= 70:
+                markup = 0.50
+            else:
+                markup = 0.70
         else:
-            markup = 0.70
+            # Regular users use their flat markup setting
+            markup = self.user_markup_settings.get('default_markup', 50.0) / 100
+        
         new_sales_price = round(cost_per_item * (1 + markup), 2)
         return {'new_purchase_price': new_purchase_price, 'new_sales_price': new_sales_price}
 
@@ -197,76 +232,73 @@ class CEFInvoiceParser:
             # Second element is ALWAYS the part number (single word or hyphenated)
             part_number = parts[1]
             
-            # Special case: check if this is a multi-word part number like "SWA STORM20S"
-            # Pattern: First word is 3-4 letters, second word is ALLCAPS+numbers
-            if (len(parts) > 2 and 
-                len(parts[1]) <= 4 and 
-                parts[1].isupper() and 
-                re.match(r'^[A-Z]+\d+[A-Z]*$', parts[2])):
-                part_number = f"{parts[1]} {parts[2]}"
-                desc_start_idx = 3
-            else:
-                desc_start_idx = 2
+            # Find where numbers start from the end (looking for price pattern)
+            # Work backwards to find: total_amount, [qty/each indicator], [discount%], price_per
+            numeric_end_idx = len(parts)
             
-            # Everything after part number until we hit a price is description
-            description_parts = []
+            # Check if last element is a code like 'J' - skip it
+            if parts[-1].isalpha() and len(parts[-1]) == 1:
+                numeric_end_idx -= 1
+            
+            # Find the rightmost sequence of numbers
+            price_indices = []
+            for i in range(numeric_end_idx - 1, 1, -1):
+                # Clean the part (remove % if present)
+                clean_part = parts[i].replace('%', '')
+                try:
+                    float(clean_part)
+                    price_indices.insert(0, i)
+                except:
+                    if len(price_indices) > 0:
+                        break
+            
+            if len(price_indices) < 2:
+                return None
+            
+            # Description is everything between part_number and the first number we found
+            desc_end_idx = price_indices[0]
+            description = ' '.join(parts[2:desc_end_idx])
+            
+            # Parse the numeric values
+            # Pattern is usually: price_per [qty] [discount%] total_amount
             price_per = 0.0
             discount = '0'
             total_amount = 0.0
             
-            i = desc_start_idx
-            
-            # Collect description until we hit the price
-            while i < len(parts):
-                part = parts[i]
-                
-                # Check if this is a price (decimal number)
-                if part.replace('.', '').isdigit() and '.' in part:
-                    price_per = float(part)
-                    i += 1
-                    break
-                else:
-                    description_parts.append(part)
-                    i += 1
-            
-            description = ' '.join(description_parts)
-            
-            # After price, look for unit, discount, total
-            while i < len(parts):
-                part = parts[i]
-                
-                if part in ['each', 'pack', 'm', '1', '100', '25']:
-                    # Skip unit indicators and multipliers
+            numeric_values = []
+            for idx in price_indices:
+                clean_val = parts[idx].replace('%', '')
+                try:
+                    val = float(clean_val)
+                    has_percent = '%' in parts[idx]
+                    numeric_values.append({'value': val, 'has_percent': has_percent, 'idx': idx})
+                except:
                     pass
-                elif '%' in part:
-                    discount = part.replace('%', '')
-                elif 'J' in part:
-                    if part == 'J' and i > 0:
-                        try:
-                            total_amount = float(parts[i-1])
-                        except:
-                            pass
-                    else:
-                        try:
-                            total_amount = float(part.replace('J', ''))
-                        except:
-                            pass
-                    break
-                elif part.replace('.', '').isdigit() and '.' in part:
-                    total_amount = float(part)
+            
+            # Try to identify which is which
+            # Usually: price_per, [qty indicator], [discount%], total_amount
+            for nv in numeric_values:
+                if nv['has_percent']:
+                    discount = str(int(nv['value']))
+            
+            # First number is usually price_per, last is usually total_amount
+            if len(numeric_values) >= 2:
+                price_per = numeric_values[0]['value']
+                total_amount = numeric_values[-1]['value']
                 
-                i += 1
+                # If we have 3+ values and middle one matches quantity, it's qty indicator
+                if len(numeric_values) >= 3:
+                    for nv in numeric_values[1:-1]:
+                        if not nv['has_percent'] and nv['value'] == quantity:
+                            continue  # Skip qty indicator
             
             # Calculate cost per item
             cost_per_item = 0.0
             if total_amount > 0 and quantity > 0:
                 cost_per_item = round(total_amount / quantity, 2)
             elif price_per > 0:
-                try:
-                    discount_val = float(discount) / 100
-                    cost_per_item = round(price_per * (1 - discount_val), 2)
-                except:
-                    cost_per_item = price_per
+                discount_val = float(discount) / 100 if discount else 0
+                cost_per_item = round(price_per * (1 - discount_val), 2)
             
             if not part_number or cost_per_item == 0:
                 return None
@@ -286,27 +318,23 @@ class CEFInvoiceParser:
             return None
 
     def _extract_table_columns(self, table) -> List[Dict]:
-        """Extract items from table where each item is in a column (JER765610 format)"""
+        """Extract items when each column represents a complete item (rotated format)"""
         items = []
         
         try:
-            if not table or len(table) == 0:
-                return []
-            
-            row = table[0]
-            self.logger.info(f"Table has {len(row)} columns")
-            
-            for col_idx, cell in enumerate(row):
-                if not cell or not cell.strip():
-                    continue
-                
-                if 'Qty' in cell and 'Item' in cell:
-                    continue
-                
-                item = self._parse_column_cell(cell)
-                if item:
-                    items.append(item)
-                    self.logger.info(f"Extracted from column {col_idx}: {item['part_number']}")
+            # In column format, each cell might contain a complete item
+            for row in table:
+                for col_idx, cell in enumerate(row):
+                    if not cell:
+                        continue
+                    
+                    if 'Qty' in cell and 'Item' in cell:
+                        continue
+                    
+                    item = self._parse_column_cell(cell)
+                    if item:
+                        items.append(item)
+                        self.logger.info(f"Extracted from column {col_idx}: {item['part_number']}")
             
         except Exception as e:
             self.logger.error(f"Error in _extract_table_columns: {str(e)}")
