@@ -412,8 +412,25 @@ function filterXeroCustomerDropdown(searchTerm) {
     const term = searchTerm.toLowerCase().trim();
     let sortedCustomers = [...xeroCustomers].sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
     let html = '';
+    
+    // Show suggestions first if available
+    if (xeroSuggestedCustomers.length > 0 && term === '') {
+        html += '<div class="px-3 py-2 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">⭐ Suggested</div>';
+        xeroSuggestedCustomers.forEach(match => { 
+            const customer = xeroCustomers.find(c => c.ContactID === match.customer_id); 
+            if (customer) { 
+                const displayName = customer.Name || 'Unknown'; 
+                const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;'); 
+                html += '<div class="xero-customer-option px-3 py-2 cursor-pointer hover:bg-[#13B5EA]/10 flex items-center justify-between" data-id="' + customer.ContactID + '" data-name="' + escapedName + '" onclick="selectXeroCustomer(\'' + customer.ContactID + '\', \'' + escapedName + '\')"><span class="text-sm font-medium text-gray-900 dark:text-white truncate">⭐ ' + displayName + '</span><span class="text-xs text-green-600 dark:text-green-400 ml-2">' + match.confidence + '%</span></div>'; 
+            } 
+        });
+        html += '<div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">All Contacts</div>';
+    }
+    
     let filtered = term ? sortedCustomers.filter(c => (c.Name || '').toLowerCase().includes(term) || (c.EmailAddress || '').toLowerCase().includes(term)) : sortedCustomers;
     filtered.slice(0, 100).forEach(customer => {
+        // Skip if already shown in suggestions
+        if (term === '' && xeroSuggestedCustomers.some(s => s.customer_id === customer.ContactID)) return;
         const displayName = customer.Name || 'Unknown';
         const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         html += '<div class="xero-customer-option px-3 py-2 cursor-pointer hover:bg-[#13B5EA]/10" data-id="' + customer.ContactID + '" data-name="' + escapedName + '" onclick="selectXeroCustomer(\'' + customer.ContactID + '\', \'' + escapedName + '\')"><span class="text-sm text-gray-900 dark:text-white">' + displayName + '</span>' + (customer.EmailAddress ? '<span class="text-xs text-gray-500 dark:text-gray-400 ml-2">' + customer.EmailAddress + '</span>' : '') + '</div>';
@@ -428,6 +445,23 @@ function focusPrevXeroItem() { const items = document.querySelectorAll('.xero-cu
 function selectFocusedXeroItem() { const focused = document.querySelector('.xero-customer-option.focused'); if (focused) selectXeroCustomer(focused.dataset.id, focused.dataset.name); }
 
 async function loadXeroCustomers() { try { const response = await fetch('/integrations/api/xero/customers'); const data = await response.json(); if (data.customers) xeroCustomers = data.customers; } catch (error) { console.error('Error loading Xero customers:', error); } }
+
+let xeroSuggestedCustomers = [];
+
+async function getXeroCustomerSuggestions(jobReference) { 
+    try { 
+        const response = await fetch('/integrations/api/xero/match-customer?job_reference=' + encodeURIComponent(jobReference)); 
+        const data = await response.json(); 
+        if (data.matches && data.matches.length > 0) { 
+            xeroSuggestedCustomers = data.matches; 
+            if (xeroSuggestedCustomers[0].confidence >= 80) { 
+                selectXeroCustomer(xeroSuggestedCustomers[0].customer_id, xeroSuggestedCustomers[0].customer_name); 
+            } 
+        } 
+    } catch (error) { 
+        console.error('Error getting Xero suggestions:', error); 
+    } 
+}
 
 function onXeroCustomerChange() { const customerId = document.getElementById('xero-customer-select').value; if (!customerId) { document.getElementById('xero-invoice-action-text').textContent = 'Select contact first'; document.getElementById('sync-to-xero-btn').disabled = true; return; } document.getElementById('sync-to-xero-btn').disabled = false; document.getElementById('xero-invoice-action-text').innerHTML = '<span class="text-[#13B5EA]">Will create new invoice</span>'; }
 
@@ -445,11 +479,11 @@ function renderInvoices() { const tbody = document.getElementById('invoices-tabl
 async function viewInvoice(id) { try { const response = await fetch('/api/invoices/' + id); const data = await response.json(); if (data.success) { currentInvoice = data.invoice; const inv = data.invoice; document.getElementById('modal-title').textContent = inv.job_reference || 'Invoice Details'; document.getElementById('modal-subtitle').textContent = inv.supplier_name + ' • ' + (inv.invoice_number || 'No invoice #') + ' • ' + formatDate(inv.created_at); document.getElementById('modal-items').innerHTML = inv.items.map(item => '<tr><td class="px-4 py-3 text-sm text-gray-900 dark:text-white font-mono">' + (item.part_number || '-') + '</td><td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">' + (item.description || '-') + '</td><td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center">' + item.quantity + '</td><td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£' + (item.total_amount || 0).toFixed(2) + '</td><td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-right">£' + ((item.selling_price || 0) * item.quantity).toFixed(2) + '</td><td class="px-4 py-3 text-sm text-right font-medium ' + ((item.profit_per_item || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400') + '">£' + ((item.profit_per_item || 0) * item.quantity).toFixed(2) + '</td></tr>').join(''); document.getElementById('modal-total-cost').textContent = '£' + (inv.total_cost || 0).toFixed(2); document.getElementById('modal-total-selling').textContent = '£' + (inv.total_selling || 0).toFixed(2); document.getElementById('modal-total-profit').textContent = '£' + (inv.total_profit || 0).toFixed(2); document.getElementById('modal-total-with-gst').textContent = '£' + ((inv.total_selling || 0) * 1.05).toFixed(2);
         // Show appropriate sync section based on connection
         if (qbConnected) { document.getElementById('qb-sync-section').classList.remove('hidden'); resetQBSyncUI(); if (inv.job_reference) getCustomerSuggestions(inv.job_reference); } else { document.getElementById('qb-sync-section').classList.add('hidden'); }
-        if (xeroConnected) { document.getElementById('xero-sync-section').classList.remove('hidden'); resetXeroSyncUI(); } else { document.getElementById('xero-sync-section').classList.add('hidden'); }
+        if (xeroConnected) { document.getElementById('xero-sync-section').classList.remove('hidden'); resetXeroSyncUI(); if (inv.job_reference) getXeroCustomerSuggestions(inv.job_reference); } else { document.getElementById('xero-sync-section').classList.add('hidden'); }
         document.getElementById('invoice-modal').classList.remove('hidden'); } } catch (error) { console.error('Error loading invoice:', error); } }
 
 function resetQBSyncUI() { selectedCustomerId = null; suggestedCustomers = []; document.getElementById('qb-customer-select').value = ''; document.getElementById('customer-search-input').value = ''; document.getElementById('selected-customer-display').classList.add('hidden'); document.getElementById('invoice-action-text').textContent = 'Select customer first'; document.getElementById('sync-to-qb-btn').disabled = true; document.getElementById('sync-progress').classList.add('hidden'); document.getElementById('sync-result').classList.add('hidden'); }
-function resetXeroSyncUI() { selectedXeroCustomerId = null; document.getElementById('xero-customer-select').value = ''; document.getElementById('xero-customer-search-input').value = ''; document.getElementById('xero-selected-customer-display').classList.add('hidden'); document.getElementById('xero-invoice-action-text').textContent = 'Select contact first'; document.getElementById('sync-to-xero-btn').disabled = true; document.getElementById('xero-sync-progress').classList.add('hidden'); document.getElementById('xero-sync-result').classList.add('hidden'); }
+function resetXeroSyncUI() { selectedXeroCustomerId = null; xeroSuggestedCustomers = []; document.getElementById('xero-customer-select').value = ''; document.getElementById('xero-customer-search-input').value = ''; document.getElementById('xero-selected-customer-display').classList.add('hidden'); document.getElementById('xero-invoice-action-text').textContent = 'Select contact first'; document.getElementById('sync-to-xero-btn').disabled = true; document.getElementById('xero-sync-progress').classList.add('hidden'); document.getElementById('xero-sync-result').classList.add('hidden'); }
 
 function closeModal() { document.getElementById('invoice-modal').classList.add('hidden'); currentInvoice = null; closeDropdown(); closeXeroDropdown(); }
 function prevPage() { if (currentPage > 1) { currentPage--; renderInvoices(); } }

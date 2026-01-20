@@ -845,6 +845,26 @@ def xero_customers():
         ]
     })
 
+@bp.route('/api/xero/match-customer')
+@login_required
+def xero_match_customer():
+    """Match job reference to Xero customer using Claude"""
+    from app.models.xero import XeroConnection
+    from app.integrations.xero_service import XeroService
+    
+    job_reference = request.args.get('job_reference', '')
+    
+    if not job_reference:
+        return jsonify({'matches': []})
+    
+    connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    if not connection or not connection.is_active:
+        return jsonify({'error': 'Xero not connected'}), 400
+    
+    xero = XeroService(current_user)
+    matches = xero.match_customer_to_job_reference(connection, job_reference)
+    
+    return jsonify({'matches': matches})
 
 @bp.route('/xero/sync-to-customer/<int:invoice_id>', methods=['POST'])
 @login_required

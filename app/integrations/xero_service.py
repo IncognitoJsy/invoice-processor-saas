@@ -657,3 +657,126 @@ class XeroService:
         except Exception as e:
             logger.error(f"Error syncing quote to Xero: {str(e)}")
             return {'success': False, 'errors': [str(e)]}
+    
+    # ==================== Smart Customer Matching ====================
+    
+    def match_customer_to_job_reference(self, connection, job_reference: str) -> List[Dict]:
+        """
+        Use Claude to intelligently match a job reference to a Xero contact
+        Returns list of potential matches with confidence scores
+        """
+        if not job_reference:
+            return []
+        
+        # Get all customers/contacts
+        customers = self.get_customers(connection)
+        
+        if not customers:
+            return []
+        
+        # Build customer name list
+        customer_names = [c.get('Name', '') for c in customers if c.get('Name')]
+        
+        if not customer_names:
+            return []
+        
+        # Use Claude to find best matches
+        try:
+            import anthropic
+            import json
+            
+            client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+
+            logger.info(f"Matching job reference: {job_reference} against {len(customer_names)} Xero contacts")
+            
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                messages=[{
+                    "role": "user",
+                    "content": f"""Match this job reference to the most likely customer(s) from the list.
+
+Job Reference: "{job_reference}"
+
+Customer List:
+{chr(10).join(f'- {name}' for name in customer_names)}
+
+Return ONLY valid JSON, no markdown:
+{{
+    "matches": [
+        {{"customer_name": "exact name from list", "confidence": 85, "reason": "brief explanation"}}
+    ]
+}}
+
+Rules:
+1. Match despite typos (e.g., "RIVERWOD" matches "Riverwood")
+2. Match partial names (e.g., "JAMES R" could match "James Riverwood")
+3. Confidence should be 0-100
+4. Return up to 10 best matches
+5. If no reasonable match, return empty matches array
+6. Only return names that are EXACTLY in the customer list"""
+                }]
+            )
+            
+            response_text = message.content[0].text.strip()
+            if response_text.startswith('```'):
+                lines = response_text.split('\n')
+                response_text = '\n'.join(lines[1:-1])
+            
+            data = json.loads(response_text)
+            matches = data.get('matches', [])
+            
+            # Add contact IDs to matches
+            for match in matches:
+                for customer in customers:
+                    if customer.get('Name') == match.get('customer_name'):
+                        match['customer_id'] = customer.get('ContactID')
+                        break
+            
+            return matches[:10]
+            
+        except Exception as e:
+            logger.error(f"Xero customer matching error: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Fallback to simple search
+            return self._simple_customer_match(customers, job_reference)
+    
+    def _simple_customer_match(self, customers: List[Dict], job_reference: str) -> List[Dict]:
+        """Simple fallback matching without AI"""
+        matches = []
+        job_ref_lower = job_reference.lower()
+        
+        for customer in customers:
+            name = customer.get('Name', '')
+            if not name:
+                continue
+            
+            name_lower = name.lower()
+            
+            # Check for partial match
+            if job_ref_lower in name_lower or name_lower in job_ref_lower:
+                confidence = 70 if job_ref_lower in name_lower else 50
+                matches.append({
+                    'customer_name': name,
+                    'customer_id': customer.get('ContactID'),
+                    'confidence': confidence,
+                    'reason': 'Partial name match'
+                })
+            # Check for word overlap
+            else:
+                job_words = set(job_ref_lower.split())
+                name_words = set(name_lower.split())
+                overlap = job_words & name_words
+                if overlap:
+                    confidence = min(60, len(overlap) * 20)
+                    matches.append({
+                        'customer_name': name,
+                        'customer_id': customer.get('ContactID'),
+                        'confidence': confidence,
+                        'reason': f'Word match: {", ".join(overlap)}'
+                    })
+        
+        # Sort by confidence
+        matches.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+        return matches[:10]
