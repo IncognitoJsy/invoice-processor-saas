@@ -685,6 +685,15 @@ class XeroService:
                     existing_lines[line_index]['Quantity'] = combined_qty
                     existing_lines[line_index]['UnitAmount'] = new_price
                     
+                    # CRITICAL: Remove LineAmount so Xero recalculates it
+                    # Or set it correctly: LineAmount = Quantity × UnitAmount
+                    if 'LineAmount' in existing_lines[line_index]:
+                        del existing_lines[line_index]['LineAmount']
+                    
+                    # Also remove TaxAmount so Xero recalculates
+                    if 'TaxAmount' in existing_lines[line_index]:
+                        del existing_lines[line_index]['TaxAmount']
+                    
                     # Update description if provided
                     if description:
                         existing_lines[line_index]['Description'] = description[:4000]
