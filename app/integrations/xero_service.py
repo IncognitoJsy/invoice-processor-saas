@@ -424,16 +424,73 @@ class XeroService:
             return result['Items'][0] if result['Items'] else None
         return None
     
+    def update_item(self, connection, item_id: str, code: str, name: str, description: str,
+                    purchase_price: float, sale_price: float,
+                    purchase_account_code: str, sales_account_code: str) -> Optional[Dict]:
+        """Update an existing item's prices and details"""
+        data = {
+            'Items': [{
+                'ItemID': item_id,
+                'Code': code[:30],
+                'Name': name[:50],
+                'Description': description[:4000] if description else name,
+                'PurchaseDetails': {
+                    'UnitPrice': purchase_price,
+                    'AccountCode': purchase_account_code
+                },
+                'SalesDetails': {
+                    'UnitPrice': sale_price,
+                    'AccountCode': sales_account_code
+                }
+            }]
+        }
+        
+        result = self._make_request('POST', '/Items', connection, data)
+        if result and 'Items' in result:
+            logger.info(f"Updated Xero item: {code} - Purchase: £{purchase_price}, Sale: £{sale_price}")
+            return result['Items'][0] if result['Items'] else None
+        return None
+    
     def find_or_create_item(self, connection, code: str, name: str, description: str,
                            purchase_price: float, sale_price: float,
                            purchase_account_code: str, sales_account_code: str) -> Optional[Dict]:
-        """Find existing item by code or create new one"""
+        """
+        Find existing item by code, update prices if higher, or create new one.
+        
+        Price update logic:
+        - If new sale_price is HIGHER than existing, update the item
+        - This ensures we never sell at an old lower price when costs go up
+        - Purchase price is also updated to reflect current cost
+        """
         items = self.get_items(connection)
         
         for item in items:
             if item.get('Code', '').lower() == code.lower():
+                # Found existing item - check if prices need updating
+                existing_sale_price = float(item.get('SalesDetails', {}).get('UnitPrice', 0) or 0)
+                existing_purchase_price = float(item.get('PurchaseDetails', {}).get('UnitPrice', 0) or 0)
+                
+                # Update if new sale price is higher OR purchase price changed significantly
+                if sale_price > existing_sale_price or abs(purchase_price - existing_purchase_price) > 0.01:
+                    logger.info(f"Updating item {code}: Sale £{existing_sale_price} -> £{sale_price}, "
+                               f"Purchase £{existing_purchase_price} -> £{purchase_price}")
+                    
+                    updated_item = self.update_item(
+                        connection,
+                        item_id=item['ItemID'],
+                        code=code,
+                        name=name,
+                        description=description,
+                        purchase_price=purchase_price,
+                        sale_price=sale_price,
+                        purchase_account_code=purchase_account_code,
+                        sales_account_code=sales_account_code
+                    )
+                    return updated_item if updated_item else item
+                
                 return item
         
+        # Item doesn't exist - create it
         return self.create_item(connection, code, name, description,
                                purchase_price, sale_price,
                                purchase_account_code, sales_account_code)
