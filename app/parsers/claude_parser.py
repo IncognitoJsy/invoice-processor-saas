@@ -435,9 +435,11 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 
                 # Apply discount to get actual cost
                 # For Wholesale Electrics, total_amount is BEFORE discount
-                if discount_val > 0:
+                # For YESSS and CEF, total_amount is ALREADY discounted
+                if 'wholesale' in supplier_lower and discount_val > 0:
                     discounted_total = total_amount * (1 - discount_val / 100)
                 else:
+                    # YESSS, CEF, and others already show discounted amounts
                     discounted_total = total_amount
                 
                 cost_per_item = round(discounted_total / quantity, 2) if quantity > 0 else 0
