@@ -532,6 +532,170 @@ class XeroService:
             return result['Invoices'][0] if result['Invoices'] else None
         return None
     
+    def get_draft_invoices(self, connection, customer_contact_id: str = None) -> List[Dict]:
+        """
+        Get draft invoices that haven't been sent/approved yet.
+        Optionally filter by customer.
+        
+        In Xero, DRAFT status means not yet approved/sent.
+        """
+        try:
+            # Build query - get DRAFT invoices (ACCREC = customer invoices)
+            if customer_contact_id:
+                # Xero doesn't support filtering by ContactID directly in the query
+                # So we fetch recent drafts and filter
+                endpoint = '/Invoices?Statuses=DRAFT&where=Type=="ACCREC"'
+            else:
+                endpoint = '/Invoices?Statuses=DRAFT&where=Type=="ACCREC"'
+            
+            result = self._make_request('GET', endpoint, connection)
+            
+            if not result or 'Invoices' not in result:
+                return []
+            
+            invoices = result['Invoices']
+            
+            # Filter by customer if specified
+            if customer_contact_id:
+                invoices = [
+                    inv for inv in invoices 
+                    if inv.get('Contact', {}).get('ContactID') == customer_contact_id
+                ]
+            
+            logger.info(f"Found {len(invoices)} draft invoices" + 
+                       (f" for customer {customer_contact_id}" if customer_contact_id else ""))
+            
+            return invoices
+            
+        except Exception as e:
+            logger.error(f"Error getting draft invoices: {str(e)}")
+            return []
+    
+    def add_items_to_invoice(self, connection, invoice_id: str, line_items: List[Dict]) -> Optional[Dict]:
+        """
+        Add line items to an existing invoice, merging duplicates.
+        
+        If an item with the same ItemCode already exists:
+        - Add to the quantity (accumulate)
+        - Update the price to the latest price
+        
+        This keeps invoices compact and ensures prices are always current.
+        """
+        try:
+            # Get existing invoice
+            result = self._make_request('GET', f'/Invoices/{invoice_id}', connection)
+            
+            if not result or 'Invoices' not in result or not result['Invoices']:
+                return {'error': 'Invoice not found'}
+            
+            invoice = result['Invoices'][0]
+            existing_lines = invoice.get('LineItems', [])
+            
+            # Get tax type
+            sales_tax_type = self.get_default_sales_tax_type(connection)
+            
+            # Build a map of existing items by ItemCode
+            # Structure: {item_code: {'line_index': idx, 'quantity': qty, 'line': line_obj}}
+            existing_items_map = {}
+            for idx, line in enumerate(existing_lines):
+                item_code = line.get('ItemCode')
+                if item_code:
+                    existing_items_map[item_code] = {
+                        'line_index': idx,
+                        'quantity': float(line.get('Quantity', 0)),
+                        'line': line
+                    }
+            
+            # Process each new item
+            items_merged = 0
+            items_added = 0
+            
+            for item in line_items:
+                item_code = item.get('item_code')
+                new_qty = float(item.get('quantity', 1))
+                new_price = float(item.get('unit_price', 0))
+                description = item.get('description', '')
+                account_code = item.get('account_code')
+                
+                if item_code and item_code in existing_items_map:
+                    # Item already exists - merge quantities and update price
+                    existing_info = existing_items_map[item_code]
+                    line_index = existing_info['line_index']
+                    old_qty = existing_info['quantity']
+                    combined_qty = old_qty + new_qty
+                    
+                    # Update the existing line
+                    existing_lines[line_index]['Quantity'] = combined_qty
+                    existing_lines[line_index]['UnitAmount'] = new_price
+                    
+                    # Update description if provided
+                    if description:
+                        existing_lines[line_index]['Description'] = description[:4000]
+                    
+                    # Update tax type
+                    if sales_tax_type:
+                        existing_lines[line_index]['TaxType'] = sales_tax_type
+                    
+                    logger.info(
+                        f"Merged item {item_code}: {old_qty} + {new_qty} = {combined_qty} @ £{new_price}"
+                    )
+                    items_merged += 1
+                    
+                    # Update the map in case same item appears twice in new items
+                    existing_items_map[item_code]['quantity'] = combined_qty
+                    
+                else:
+                    # New item - add as new line
+                    new_line = {
+                        'Description': description[:4000] if description else '',
+                        'Quantity': new_qty,
+                        'UnitAmount': new_price,
+                        'AccountCode': account_code,
+                        'TaxType': sales_tax_type
+                    }
+                    
+                    if item_code:
+                        new_line['ItemCode'] = item_code
+                    
+                    existing_lines.append(new_line)
+                    items_added += 1
+                    
+                    # Add to map
+                    if item_code:
+                        existing_items_map[item_code] = {
+                            'line_index': len(existing_lines) - 1,
+                            'quantity': new_qty,
+                            'line': new_line
+                        }
+                    
+                    logger.info(f"Added new item: {item_code or description[:30]} - Qty: {new_qty} @ £{new_price}")
+            
+            # Update the invoice
+            update_data = {
+                'Invoices': [{
+                    'InvoiceID': invoice_id,
+                    'LineItems': existing_lines
+                }]
+            }
+            
+            result = self._make_request('POST', '/Invoices', connection, update_data)
+            
+            if result and 'Invoices' in result:
+                logger.info(f"Updated invoice {invoice_id}: {items_merged} merged, {items_added} added")
+                return {
+                    'Invoice': result['Invoices'][0],
+                    'items_merged': items_merged,
+                    'items_added': items_added
+                }
+            else:
+                return {'error': 'Failed to update invoice'}
+                
+        except Exception as e:
+            logger.error(f"Error adding items to invoice: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {'error': str(e)}
+    
     # ==================== Quotes (Estimates) ====================
     
     def create_quote(self, connection, customer_contact_id: str,
@@ -681,12 +845,22 @@ class XeroService:
         
         return results
     
-    def sync_to_customer_invoice(self, connection, invoice, customer_contact_id: str) -> Dict:
-        """Sync products and create/update customer invoice in Xero"""
+    def sync_to_customer_invoice(self, connection, invoice, customer_contact_id: str, 
+                                   use_existing_invoice: bool = True) -> Dict:
+        """
+        Sync products and create/update customer invoice in Xero
+        
+        If use_existing_invoice is True:
+        - Looks for an existing DRAFT invoice for this customer
+        - If found, adds items to it (merging duplicates)
+        - If not found, creates a new invoice
+        
+        This keeps all items for a customer in one invoice until it's sent.
+        """
         errors = []
         
         try:
-            # First sync products
+            # First sync products (updates prices if item exists)
             product_results = self.sync_products_to_items(connection, invoice)
             
             # Prepare line items with markup prices
@@ -704,33 +878,76 @@ class XeroService:
                     'item_code': sku
                 })
             
-            # Create invoice
-            xero_invoice = self.create_invoice(
-                connection,
-                customer_contact_id=customer_contact_id,
-                line_items=line_items,
-                reference=invoice.job_reference
-            )
+            # Check for existing draft invoice for this customer
+            xero_invoice = None
+            invoice_action = 'created_new'
+            
+            if use_existing_invoice:
+                draft_invoices = self.get_draft_invoices(connection, customer_contact_id)
+                if draft_invoices:
+                    # Use the first (most recent) draft invoice
+                    xero_invoice = draft_invoices[0]
+                    invoice_action = 'added_to_existing'
+                    logger.info(f"Found existing draft invoice: {xero_invoice.get('InvoiceID')}")
             
             if xero_invoice:
-                return {
-                    'success': True,
-                    'products_synced': product_results['synced'],
-                    'products_failed': product_results['failed'],
-                    'xero_invoice_id': xero_invoice.get('InvoiceID'),
-                    'xero_invoice_number': xero_invoice.get('InvoiceNumber')
-                }
+                # Add items to existing invoice (merges duplicates)
+                result = self.add_items_to_invoice(
+                    connection,
+                    xero_invoice['InvoiceID'],
+                    line_items
+                )
+                
+                if result.get('Invoice'):
+                    return {
+                        'success': True,
+                        'invoice_action': invoice_action,
+                        'products_synced': product_results['synced'],
+                        'products_failed': product_results['failed'],
+                        'xero_invoice_id': result['Invoice'].get('InvoiceID'),
+                        'xero_invoice_number': result['Invoice'].get('InvoiceNumber'),
+                        'items_merged': result.get('items_merged', 0),
+                        'items_added': result.get('items_added', 0)
+                    }
+                else:
+                    errors.append(f"Failed to add items to invoice: {result.get('error', 'Unknown error')}")
+                    return {
+                        'success': False,
+                        'products_synced': product_results['synced'],
+                        'products_failed': product_results['failed'],
+                        'errors': errors
+                    }
             else:
-                errors.append('Failed to create invoice in Xero')
-                return {
-                    'success': False,
-                    'products_synced': product_results['synced'],
-                    'products_failed': product_results['failed'],
-                    'errors': errors
-                }
+                # Create new invoice
+                xero_invoice = self.create_invoice(
+                    connection,
+                    customer_contact_id=customer_contact_id,
+                    line_items=line_items,
+                    reference=invoice.job_reference
+                )
+                
+                if xero_invoice:
+                    return {
+                        'success': True,
+                        'invoice_action': invoice_action,
+                        'products_synced': product_results['synced'],
+                        'products_failed': product_results['failed'],
+                        'xero_invoice_id': xero_invoice.get('InvoiceID'),
+                        'xero_invoice_number': xero_invoice.get('InvoiceNumber')
+                    }
+                else:
+                    errors.append('Failed to create invoice in Xero')
+                    return {
+                        'success': False,
+                        'products_synced': product_results['synced'],
+                        'products_failed': product_results['failed'],
+                        'errors': errors
+                    }
                 
         except Exception as e:
             logger.error(f"Error syncing to customer invoice: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {'success': False, 'errors': [str(e)]}
     
     def sync_quote_to_xero(self, connection, quote, customer_contact_id: str) -> Dict:
