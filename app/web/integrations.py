@@ -328,7 +328,7 @@ def quickbooks_sync_products(invoice_id):
     
     # Sync products
     qb = QuickBooksService(current_user)
-    result = qb.sync_products_to_quickbooks(connection, invoice)
+    result = qb.sync_invoice_items_as_products(connection, invoice)
     
     return jsonify(result)
 
