@@ -479,11 +479,11 @@ class XeroService:
             
             # Prepare line items
             line_items = []
-            for item in invoice.line_items:
+            for item in invoice.items:
                 line_items.append({
-                    'description': item.get('description', ''),
-                    'quantity': item.get('quantity', 1),
-                    'unit_price': item.get('unit_price', 0),
+                    'description': item.description or '',
+                    'quantity': float(item.quantity or 1),
+                    'unit_price': float(item.cost_per_item or 0),
                     'account_code': connection.default_expense_account_code
                 })
             
@@ -527,15 +527,15 @@ class XeroService:
         if not connection.default_expense_account_code or not connection.default_sales_account_code:
             return {'synced': 0, 'failed': 0, 'errors': ['Please configure expense and sales accounts in Xero settings']}
         
-        for item in invoice.line_items:
+        for item in invoice.items:
             try:
-                sku = item.get('sku', '')[:30]
+                sku = (item.part_number or '')[:30]
                 if not sku:
                     sku = f"ITEM-{invoice.id}-{results['synced'] + results['failed'] + 1}"
                 
-                description = item.get('description', '')
-                purchase_price = item.get('unit_price', 0)
-                sale_price = item.get('customer_price', purchase_price)
+                description = item.description or ''
+                purchase_price = float(item.cost_per_item or 0)
+                sale_price = float(item.selling_price or purchase_price)
                 
                 result = self.find_or_create_item(
                     connection,
@@ -570,15 +570,15 @@ class XeroService:
             
             # Prepare line items with markup prices
             line_items = []
-            for item in invoice.line_items:
-                sku = item.get('sku', '')[:30]
+            for item in invoice.items:
+                sku = (item.part_number or '')[:30]
                 if not sku:
                     sku = f"ITEM-{invoice.id}-{len(line_items) + 1}"
                 
                 line_items.append({
-                    'description': item.get('description', ''),
-                    'quantity': item.get('quantity', 1),
-                    'unit_price': item.get('customer_price', item.get('unit_price', 0)),
+                    'description': item.description or '',
+                    'quantity': float(item.quantity or 1),
+                    'unit_price': float(item.selling_price or item.cost_per_item or 0),
                     'account_code': connection.default_sales_account_code,
                     'item_code': sku
                 })
@@ -622,15 +622,15 @@ class XeroService:
             
             # Prepare line items
             line_items = []
-            for item in quote.line_items:
-                sku = item.get('sku', '')[:30]
+            for item in quote.items:
+                sku = (item.part_number or '')[:30]
                 if not sku:
                     sku = f"ITEM-{quote.id}-{len(line_items) + 1}"
                 
                 line_items.append({
-                    'description': item.get('description', ''),
-                    'quantity': item.get('quantity', 1),
-                    'unit_price': item.get('customer_price', item.get('unit_price', 0)),
+                    'description': item.description or '',
+                    'quantity': float(item.quantity or 1),
+                    'unit_price': float(item.selling_price or item.cost_per_item or 0),
                     'account_code': connection.default_sales_account_code,
                     'item_code': sku
                 })
