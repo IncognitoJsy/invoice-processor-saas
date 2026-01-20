@@ -598,19 +598,20 @@ class XeroService:
         """
         try:
             # Build query - get DRAFT invoices (ACCREC = customer invoices)
-            if customer_contact_id:
-                # Xero doesn't support filtering by ContactID directly in the query
-                # So we fetch recent drafts and filter
-                endpoint = '/Invoices?Statuses=DRAFT&where=Type=="ACCREC"'
-            else:
-                endpoint = '/Invoices?Statuses=DRAFT&where=Type=="ACCREC"'
+            # Xero API format: /Invoices?Statuses=DRAFT
+            endpoint = '/Invoices?Statuses=DRAFT'
             
             result = self._make_request('GET', endpoint, connection)
+            
+            logger.info(f"Xero draft invoices response: {result.get('Invoices', []) if result else 'None'}")
             
             if not result or 'Invoices' not in result:
                 return []
             
             invoices = result['Invoices']
+            
+            # Filter to only ACCREC (sales invoices, not bills)
+            invoices = [inv for inv in invoices if inv.get('Type') == 'ACCREC']
             
             # Filter by customer if specified
             if customer_contact_id:
@@ -626,6 +627,8 @@ class XeroService:
             
         except Exception as e:
             logger.error(f"Error getting draft invoices: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
     
     def add_items_to_invoice(self, connection, invoice_id: str, line_items: List[Dict]) -> Optional[Dict]:
