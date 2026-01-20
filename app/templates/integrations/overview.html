@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block title %}Integrations - GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <a href="{{ url_for('settings.settings_page') }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium mb-2 inline-block">
+            ← Back to Settings
+        </a>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-1">Connect your accounting software to sync invoices automatically</p>
+    </div>
+
+    {% if xero_connected or quickbooks_connected %}
+    <!-- Currently Connected Section -->
+    <div class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Currently Connected
+        </h2>
+        
+        {% if xero_connected %}
+        <!-- Xero Connected Card -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 border-green-500 p-6 mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <!-- Xero Logo -->
+                    <div class="w-14 h-14 bg-[#13B5EA] rounded-xl flex items-center justify-center">
+                        <span class="text-white font-bold text-xl">xero</span>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">Xero</h3>
+                        <p class="text-green-600 dark:text-green-400 text-sm font-medium flex items-center">
+                            <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                            Connected to {{ xero_connection.tenant_name }}
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ url_for('integrations.xero_settings') }}" 
+                   class="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition">
+                    Manage Settings
+                </a>
+            </div>
+            
+            {% if xero_connection.default_sales_account_code and xero_connection.default_expense_account_code %}
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">Sales Account:</span>
+                    <span class="text-gray-900 dark:text-white ml-2">{{ xero_connection.default_sales_account_name or xero_connection.default_sales_account_code }}</span>
+                </div>
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">Expense Account:</span>
+                    <span class="text-gray-900 dark:text-white ml-2">{{ xero_connection.default_expense_account_name or xero_connection.default_expense_account_code }}</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p class="text-amber-600 dark:text-amber-400 text-sm flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Please configure your accounts in settings to enable syncing
+                </p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if quickbooks_connected %}
+        <!-- QuickBooks Connected Card -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 border-green-500 p-6 mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <!-- QuickBooks Logo -->
+                    <div class="w-14 h-14 bg-[#2CA01C] rounded-xl flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm4 0h-2v-6h2v6z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">QuickBooks Online</h3>
+                        <p class="text-green-600 dark:text-green-400 text-sm font-medium flex items-center">
+                            <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                            Connected to {{ quickbooks_connection.company_name }}
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ url_for('integrations.quickbooks_settings') }}" 
+                   class="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition">
+                    Manage Settings
+                </a>
+            </div>
+            
+            {% if quickbooks_connection.default_income_account_id and quickbooks_connection.default_expense_account_id %}
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">Income Account:</span>
+                    <span class="text-gray-900 dark:text-white ml-2">{{ quickbooks_connection.default_income_account_name }}</span>
+                </div>
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">Expense Account:</span>
+                    <span class="text-gray-900 dark:text-white ml-2">{{ quickbooks_connection.default_expense_account_name }}</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p class="text-amber-600 dark:text-amber-400 text-sm flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Please configure your accounts in settings to enable syncing
+                </p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if not xero_connected or not quickbooks_connected %}
+    <!-- Available Integrations Section -->
+    <div>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            {% if xero_connected or quickbooks_connected %}
+            <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
+            Or Connect Another Platform
+            {% else %}
+            <svg class="w-5 h-5 text-primary-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+            </svg>
+            Connect Your Accounting Software
+            {% endif %}
+        </h2>
+        
+        <div class="grid md:grid-cols-2 gap-4">
+            {% if not xero_connected %}
+            <!-- Xero Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 hover:border-[#13B5EA] transition-colors">
+                <div class="flex items-center space-x-4 mb-4">
+                    <div class="w-14 h-14 bg-[#13B5EA] rounded-xl flex items-center justify-center">
+                        <span class="text-white font-bold text-xl">xero</span>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">Xero</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm">Popular in UK & Australia</p>
+                    </div>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                    Connect to Xero to sync products, create customer invoices, and manage your accounts seamlessly.
+                </p>
+                <a href="{{ url_for('integrations.xero_connect') }}" 
+                   class="block w-full py-3 px-4 bg-[#13B5EA] hover:bg-[#0e9ed0] text-white rounded-lg font-semibold text-center transition">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                    Connect to Xero
+                </a>
+            </div>
+            {% endif %}
+            
+            {% if not quickbooks_connected %}
+            <!-- QuickBooks Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 hover:border-[#2CA01C] transition-colors">
+                <div class="flex items-center space-x-4 mb-4">
+                    <div class="w-14 h-14 bg-[#2CA01C] rounded-xl flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm4 0h-2v-6h2v6z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white">QuickBooks Online</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm">Popular worldwide</p>
+                    </div>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                    Connect to QuickBooks to sync products, create customer invoices, and manage your accounts seamlessly.
+                </p>
+                <a href="{{ url_for('integrations.quickbooks_connect') }}" 
+                   class="block w-full py-3 px-4 bg-[#2CA01C] hover:bg-[#248a17] text-white rounded-lg font-semibold text-center transition">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                    Connect to QuickBooks
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Info Note -->
+    <div class="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+        <div class="flex items-start">
+            <svg class="w-5 h-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="text-sm text-blue-800 dark:text-blue-200">
+                <p class="font-medium mb-1">Note about multiple connections</p>
+                <p class="text-blue-600 dark:text-blue-300">You can connect both Xero and QuickBooks if needed, but each invoice can only be synced to one platform at a time. Choose your primary accounting software for the best experience.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

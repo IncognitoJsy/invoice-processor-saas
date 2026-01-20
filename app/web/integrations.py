@@ -10,6 +10,28 @@ import os
 bp = Blueprint('integrations', __name__, url_prefix='/integrations')
 
 
+@bp.route('/overview')
+@login_required
+def integrations_overview():
+    """Combined integrations overview page"""
+    from app.models.quickbooks import QuickBooksConnection
+    from app.models.xero import XeroConnection
+    
+    # Check QuickBooks connection
+    qb_connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+    qb_connected = qb_connection and qb_connection.is_active
+    
+    # Check Xero connection
+    xero_connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    xero_connected = xero_connection and xero_connection.is_active
+    
+    return render_template('integrations/overview.html',
+                         quickbooks_connected=qb_connected,
+                         quickbooks_connection=qb_connection,
+                         xero_connected=xero_connected,
+                         xero_connection=xero_connection)
+
+
 def generate_oauth_state(user_id):
     """Generate a secure OAuth state that includes the user ID.
     
