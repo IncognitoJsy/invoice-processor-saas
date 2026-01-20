@@ -64,6 +64,7 @@ class XeroService:
     def exchange_code_for_tokens(self, auth_code: str) -> Optional[Dict]:
         """Exchange authorization code for access and refresh tokens"""
         redirect_uri = url_for('integrations.xero_callback', _external=True)
+        redirect_uri = redirect_uri.replace('http://', 'https://')
         
         # Xero requires Basic auth with client credentials
         credentials = base64.b64encode(
