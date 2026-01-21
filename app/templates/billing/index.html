@@ -301,11 +301,10 @@ function openPaddleCheckout(plan) {
         settings: {
             displayMode: 'overlay',
             theme: 'light',
-            locale: 'en',
-            successUrl: '{{ url_for("billing.success", _external=True) }}',
-            allowLogout: false
+            locale: 'en'
         }
     });
 }
+
 </script>
 {% endblock %}
