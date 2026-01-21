@@ -71,7 +71,9 @@ def index():
     config = get_paddle_config()
     return render_template('billing/index.html', 
                           paddle_client_token=config['client_token'],
-                          paddle_environment=config['environment'])
+                          paddle_environment=config['environment'],
+                          paddle_price_basic=config['price_basic'],
+                          paddle_price_pro=config['price_pro'])
 
 
 @bp.route('/topup')

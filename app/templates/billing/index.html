@@ -267,14 +267,14 @@
 <!-- Paddle.js -->
 <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script>
-Paddle.Environment.set('sandbox');
+Paddle.Environment.set('{{ paddle_environment }}');
 Paddle.Initialize({
-    token: 'test_d75ef02eded87e2c529a473915c'
+    token: '{{ paddle_client_token }}'
 });
 
 const priceIds = {
-    basic: 'pri_01kfft6mchfr6kzny801xtgjb8',
-    pro: 'pri_01kfft4zz0b4mh3azhc93ffq5h'
+    basic: '{{ paddle_price_basic }}',
+    pro: '{{ paddle_price_pro }}'
 };
 
 function openPaddleCheckout(plan) {
