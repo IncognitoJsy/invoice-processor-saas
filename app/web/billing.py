@@ -432,7 +432,30 @@ def get_user_from_paddle_data(data):
 
 def handle_subscription_created(data):
     """Handle subscription.created webhook"""
-    user = get_user_from_paddle_data(data)
+    from app.models.user import User
+    
+    # Try multiple ways to find the user
+    user = None
+    
+    # 1. Try custom_data
+    custom_data = data.get('custom_data') or {}
+    user_id = custom_data.get('user_id')
+    if user_id:
+        user = User.query.get(int(user_id))
+    
+    # 2. Try customer email from the subscription data
+    if not user:
+        customer = data.get('customer') or {}
+        email = customer.get('email')
+        if email:
+            user = User.query.filter_by(email=email).first()
+            current_app.logger.info(f"Found user by email: {email}")
+    
+    # 3. Try customer_id
+    if not user:
+        customer_id = data.get('customer_id')
+        if customer_id:
+            user = User.query.filter_by(paddle_customer_id=customer_id).first()
     
     if not user:
         current_app.logger.warning(f"No user found for subscription: {data.get('id')}")
@@ -444,7 +467,7 @@ def handle_subscription_created(data):
     status = data.get('status')
     
     # Determine plan from price ID
-    items = data.get('items', [])
+    items = data.get('items') or []
     price_id = items[0].get('price', {}).get('id') if items else None
     
     config = get_paddle_config()
@@ -476,6 +499,7 @@ def handle_subscription_created(data):
         
         plan_name = 'Basic' if plan == 'basic' else 'Pro'
         email_service.send_welcome_paid(user, plan_name, dashboard_url)
+        current_app.logger.info(f"Welcome email sent to {user.email}")
     except Exception as e:
         current_app.logger.error(f"Failed to send welcome email: {str(e)}")
 
