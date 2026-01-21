@@ -140,7 +140,7 @@
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span>Redirecting to payment...</span>
+                        <span>Opening checkout...</span>
                     </span>
                 </button>
             </div>
@@ -152,7 +152,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
-                        <p class="font-medium text-gray-900 dark:text-white">Secure payment via Stripe</p>
+                        <p class="font-medium text-gray-900 dark:text-white">Secure payment via Paddle</p>
                         <p>Your purchased invoice credits never expire and carry over between billing periods.</p>
                     </div>
                 </div>
@@ -162,7 +162,18 @@
     </div>
 </div>
 
+{% if can_purchase %}
+<!-- Paddle.js -->
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script>
+// Initialize Paddle
+{% if paddle_environment == 'sandbox' %}
+Paddle.Environment.set('sandbox');
+{% endif %}
+Paddle.Initialize({
+    token: '{{ paddle_client_token }}'
+});
+
 function topupPage() {
     return {
         quantity: 10,
@@ -202,9 +213,7 @@ function topupPage() {
         },
         
         validateCustom() {
-            // Round to nearest 10
             this.customQuantity = Math.round(this.customQuantity / 10) * 10;
-            // Enforce limits
             if (this.customQuantity < 10) this.customQuantity = 10;
             if (this.customQuantity > 500) this.customQuantity = 500;
             this.quantity = this.customQuantity;
@@ -214,31 +223,44 @@ function topupPage() {
             this.loading = true;
             this.error = null;
             
+            const pricePerInvoice = {{ price_per_invoice }};
+            const totalAmount = (this.quantity * pricePerInvoice * 100).toFixed(0); // In pence
+            
             try {
-                const response = await fetch('/billing/topup/checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
+                // Open Paddle checkout with custom price
+                Paddle.Checkout.open({
+                    items: [{
+                        priceId: null, // For custom amounts, we use a different approach
+                        quantity: 1
+                    }],
+                    // For one-time purchases with custom amounts, you need a "top-up" product in Paddle
+                    // OR use the transaction API. For now, we'll use a simplified approach:
+                    customData: {
+                        user_id: '{{ current_user.id }}',
+                        type: 'topup',
                         quantity: this.quantity
-                    })
+                    },
+                    customer: {
+                        email: '{{ current_user.email }}'
+                    },
+                    settings: {
+                        displayMode: 'overlay',
+                        theme: 'light',
+                        locale: 'en',
+                        successUrl: '{{ url_for("billing.topup_success", _external=True) }}?quantity=' + this.quantity,
+                        allowLogout: false
+                    }
                 });
                 
-                const data = await response.json();
-                
-                if (response.ok && data.checkout_url) {
-                    window.location.href = data.checkout_url;
-                } else {
-                    this.error = data.error || 'Failed to create checkout session';
-                    this.loading = false;
-                }
-            } catch (err) {
-                this.error = 'Network error. Please try again.';
                 this.loading = false;
+            } catch (err) {
+                this.error = 'Failed to open checkout. Please try again.';
+                this.loading = false;
+                console.error('Paddle checkout error:', err);
             }
         }
     }
 }
 </script>
+{% endif %}
 {% endblock %}

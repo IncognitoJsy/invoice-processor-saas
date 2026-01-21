@@ -1,9 +1,11 @@
-"""Billing routes for Stripe subscription management"""
+"""Billing routes for Paddle subscription management"""
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
-import stripe
 import os
+import hashlib
+import hmac
+import json
 from datetime import datetime
 
 bp = Blueprint('billing', __name__, url_prefix='/billing')
@@ -11,27 +13,73 @@ bp = Blueprint('billing', __name__, url_prefix='/billing')
 # Top-up pricing: £0.50 per invoice
 TOPUP_PRICE_PER_INVOICE = 0.50
 TOPUP_MIN_QUANTITY = 10
-TOPUP_PRESETS = [10, 20, 30]  # Preset options
+TOPUP_PRESETS = [10, 20, 30]
+
+# Paddle configuration
+def get_paddle_config():
+    """Get Paddle configuration"""
+    return {
+        'api_key': os.getenv('PADDLE_API_KEY'),
+        'client_token': os.getenv('PADDLE_CLIENT_TOKEN'),
+        'webhook_secret': os.getenv('PADDLE_WEBHOOK_SECRET'),
+        'environment': os.getenv('PADDLE_ENV', 'sandbox'),
+        'price_basic': os.getenv('PADDLE_PRICE_BASIC'),
+        'price_pro': os.getenv('PADDLE_PRICE_PRO'),
+    }
 
 
-def get_stripe():
-    """Initialize Stripe with API key"""
-    stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-    return stripe
+def get_paddle_api_url():
+    """Get Paddle API base URL based on environment"""
+    config = get_paddle_config()
+    if config['environment'] == 'production':
+        return 'https://api.paddle.com'
+    return 'https://sandbox-api.paddle.com'
+
+
+def paddle_api_request(method, endpoint, data=None):
+    """Make authenticated request to Paddle API"""
+    import requests
+    
+    config = get_paddle_config()
+    url = f"{get_paddle_api_url()}{endpoint}"
+    
+    headers = {
+        'Authorization': f"Bearer {config['api_key']}",
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        if method == 'GET':
+            response = requests.get(url, headers=headers, params=data)
+        elif method == 'POST':
+            response = requests.post(url, headers=headers, json=data)
+        elif method == 'PATCH':
+            response = requests.patch(url, headers=headers, json=data)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+        
+        return response.json()
+    except Exception as e:
+        current_app.logger.error(f"Paddle API error: {str(e)}")
+        raise
 
 
 @bp.route('/')
 @login_required
 def index():
     """Billing overview page"""
-    return render_template('billing/index.html')
+    config = get_paddle_config()
+    return render_template('billing/index.html', 
+                          paddle_client_token=config['client_token'],
+                          paddle_environment=config['environment'])
 
 
 @bp.route('/topup')
 @login_required
 def topup():
     """Top-up purchase page - only for Basic plan users"""
-    # Check if user can purchase top-ups
+    config = get_paddle_config()
+    
     if current_user.subscription_plan == 'trial':
         return render_template('billing/topup.html', 
                              error="Top-ups are only available for paid subscribers. Please upgrade to Basic or Pro first.",
@@ -47,7 +95,6 @@ def topup():
                              error="Please reactivate your subscription to purchase top-ups.",
                              can_purchase=False)
     
-    # Basic plan - can purchase
     return render_template('billing/topup.html',
                          can_purchase=True,
                          price_per_invoice=TOPUP_PRICE_PER_INVOICE,
@@ -55,24 +102,21 @@ def topup():
                          min_quantity=TOPUP_MIN_QUANTITY,
                          current_bonus=current_user.bonus_invoices or 0,
                          base_remaining=current_user.base_invoices_remaining,
-                         total_remaining=current_user.invoices_remaining)
+                         total_remaining=current_user.invoices_remaining,
+                         paddle_client_token=config['client_token'],
+                         paddle_environment=config['environment'])
 
 
 @bp.route('/topup/checkout', methods=['POST'])
 @login_required
 def topup_checkout():
-    """Create Stripe checkout session for top-up purchase"""
-    s = get_stripe()
-    
-    # Validate user can purchase
+    """Create Paddle checkout for top-up purchase"""
     if current_user.subscription_plan not in ['basic']:
         return jsonify({'error': 'Top-ups are only available for Basic plan subscribers'}), 400
     
-    # Get quantity from request
     data = request.get_json() or {}
     quantity = data.get('quantity', 10)
     
-    # Validate quantity
     try:
         quantity = int(quantity)
     except (ValueError, TypeError):
@@ -87,93 +131,38 @@ def topup_checkout():
     if quantity > 500:
         return jsonify({'error': 'Maximum purchase is 500 invoices at once'}), 400
     
-    # Calculate price in pence (Stripe uses smallest currency unit)
+    # Calculate price in pence
     amount_pence = int(quantity * TOPUP_PRICE_PER_INVOICE * 100)
     
-    try:
-        # Create or get Stripe customer
-        if current_user.stripe_customer_id:
-            customer_id = current_user.stripe_customer_id
-        else:
-            customer = s.Customer.create(
-                email=current_user.email,
-                name=f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email,
-                metadata={'user_id': current_user.id}
-            )
-            current_user.stripe_customer_id = customer.id
-            db.session.commit()
-            customer_id = customer.id
-        
-        # Create checkout session for one-time payment
-        checkout_session = s.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'gbp',
-                    'product_data': {
-                        'name': f'GoZappify Invoice Top-Up ({quantity} invoices)',
-                        'description': f'{quantity} additional invoice processing credits at £{TOPUP_PRICE_PER_INVOICE:.2f} each',
-                    },
-                    'unit_amount': amount_pence,
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url=request.host_url + f'billing/topup/success?session_id={{CHECKOUT_SESSION_ID}}&quantity={quantity}',
-            cancel_url=request.host_url + 'billing/topup',
-            metadata={
-                'user_id': current_user.id,
-                'type': 'topup',
-                'quantity': quantity
-            }
-        )
-        
-        return jsonify({'checkout_url': checkout_session.url})
-        
-    except Exception as e:
-        current_app.logger.error(f"Stripe top-up checkout error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+    # Return data for Paddle.js overlay checkout
+    return jsonify({
+        'success': True,
+        'checkout_data': {
+            'user_id': current_user.id,
+            'user_email': current_user.email,
+            'quantity': quantity,
+            'amount': amount_pence,
+            'type': 'topup'
+        }
+    })
 
 
 @bp.route('/topup/success')
 @login_required
 def topup_success():
     """Handle successful top-up purchase"""
-    s = get_stripe()
-    session_id = request.args.get('session_id')
+    # Get quantity from URL params (set by Paddle passthrough)
     quantity = request.args.get('quantity', 0, type=int)
     
-    if session_id:
-        try:
-            session = s.checkout.Session.retrieve(session_id)
-            
-            # Verify payment was successful
-            if session.payment_status == 'paid':
-                # Get quantity from metadata (more reliable)
-                quantity = int(session.metadata.get('quantity', quantity))
-                
-                # Check if this session was already processed (prevent double-credit)
-                # We'll use a simple check - if bonus_invoices was recently updated
-                # In production, you'd want to store processed session IDs
-                
-                # Add bonus invoices to user
-                current_user.add_bonus_invoices(quantity)
-                db.session.commit()
-                
-                current_app.logger.info(f"User {current_user.id} purchased {quantity} top-up invoices")
-                
-                return render_template('billing/topup_success.html',
-                                     quantity=quantity,
-                                     total_bonus=current_user.bonus_invoices,
-                                     total_remaining=current_user.invoices_remaining)
-            else:
-                current_app.logger.warning(f"Top-up payment not complete: {session.payment_status}")
-                return redirect(url_for('billing.topup'))
-                
-        except Exception as e:
-            current_app.logger.error(f"Error processing top-up success: {str(e)}")
-            return redirect(url_for('billing.topup'))
+    if quantity > 0:
+        # Add bonus invoices (webhook should also handle this, but this is backup)
+        # Check if already credited by looking at recent transactions
+        current_app.logger.info(f"Top-up success page: User {current_user.id}, quantity {quantity}")
+        
+        return render_template('billing/topup_success.html',
+                             quantity=quantity,
+                             total_bonus=current_user.bonus_invoices or 0,
+                             total_remaining=current_user.invoices_remaining)
     
     return redirect(url_for('billing.topup'))
 
@@ -181,147 +170,86 @@ def topup_success():
 @bp.route('/subscribe/<plan>')
 @login_required
 def subscribe(plan):
-    """Create Stripe checkout session for subscription"""
-    s = get_stripe()
+    """Return subscription data for Paddle checkout overlay"""
+    config = get_paddle_config()
     
     price_ids = {
-        'basic': os.getenv('STRIPE_BASIC_PRICE_ID'),
-        'pro': os.getenv('STRIPE_PRO_PRICE_ID')
+        'basic': config['price_basic'],
+        'pro': config['price_pro']
     }
     
     if plan not in price_ids:
         return jsonify({'error': 'Invalid plan'}), 400
     
-    try:
-        # Create or get Stripe customer
-        if current_user.stripe_customer_id:
-            customer_id = current_user.stripe_customer_id
-        else:
-            customer = s.Customer.create(
-                email=current_user.email,
-                name=f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email,
-                metadata={'user_id': current_user.id}
-            )
-            current_user.stripe_customer_id = customer.id
-            db.session.commit()
-            customer_id = customer.id
-        
-        # Create checkout session
-        checkout_session = s.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=['card'],
-            line_items=[{
-                'price': price_ids[plan],
-                'quantity': 1,
-            }],
-            mode='subscription',
-            success_url=request.host_url + 'billing/success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=request.host_url + 'billing/',
-            metadata={
-                'user_id': current_user.id,
-                'plan': plan
-            }
-        )
-        
-        return redirect(checkout_session.url)
-        
-    except Exception as e:
-        current_app.logger.error(f"Stripe checkout error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+    # Return data for the frontend to open Paddle checkout
+    return jsonify({
+        'success': True,
+        'price_id': price_ids[plan],
+        'plan': plan,
+        'user_email': current_user.email,
+        'user_id': current_user.id
+    })
 
 
 @bp.route('/success')
 @login_required
 def success():
-    """Handle successful subscription"""
-    s = get_stripe()
-    session_id = request.args.get('session_id')
-    
-    if session_id:
-        try:
-            session = s.checkout.Session.retrieve(session_id)
-            subscription = s.Subscription.retrieve(session.subscription)
-            
-            # Determine plan from price
-            basic_price = os.getenv('STRIPE_BASIC_PRICE_ID')
-            pro_price = os.getenv('STRIPE_PRO_PRICE_ID')
-            
-            price_id = subscription['items']['data'][0]['price']['id']
-            
-            if price_id == basic_price:
-                plan = 'basic'
-            elif price_id == pro_price:
-                plan = 'pro'
-            else:
-                plan = 'basic'
-            
-            # Update user - use start_paid_subscription to reset billing period
-            current_user.start_paid_subscription(plan)
-            current_user.subscription_status = 'active'
-            current_user.stripe_subscription_id = subscription.id
-            current_user.trial_ends_at = None  # Clear trial
-            db.session.commit()
-            
-            current_app.logger.info(f"User {current_user.id} subscribed to {plan}")
-            
-            # Send welcome email
-            try:
-                from app.services.email_service import get_email_service
-                email_service = get_email_service()
-                dashboard_url = request.host_url + 'dashboard'
-                plan_name = 'Basic' if plan == 'basic' else 'Pro'
-                email_service.send_welcome_paid(current_user, plan_name, dashboard_url)
-                current_app.logger.info(f"Welcome email sent to {current_user.email}")
-            except Exception as e:
-                current_app.logger.error(f"Failed to send welcome email: {str(e)}")
-            
-        except Exception as e:
-            current_app.logger.error(f"Error processing subscription success: {str(e)}")
-    
+    """Subscription success page"""
     return render_template('billing/success.html')
 
 
 @bp.route('/manage')
 @login_required
 def manage():
-    """Redirect to Stripe customer portal for subscription management"""
-    s = get_stripe()
-    
-    if not current_user.stripe_customer_id:
+    """Redirect to Paddle customer portal or show management options"""
+    if not current_user.paddle_subscription_id:
         return redirect(url_for('billing.index'))
     
+    # For Paddle, we can either:
+    # 1. Use Paddle's customer portal (if enabled)
+    # 2. Show our own management page
+    
+    # Try to get cancel URL from Paddle
     try:
-        portal_session = s.billing_portal.Session.create(
-            customer=current_user.stripe_customer_id,
-            return_url=request.host_url + 'billing/',
-        )
-        return redirect(portal_session.url)
+        config = get_paddle_config()
+        if current_user.paddle_subscription_id:
+            response = paddle_api_request('GET', f"/subscriptions/{current_user.paddle_subscription_id}")
+            if response.get('data'):
+                # Paddle provides management URLs in subscription data
+                management_urls = response['data'].get('management_urls', {})
+                cancel_url = management_urls.get('cancel')
+                update_payment_url = management_urls.get('update_payment_method')
+                
+                return render_template('billing/manage.html',
+                                     cancel_url=cancel_url,
+                                     update_payment_url=update_payment_url,
+                                     subscription=response['data'])
     except Exception as e:
-        current_app.logger.error(f"Stripe portal error: {str(e)}")
-        return redirect(url_for('billing.index'))
+        current_app.logger.error(f"Error getting Paddle subscription: {str(e)}")
+    
+    return redirect(url_for('billing.index'))
 
 
 @bp.route('/cancel', methods=['POST'])
 @login_required
 def cancel():
     """Cancel subscription"""
-    s = get_stripe()
-    
-    if not current_user.stripe_subscription_id:
+    if not current_user.paddle_subscription_id:
         return jsonify({'error': 'No active subscription'}), 400
     
     try:
-        # Cancel at period end (user keeps access until end of billing period)
-        s.Subscription.modify(
-            current_user.stripe_subscription_id,
-            cancel_at_period_end=True
-        )
+        # Cancel at period end
+        response = paddle_api_request('POST', f"/subscriptions/{current_user.paddle_subscription_id}/cancel", {
+            'effective_from': 'next_billing_period'
+        })
         
-        current_user.subscription_status = 'cancelled'
-        db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Subscription will cancel at end of billing period'})
-        
+        if response.get('data'):
+            current_user.subscription_status = 'cancelled'
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Subscription will cancel at end of billing period'})
+        else:
+            return jsonify({'error': response.get('error', {}).get('detail', 'Cancellation failed')}), 500
+            
     except Exception as e:
         current_app.logger.error(f"Cancellation error: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -329,155 +257,240 @@ def cancel():
 
 @bp.route('/webhook', methods=['POST'])
 def webhook():
-    """Handle Stripe webhooks"""
-    s = get_stripe()
+    """Handle Paddle webhooks"""
     payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+    signature = request.headers.get('Paddle-Signature')
+    
+    config = get_paddle_config()
+    webhook_secret = config['webhook_secret']
+    
+    # Verify webhook signature
+    if webhook_secret and signature:
+        if not verify_paddle_signature(payload, signature, webhook_secret):
+            current_app.logger.error("Invalid Paddle webhook signature")
+            return jsonify({'error': 'Invalid signature'}), 400
     
     try:
-        if webhook_secret:
-            event = s.Webhook.construct_event(payload, sig_header, webhook_secret)
-        else:
-            event = s.Event.construct_from(request.get_json(), s.api_key)
-    except Exception as e:
-        current_app.logger.error(f"Webhook error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        event = json.loads(payload)
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON'}), 400
     
-    # Handle events
-    event_type = event['type']
-    data = event['data']['object']
+    event_type = event.get('event_type')
+    data = event.get('data', {})
     
-    current_app.logger.info(f"Stripe webhook received: {event_type}")
+    current_app.logger.info(f"Paddle webhook received: {event_type}")
+    current_app.logger.debug(f"Webhook data: {json.dumps(data, indent=2)}")
     
-    if event_type == 'checkout.session.completed':
-        handle_checkout_completed(data)
-    elif event_type == 'customer.subscription.updated':
+    # Handle different event types
+    if event_type == 'subscription.created':
+        handle_subscription_created(data)
+    elif event_type == 'subscription.updated':
         handle_subscription_updated(data)
-    elif event_type == 'customer.subscription.deleted':
-        handle_subscription_deleted(data)
-    elif event_type == 'invoice.payment_failed':
-        handle_payment_failed(data)
-    elif event_type == 'invoice.payment_succeeded':
-        handle_payment_succeeded(data)
+    elif event_type == 'subscription.canceled':
+        handle_subscription_canceled(data)
+    elif event_type == 'subscription.paused':
+        handle_subscription_paused(data)
+    elif event_type == 'transaction.completed':
+        handle_transaction_completed(data)
     
     return jsonify({'received': True})
 
 
-def handle_checkout_completed(session):
-    """Handle checkout.session.completed webhook"""
+def verify_paddle_signature(payload, signature, secret):
+    """Verify Paddle webhook signature"""
+    try:
+        # Parse the signature header
+        # Format: ts=timestamp;h1=hash
+        parts = dict(part.split('=') for part in signature.split(';'))
+        timestamp = parts.get('ts')
+        received_hash = parts.get('h1')
+        
+        if not timestamp or not received_hash:
+            return False
+        
+        # Build the signed payload
+        signed_payload = f"{timestamp}:{payload.decode('utf-8')}"
+        
+        # Calculate expected signature
+        expected_hash = hmac.new(
+            secret.encode('utf-8'),
+            signed_payload.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+        return hmac.compare_digest(expected_hash, received_hash)
+    except Exception as e:
+        current_app.logger.error(f"Signature verification error: {str(e)}")
+        return False
+
+
+def get_user_from_paddle_data(data):
+    """Extract user from Paddle webhook data"""
     from app.models.user import User
     
-    customer_id = session.get('customer')
-    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+    # Try to get user from custom_data first
+    custom_data = data.get('custom_data', {})
+    user_id = custom_data.get('user_id')
+    
+    if user_id:
+        user = User.query.get(int(user_id))
+        if user:
+            return user
+    
+    # Try customer email
+    customer = data.get('customer', {})
+    email = customer.get('email')
+    
+    if email:
+        user = User.query.filter_by(email=email).first()
+        if user:
+            return user
+    
+    # Try paddle_customer_id
+    customer_id = data.get('customer_id') or customer.get('id')
+    if customer_id:
+        user = User.query.filter_by(paddle_customer_id=customer_id).first()
+        if user:
+            return user
+    
+    return None
+
+
+def handle_subscription_created(data):
+    """Handle subscription.created webhook"""
+    user = get_user_from_paddle_data(data)
     
     if not user:
-        current_app.logger.warning(f"No user found for customer {customer_id}")
+        current_app.logger.warning(f"No user found for subscription: {data.get('id')}")
         return
     
-    # Check if this is a top-up purchase
-    metadata = session.get('metadata', {})
-    if metadata.get('type') == 'topup':
-        quantity = int(metadata.get('quantity', 0))
-        if quantity > 0 and session.get('payment_status') == 'paid':
-            user.add_bonus_invoices(quantity)
-            db.session.commit()
-            current_app.logger.info(f"Webhook: Added {quantity} top-up invoices to user {user.id}")
-        return
+    # Get subscription details
+    subscription_id = data.get('id')
+    customer_id = data.get('customer_id')
+    status = data.get('status')
     
-    # Regular subscription checkout
-    plan = metadata.get('plan', 'basic')
-    plan_name = 'Basic' if plan == 'basic' else 'Pro'
+    # Determine plan from price ID
+    items = data.get('items', [])
+    price_id = items[0].get('price', {}).get('id') if items else None
+    
+    config = get_paddle_config()
+    if price_id == config['price_basic']:
+        plan = 'basic'
+    elif price_id == config['price_pro']:
+        plan = 'pro'
+    else:
+        plan = 'basic'  # Default
+    
+    # Update user
+    user.paddle_customer_id = customer_id
+    user.paddle_subscription_id = subscription_id
+    user.subscription_plan = plan
+    user.subscription_status = 'active' if status == 'active' else status
+    user.subscription_started_at = datetime.utcnow()
+    user.bonus_invoices = 0  # Reset bonus on new subscription
+    
+    db.session.commit()
+    current_app.logger.info(f"Subscription created for user {user.id}: {plan}")
     
     # Send welcome email
     try:
         from app.services.email_service import get_email_service
         email_service = get_email_service()
         
-        base_url = os.getenv('APP_URL', 'https://invoice-processor-saas-production.up.railway.app')
+        base_url = os.getenv('APP_URL', 'https://gozappify.com')
         dashboard_url = f"{base_url}/dashboard"
         
+        plan_name = 'Basic' if plan == 'basic' else 'Pro'
         email_service.send_welcome_paid(user, plan_name, dashboard_url)
-        current_app.logger.info(f"Welcome email sent to {user.email} via webhook")
     except Exception as e:
-        current_app.logger.error(f"Failed to send welcome email via webhook: {str(e)}")
+        current_app.logger.error(f"Failed to send welcome email: {str(e)}")
 
 
-def handle_subscription_updated(subscription):
-    """Handle subscription update webhook"""
-    from app.models.user import User
-    
-    customer_id = subscription.get('customer')
-    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+def handle_subscription_updated(data):
+    """Handle subscription.updated webhook"""
+    user = get_user_from_paddle_data(data)
     
     if not user:
-        current_app.logger.warning(f"No user found for customer {customer_id}")
-        return
+        subscription_id = data.get('id')
+        # Try to find by subscription ID
+        from app.models.user import User
+        user = User.query.filter_by(paddle_subscription_id=subscription_id).first()
+        
+        if not user:
+            current_app.logger.warning(f"No user found for subscription update: {subscription_id}")
+            return
     
-    status = subscription.get('status')
+    status = data.get('status')
     
+    # Check if this is a renewal
+    billing_cycle = data.get('current_billing_period', {})
+    if billing_cycle:
+        period_start = billing_cycle.get('starts_at')
+        if period_start:
+            # This might be a renewal - reset billing period
+            user.renew_subscription()
+            current_app.logger.info(f"Subscription renewed for user {user.id}")
+    
+    # Update status
     if status == 'active':
         user.subscription_status = 'active'
-        # Check if this is a renewal (subscription already existed)
-        if user.stripe_subscription_id == subscription.get('id'):
-            # This might be a renewal - check billing cycle
-            current_period_start = subscription.get('current_period_start')
-            if current_period_start:
-                from datetime import datetime
-                period_start = datetime.fromtimestamp(current_period_start)
-                # If period start is recent (within last day), this is likely a renewal
-                if (datetime.utcnow() - period_start).days < 1:
-                    user.renew_subscription()
-                    current_app.logger.info(f"Renewed subscription for user {user.id}")
     elif status == 'past_due':
         user.subscription_status = 'past_due'
-    elif status in ['canceled', 'unpaid']:
+    elif status in ['canceled', 'paused']:
         user.subscription_status = 'cancelled'
-        user.subscription_plan = 'cancelled'
     
     db.session.commit()
-    current_app.logger.info(f"Updated user {user.id} subscription status to {status}")
+    current_app.logger.info(f"Subscription updated for user {user.id}: status={status}")
 
 
-def handle_subscription_deleted(subscription):
-    """Handle subscription cancellation webhook"""
+def handle_subscription_canceled(data):
+    """Handle subscription.canceled webhook"""
     from app.models.user import User
     
-    customer_id = subscription.get('customer')
-    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+    subscription_id = data.get('id')
+    user = User.query.filter_by(paddle_subscription_id=subscription_id).first()
     
     if user:
         user.subscription_plan = 'cancelled'
         user.subscription_status = 'cancelled'
-        user.stripe_subscription_id = None
         db.session.commit()
-        current_app.logger.info(f"Cancelled subscription for user {user.id}")
+        current_app.logger.info(f"Subscription cancelled for user {user.id}")
 
 
-def handle_payment_failed(invoice):
-    """Handle failed payment webhook"""
+def handle_subscription_paused(data):
+    """Handle subscription.paused webhook"""
     from app.models.user import User
     
-    customer_id = invoice.get('customer')
-    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+    subscription_id = data.get('id')
+    user = User.query.filter_by(paddle_subscription_id=subscription_id).first()
     
     if user:
-        user.subscription_status = 'past_due'
+        user.subscription_status = 'paused'
         db.session.commit()
-        current_app.logger.info(f"Payment failed for user {user.id}")
+        current_app.logger.info(f"Subscription paused for user {user.id}")
 
 
-def handle_payment_succeeded(invoice):
-    """Handle successful payment webhook"""
-    from app.models.user import User
+def handle_transaction_completed(data):
+    """Handle transaction.completed webhook - used for one-time purchases like top-ups"""
+    # Check if this is a top-up purchase
+    custom_data = data.get('custom_data', {})
     
-    customer_id = invoice.get('customer')
-    user = User.query.filter_by(stripe_customer_id=customer_id).first()
-    
-    if user and user.subscription_status == 'past_due':
-        user.subscription_status = 'active'
-        db.session.commit()
-        current_app.logger.info(f"Payment succeeded for user {user.id}")
+    if custom_data.get('type') == 'topup':
+        user_id = custom_data.get('user_id')
+        quantity = custom_data.get('quantity', 0)
+        
+        if user_id and quantity:
+            from app.models.user import User
+            user = User.query.get(int(user_id))
+            
+            if user:
+                # Check if this transaction was already processed
+                transaction_id = data.get('id')
+                # In production, you'd want to store processed transaction IDs
+                
+                user.add_bonus_invoices(int(quantity))
+                db.session.commit()
+                current_app.logger.info(f"Added {quantity} top-up invoices to user {user.id}")
 
 
 @bp.route('/api/status')

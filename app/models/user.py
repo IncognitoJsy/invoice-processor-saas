@@ -16,15 +16,22 @@ class User(db.Model, UserMixin):
     
     # Subscription fields
     subscription_plan = db.Column(db.String(20), default='trial')  # trial, basic, pro, cancelled
-    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, cancelled
+    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, cancelled, paused
+    
+    # Paddle fields (replacing Stripe)
+    paddle_customer_id = db.Column(db.String(255))
+    paddle_subscription_id = db.Column(db.String(255))
+    
+    # Keep Stripe fields for migration/backwards compatibility (can remove later)
     stripe_customer_id = db.Column(db.String(255))
     stripe_subscription_id = db.Column(db.String(255))
+    
     trial_ends_at = db.Column(db.DateTime)
     subscription_ends_at = db.Column(db.DateTime)
-    subscription_started_at = db.Column(db.DateTime)  # NEW: Track billing period start
+    subscription_started_at = db.Column(db.DateTime)
     
     # Bonus invoices (purchased top-ups)
-    bonus_invoices = db.Column(db.Integer, default=0)  # NEW: Extra invoices purchased
+    bonus_invoices = db.Column(db.Integer, default=0)
 
     # Setup wizard & onboarding
     setup_completed = db.Column(db.Boolean, default=False)
@@ -58,12 +65,12 @@ class User(db.Model, UserMixin):
         """Start a paid subscription - resets quota"""
         self.subscription_plan = plan
         self.subscription_status = 'active'
-        self.subscription_started_at = datetime.utcnow()  # Reset billing period
-        self.bonus_invoices = 0  # Reset bonus invoices on new subscription
+        self.subscription_started_at = datetime.utcnow()
+        self.bonus_invoices = 0
     
     def renew_subscription(self):
-        """Called when subscription renews (e.g., from Stripe webhook)"""
-        self.subscription_started_at = datetime.utcnow()  # Reset billing period
+        """Called when subscription renews (e.g., from Paddle webhook)"""
+        self.subscription_started_at = datetime.utcnow()
         # Note: bonus_invoices are NOT reset on renewal - they carry over
     
     def add_bonus_invoices(self, count):
@@ -90,13 +97,10 @@ class User(db.Model, UserMixin):
     @property
     def has_active_subscription(self):
         """Check if user has active paid subscription or valid trial"""
-        # Admin always has access
         if self.is_admin:
             return True
-        # Check paid subscription
         if self.subscription_plan in ['basic', 'pro'] and self.subscription_status == 'active':
             return True
-        # Check trial
         if self.is_trial_active:
             return True
         return False
@@ -110,11 +114,11 @@ class User(db.Model, UserMixin):
     def monthly_invoice_limit(self):
         """Get monthly invoice limit based on plan"""
         if self.is_admin:
-            return float('inf')  # Unlimited for admin
+            return float('inf')
         limits = {
-            'trial': 25,  # Updated from 10 to 25
+            'trial': 25,
             'basic': 100,
-            'pro': float('inf'),  # Unlimited
+            'pro': float('inf'),
             'cancelled': 0
         }
         return limits.get(self.subscription_plan, 0)
@@ -123,16 +127,12 @@ class User(db.Model, UserMixin):
     def billing_period_start(self):
         """Get the start of the current billing period"""
         if self.subscription_plan == 'trial':
-            # For trial, use account creation date
             return self.created_at
         
         if self.subscription_started_at:
-            # Calculate current billing period based on subscription start
             now = datetime.utcnow()
             start = self.subscription_started_at
             
-            # Find the most recent billing period start
-            # (subscription_started_at + N months where result <= now)
             months_elapsed = 0
             while True:
                 next_period = start + timedelta(days=30 * (months_elapsed + 1))
@@ -142,7 +142,6 @@ class User(db.Model, UserMixin):
             
             return start + timedelta(days=30 * months_elapsed)
         
-        # Fallback to first of calendar month (legacy behavior)
         return datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     def get_invoices_this_period(self):
@@ -156,7 +155,6 @@ class User(db.Model, UserMixin):
         ).count()
         return count
     
-    # Keep old method for backward compatibility but use new logic
     def get_invoices_this_month(self):
         """Get count of invoices uploaded this billing period (deprecated name)"""
         return self.get_invoices_this_period()
@@ -170,8 +168,6 @@ class User(db.Model, UserMixin):
         
         used = self.get_invoices_this_period()
         base_remaining = max(0, limit - used)
-        
-        # Add bonus invoices
         bonus = self.bonus_invoices or 0
         
         return base_remaining + bonus
@@ -205,13 +201,9 @@ class User(db.Model, UserMixin):
         if self.invoices_remaining < count:
             return False
         
-        # Bonus invoices are used first (they're explicitly tracked)
-        # Base allowance is implicitly tracked via invoice count
-        # So we only need to deduct from bonus if base is exhausted
         base_remaining = self.base_invoices_remaining
         
         if base_remaining < count:
-            # Need to use some bonus invoices
             bonus_needed = count - base_remaining
             self.bonus_invoices = max(0, (self.bonus_invoices or 0) - bonus_needed)
         
@@ -234,7 +226,6 @@ class User(db.Model, UserMixin):
         if not self.subscription_started_at:
             return None
         
-        # Next renewal is subscription_started_at + 30 days from current period
         period_start = self.billing_period_start
         next_renewal = period_start + timedelta(days=30)
         days = (next_renewal - datetime.utcnow()).days

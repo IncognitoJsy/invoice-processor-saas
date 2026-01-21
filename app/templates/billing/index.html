@@ -104,7 +104,7 @@
                             <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span class="text-gray-700 dark:text-gray-300">QuickBooks integration</span>
+                            <span class="text-gray-700 dark:text-gray-300">QuickBooks & Xero integration</span>
                         </li>
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,7 +122,7 @@
                             <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span class="text-gray-700 dark:text-gray-300">Buy extra invoices at £0.50 each</span>
+                            <span class="text-gray-700 dark:text-gray-300">Buy extra invoices at £0.50/each</span>
                         </li>
                     </ul>
                     
@@ -132,9 +132,9 @@
                             Current Plan
                         </button>
                         {% else %}
-                        <a href="{{ url_for('billing.subscribe', plan='basic') }}" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-center transition">
+                        <button onclick="openPaddleCheckout('basic')" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">
                             Subscribe to Basic
-                        </a>
+                        </button>
                         {% endif %}
                     </div>
                 </div>
@@ -178,7 +178,7 @@
                             <svg class="w-5 h-5 text-purple-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span class="text-gray-700 dark:text-gray-300">QuickBooks integration</span>
+                            <span class="text-gray-700 dark:text-gray-300">QuickBooks & Xero integration</span>
                         </li>
                         <li class="flex items-center">
                             <svg class="w-5 h-5 text-purple-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,9 +212,9 @@
                             Current Plan
                         </button>
                         {% else %}
-                        <a href="{{ url_for('billing.subscribe', plan='pro') }}" class="block w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-center transition">
+                        <button onclick="openPaddleCheckout('pro')" class="w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">
                             Subscribe to Pro
-                        </a>
+                        </button>
                         {% endif %}
                     </div>
                 </div>
@@ -248,8 +248,8 @@
                 </div>
                 
                 <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                    <h3 class="font-semibold text-gray-900 dark:text-white">Do you support Xero or Sage?</h3>
-                    <p class="mt-2 text-gray-600 dark:text-gray-400">Not yet, but we're working on it! QuickBooks is fully supported, and more integrations are coming soon.</p>
+                    <h3 class="font-semibold text-gray-900 dark:text-white">What accounting software do you support?</h3>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">We fully support QuickBooks Online and Xero. More integrations are coming soon!</p>
                 </div>
             </div>
         </div>
@@ -263,4 +263,49 @@
         
     </div>
 </div>
+
+<!-- Paddle.js -->
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+// Initialize Paddle
+{% if paddle_environment == 'sandbox' %}
+Paddle.Environment.set('sandbox');
+{% endif %}
+Paddle.Initialize({
+    token: '{{ paddle_client_token }}'
+});
+
+// Price IDs
+const priceIds = {
+    basic: '{{ config("PADDLE_PRICE_BASIC") or "pri_01kfft6mchfr6kzny801xtgjb8" }}',
+    pro: '{{ config("PADDLE_PRICE_PRO") or "pri_01kfft4zz0b4mh3azhc93ffq5h" }}'
+};
+
+function openPaddleCheckout(plan) {
+    const priceId = priceIds[plan];
+    
+    if (!priceId) {
+        alert('Invalid plan selected');
+        return;
+    }
+    
+    Paddle.Checkout.open({
+        items: [{ priceId: priceId, quantity: 1 }],
+        customer: {
+            email: '{{ current_user.email }}'
+        },
+        customData: {
+            user_id: '{{ current_user.id }}',
+            plan: plan
+        },
+        settings: {
+            displayMode: 'overlay',
+            theme: 'light',
+            locale: 'en',
+            successUrl: '{{ url_for("billing.success", _external=True) }}',
+            allowLogout: false
+        }
+    });
+}
+</script>
 {% endblock %}
