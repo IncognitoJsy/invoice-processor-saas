@@ -420,41 +420,59 @@ def handle_transaction_completed(data):
     from app.models.user import User
     
     custom_data = data.get('custom_data') or {}
+    user = None
+    quantity = 0
     
-    # Check if this is a top-up purchase
+    # Check if this is a top-up purchase via custom_data
     if custom_data.get('type') == 'topup':
         user_id = custom_data.get('user_id')
-        quantity = custom_data.get('quantity', 0)
+        quantity = int(custom_data.get('quantity', 0))
         
         if user_id and quantity:
             user = User.query.get(int(user_id))
-            
-            if user:
-                user.add_bonus_invoices(int(quantity))
-                db.session.commit()
-                current_app.logger.info(f"Webhook: Added {quantity} top-up invoices to user {user.id}")
-                return
     
-    # Also check items for top-up price
-    items = data.get('items') or []
-    config = get_paddle_config()
-    
-    for item in items:
-        price_id = item.get('price', {}).get('id')
-        quantity = item.get('quantity', 0)
+    # Also check items for top-up price if not found via custom_data
+    if not user:
+        items = data.get('items') or []
+        config = get_paddle_config()
         
-        if price_id == config.get('price_topup') and quantity > 0:
-            # This is a top-up purchase - find user by email
-            customer = data.get('customer') or {}
-            email = customer.get('email')
+        for item in items:
+            price_id = item.get('price', {}).get('id')
+            item_quantity = item.get('quantity', 0)
             
-            if email:
-                user = User.query.filter_by(email=email).first()
-                if user:
-                    user.add_bonus_invoices(int(quantity))
-                    db.session.commit()
-                    current_app.logger.info(f"Webhook: Added {quantity} top-up invoices to user {user.id} (by email)")
-                    return
+            if price_id == config.get('price_topup') and item_quantity > 0:
+                quantity = int(item_quantity)
+                # Find user by email
+                customer = data.get('customer') or {}
+                email = customer.get('email')
+                
+                if email:
+                    user = User.query.filter_by(email=email).first()
+                break
+    
+    # Add credits and send confirmation email
+    if user and quantity > 0:
+        user.add_bonus_invoices(quantity)
+        db.session.commit()
+        current_app.logger.info(f"Webhook: Added {quantity} top-up invoices to user {user.id}")
+        
+        # Send confirmation email
+        try:
+            from app.services.email_service import get_email_service
+            email_service = get_email_service()
+            
+            base_url = os.getenv('APP_URL', 'https://gozappify.com')
+            dashboard_url = f"{base_url}/dashboard"
+            
+            # Get total credits (bonus + remaining from plan)
+            total_credits = user.invoices_remaining
+            if total_credits == float('inf'):
+                total_credits = 'Unlimited'
+            
+            email_service.send_topup_confirmation(user, quantity, total_credits, dashboard_url)
+            current_app.logger.info(f"Top-up confirmation email sent to {user.email}")
+        except Exception as e:
+            current_app.logger.error(f"Failed to send top-up confirmation email: {str(e)}")
 
 
 @bp.route('/api/status')

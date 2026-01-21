@@ -221,6 +221,60 @@ TEMPLATES = {
 </body>
 </html>
 '''
+    },
+    
+    'topup_confirmation': {
+        'subject': 'Your GoZappify invoice credits have been added ✓',
+        'html': '''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 40px 20px;">
+    <div style="max-width: 500px; margin: 0 auto; background: #1f2937; border-radius: 16px; overflow: hidden;">
+        <div style="padding: 40px; text-align: center; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <img src="''' + LOGO_URL + '''" alt="GoZappify" style="height: 50px; width: auto;" />
+        </div>
+        <div style="padding: 40px; color: #e5e7eb;">
+            <h2 style="color: white; margin: 0 0 20px;">Credits Added Successfully! ✓</h2>
+            <p style="margin: 0 0 30px; line-height: 1.6;">
+                Hi {{first_name}},<br><br>
+                Your purchase has been completed and your invoice credits have been added to your account.
+            </p>
+            <div style="background: #374151; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
+                <div style="text-align: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #4b5563;">
+                    <p style="margin: 0; color: #9ca3af; font-size: 14px;">Credits purchased</p>
+                    <p style="margin: 10px 0 0; color: #10b981; font-size: 36px; font-weight: 700;">+{{quantity}}</p>
+                    <p style="margin: 5px 0 0; color: #9ca3af; font-size: 14px;">invoice credits</p>
+                </div>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #9ca3af;">Amount paid</td>
+                        <td style="padding: 8px 0; color: white; font-weight: 600; text-align: right;">£{{amount}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #9ca3af;">New balance</td>
+                        <td style="padding: 8px 0; color: #10b981; font-weight: 600; text-align: right;">{{total_credits}} credits</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #9ca3af;">Purchase date</td>
+                        <td style="padding: 8px 0; color: white; text-align: right;">{{purchase_date}}</td>
+                    </tr>
+                </table>
+            </div>
+            <a href="{{dashboard_url}}" style="display: block; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: 600; text-align: center;">
+                Go to Dashboard
+            </a>
+            <p style="margin: 30px 0 0; font-size: 14px; color: #9ca3af; text-align: center;">
+                Your credits never expire and carry over between billing periods.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+'''
     }
 }
 
@@ -334,6 +388,21 @@ class EmailService:
             template_name='trial_expired',
             first_name=user.first_name or 'there',
             billing_url=billing_url
+        )
+    
+    def send_topup_confirmation(self, user, quantity: int, total_credits: int, dashboard_url: str):
+        """Send top-up purchase confirmation"""
+        amount = f"{quantity * 0.50:.2f}"  # £0.50 per credit
+        
+        return self.send_email(
+            to=user.email,
+            template_name='topup_confirmation',
+            first_name=user.first_name or 'there',
+            quantity=quantity,
+            amount=amount,
+            total_credits=total_credits,
+            purchase_date=datetime.utcnow().strftime('%B %d, %Y'),
+            dashboard_url=dashboard_url
         )
 
 
