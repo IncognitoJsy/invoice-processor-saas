@@ -101,7 +101,10 @@
                                 {% if current_user.subscription_plan == 'pro' %}
                                     Unlimited invoices
                                 {% else %}
-                                    {{ current_user.invoices_remaining }}/{{ current_user.monthly_invoice_limit|int }} invoices remaining this month
+                                    {{ current_user.invoices_remaining }} invoices remaining this month
+                                    {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
+                                        (includes {{ current_user.bonus_invoices }} bonus)
+                                    {% endif %}
                                 {% endif %}
                             </p>
                         </div>
@@ -124,7 +127,7 @@
                         </div>
                         <div>
                             <h2 class="text-2xl font-bold">No Active Subscription</h2>
-                            <p class="text-gray-300">Subscribe to upload invoices and sync to accounting software</p>
+                            <p class="text-gray-300">Subscribe to start processing invoices</p>
                         </div>
                     </div>
                     <a href="{{ url_for('billing.index') }}" class="inline-flex items-center px-6 py-3 bg-white text-gray-700 rounded-lg font-semibold hover:bg-gray-100 transition">
@@ -135,8 +138,8 @@
             {% endif %}
         </div>
         
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <!-- Invoices This Month -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
@@ -150,14 +153,14 @@
                         <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ invoices_this_month }}</p>
                     </div>
                 </div>
-                {% if invoice_limit != 'Unlimited' %}
+                {% if current_user.subscription_plan == 'basic' %}
                 <div class="mt-4">
-                    <div class="flex justify-between text-xs text-gray-500 mb-1">
+                    <div class="text-xs text-gray-500 dark:text-gray-400 flex justify-between mb-1">
                         <span>Usage</span>
-                        <span>{{ invoices_this_month }}/{{ invoice_limit }}</span>
+                        <span>{{ invoices_this_month }}/{{ current_user.monthly_invoice_limit|int }}</span>
                     </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div class="bg-blue-600 h-2 rounded-full transition-all {% if usage_percent > 80 %}bg-amber-500{% endif %} {% if usage_percent >= 100 %}bg-red-500{% endif %}" style="width: {{ usage_percent }}%"></div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ (invoices_this_month / current_user.monthly_invoice_limit * 100)|int }}%"></div>
                     </div>
                 </div>
                 {% endif %}
@@ -168,7 +171,7 @@
                 <div class="flex items-center">
                     <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
                         <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                         </svg>
                     </div>
                     <div class="ml-4">
@@ -178,22 +181,45 @@
                 </div>
             </div>
             
-            <!-- QuickBooks Status -->
+            <!-- Accounting Integration -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
-                    <div class="p-3 {% if qb_connected %}bg-green-100 dark:bg-green-900/30{% else %}bg-gray-100 dark:bg-gray-700{% endif %} rounded-lg">
-                        <svg class="w-6 h-6 {% if qb_connected %}text-green-600 dark:text-green-400{% else %}text-gray-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {% if xero_connected %}
+                    <!-- Xero Connected -->
+                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Xero</p>
+                        <p class="text-lg font-semibold text-blue-600 dark:text-blue-400">Connected</p>
+                    </div>
+                    {% elif qb_connected %}
+                    <!-- QuickBooks Connected -->
+                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                         </svg>
                     </div>
                     <div class="ml-4">
                         <p class="text-sm font-medium text-gray-500 dark:text-gray-400">QuickBooks</p>
-                        <p class="text-lg font-semibold {% if qb_connected %}text-green-600 dark:text-green-400{% else %}text-gray-500{% endif %}">
-                            {% if qb_connected %}Connected{% else %}Not Connected{% endif %}
-                        </p>
+                        <p class="text-lg font-semibold text-green-600 dark:text-green-400">Connected</p>
                     </div>
+                    {% else %}
+                    <!-- Not Connected -->
+                    <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Accounting</p>
+                        <p class="text-lg font-semibold text-gray-500">Not Connected</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% if not qb_connected %}
+                {% if not qb_connected and not xero_connected %}
                 <a href="{{ url_for('integrations.quickbooks_settings') }}" class="mt-4 block text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400">
                     Connect Now →
                 </a>

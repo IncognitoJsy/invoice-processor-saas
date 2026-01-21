@@ -16,6 +16,7 @@ def index():
     
     from app.models.invoice import Invoice
     from app.models.quickbooks import QuickBooksConnection
+    from app.models.xero import XeroConnection
     
     # Get invoice stats
     first_of_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -35,6 +36,10 @@ def index():
     qb_connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
     qb_connected = qb_connection and qb_connection.is_active if qb_connection else False
     
+    # Check Xero connection
+    xero_connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
+    xero_connected = xero_connection and xero_connection.is_active if xero_connection else False
+    
     # Calculate invoice limit info
     limit = current_user.monthly_invoice_limit
     if limit == float('inf'):
@@ -50,5 +55,6 @@ def index():
         invoice_limit=limit_display,
         usage_percent=usage_percent,
         recent_invoices=recent_invoices,
-        qb_connected=qb_connected
+        qb_connected=qb_connected,
+        xero_connected=xero_connected
     )
