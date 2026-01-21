@@ -267,18 +267,14 @@
 <!-- Paddle.js -->
 <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script>
-// Initialize Paddle
-{% if paddle_environment == 'sandbox' %}
 Paddle.Environment.set('sandbox');
-{% endif %}
 Paddle.Initialize({
-    token: '{{ paddle_client_token }}'
+    token: 'test_d75ef02eded87e2c529a473915c'
 });
 
-// Price IDs
 const priceIds = {
-    basic: '{{ config["PADDLE_PRICE_BASIC"] or "pri_01kfft6mchfr6kzny801xtgjb8" }}',
-    pro: '{{ config["PADDLE_PRICE_PRO"] or "pri_01kfft4zz0b4mh3azhc93ffq5h" }}'
+    basic: 'pri_01kfft6mchfr6kzny801xtgjb8',
+    pro: 'pri_01kfft4zz0b4mh3azhc93ffq5h'
 };
 
 function openPaddleCheckout(plan) {
@@ -290,13 +286,8 @@ function openPaddleCheckout(plan) {
     }
     
     Paddle.Checkout.open({
-        items: [{ priceId: priceId, quantity: 1 }],
-        customData: {
-            user_id: '{{ current_user.id }}',
-            plan: plan
-        }
+        items: [{ priceId: priceId, quantity: 1 }]
     });
 }
-
 </script>
 {% endblock %}
