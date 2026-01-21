@@ -174,7 +174,7 @@ Paddle.Initialize({
     token: '{{ paddle_client_token }}'
 });
 
-// Top-up price ID from Paddle
+// Top-up price ID from Paddle (£5 per pack of 10)
 const topupPriceId = '{{ paddle_price_topup }}';
 
 function topupPage() {
@@ -226,21 +226,24 @@ function topupPage() {
             this.loading = true;
             this.error = null;
             
-            const quantity = this.quantity;
+            const invoiceCredits = this.quantity;
+            // Paddle price is £5 per pack of 10, so divide by 10 to get pack quantity
+            const paddleQuantity = invoiceCredits / 10;
             
-            // Open Paddle checkout directly with quantity
+            // Open Paddle checkout with pack quantity
+            // e.g., 30 credits = 3 packs @ £5 = £15
             Paddle.Checkout.open({
                 items: [{ 
                     priceId: topupPriceId, 
-                    quantity: quantity 
+                    quantity: paddleQuantity 
                 }],
                 customData: {
                     user_id: '{{ current_user.id }}',
                     type: 'topup',
-                    quantity: String(quantity)
+                    quantity: String(invoiceCredits)  // Store actual credit count
                 },
                 settings: {
-                    successUrl: window.location.origin + '/billing/topup/success?quantity=' + quantity
+                    successUrl: window.location.origin + '/billing/topup/success?quantity=' + invoiceCredits
                 }
             });
             

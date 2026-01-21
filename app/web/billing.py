@@ -424,6 +424,7 @@ def handle_transaction_completed(data):
     quantity = 0
     
     # Check if this is a top-up purchase via custom_data
+    # custom_data.quantity contains the actual invoice credits (e.g., 30)
     if custom_data.get('type') == 'topup':
         user_id = custom_data.get('user_id')
         quantity = int(custom_data.get('quantity', 0))
@@ -441,7 +442,9 @@ def handle_transaction_completed(data):
             item_quantity = item.get('quantity', 0)
             
             if price_id == config.get('price_topup') and item_quantity > 0:
-                quantity = int(item_quantity)
+                # Paddle quantity is in packs of 10, so multiply to get actual credits
+                # e.g., 3 packs = 30 credits
+                quantity = int(item_quantity) * 10
                 # Find user by email
                 customer = data.get('customer') or {}
                 email = customer.get('email')

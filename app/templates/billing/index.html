@@ -24,7 +24,7 @@
                         <p class="font-semibold text-green-800 dark:text-green-200">You're on the {{ current_user.plan_display_name }} plan</p>
                         <p class="text-sm text-green-600 dark:text-green-400">
                             {% if current_user.subscription_plan == 'basic' %}
-                                {{ current_user.invoices_remaining }}/100 invoices remaining this month
+                                {{ current_user.invoices_remaining }} invoices remaining this month
                                 {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
                                     (includes {{ current_user.bonus_invoices }} bonus)
                                 {% endif %}
@@ -141,14 +141,15 @@
             </div>
             
             <!-- Pro Plan -->
-            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border-2 {% if current_user.subscription_plan == 'pro' %}border-green-500{% else %}border-purple-500{% endif %} overflow-hidden relative">
-                {% if current_user.subscription_plan == 'pro' %}
-                <div class="bg-green-500 text-white text-center py-2 text-sm font-medium">
-                    Current Plan
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border-2 {% if current_user.subscription_plan == 'pro' %}border-purple-500{% else %}border-gray-200 dark:border-gray-700{% endif %} overflow-hidden relative">
+                <div class="absolute top-4 right-4">
+                    <span class="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold px-3 py-1 rounded-full">
+                        POPULAR
+                    </span>
                 </div>
-                {% else %}
+                {% if current_user.subscription_plan == 'pro' %}
                 <div class="bg-purple-500 text-white text-center py-2 text-sm font-medium">
-                    Most Popular
+                    Current Plan
                 </div>
                 {% endif %}
                 
