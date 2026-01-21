@@ -277,8 +277,8 @@ Paddle.Initialize({
 
 // Price IDs
 const priceIds = {
-    basic: '{{ config("PADDLE_PRICE_BASIC") or "pri_01kfft6mchfr6kzny801xtgjb8" }}',
-    pro: '{{ config("PADDLE_PRICE_PRO") or "pri_01kfft4zz0b4mh3azhc93ffq5h" }}'
+    basic: '{{ config["PADDLE_PRICE_BASIC"] or "pri_01kfft6mchfr6kzny801xtgjb8" }}',
+    pro: '{{ config["PADDLE_PRICE_PRO"] or "pri_01kfft4zz0b4mh3azhc93ffq5h" }}'
 };
 
 function openPaddleCheckout(plan) {
