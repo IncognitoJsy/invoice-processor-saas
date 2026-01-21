@@ -290,6 +290,9 @@ function openPaddleCheckout(plan) {
         customData: {
             user_id: '{{ current_user.id }}',
             plan: plan
+        },
+        settings: {
+            successUrl: '{{ url_for("billing.success", _external=True) }}'
         }
     });
 }
