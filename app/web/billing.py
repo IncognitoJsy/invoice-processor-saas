@@ -403,7 +403,7 @@ def get_user_from_paddle_data(data):
     from app.models.user import User
     
     # Try to get user from custom_data first
-    custom_data = data.get('custom_data', {})
+    custom_data = data.get('custom_data') or {}
     user_id = custom_data.get('user_id')
     
     if user_id:
@@ -412,7 +412,7 @@ def get_user_from_paddle_data(data):
             return user
     
     # Try customer email
-    customer = data.get('customer', {})
+    customer = data.get('customer') or {}
     email = customer.get('email')
     
     if email:
@@ -546,8 +546,7 @@ def handle_subscription_paused(data):
 
 def handle_transaction_completed(data):
     """Handle transaction.completed webhook - used for one-time purchases like top-ups"""
-    # Check if this is a top-up purchase
-    custom_data = data.get('custom_data', {})
+    custom_data = data.get('custom_data') or {}
     
     if custom_data.get('type') == 'topup':
         user_id = custom_data.get('user_id')
@@ -558,10 +557,6 @@ def handle_transaction_completed(data):
             user = User.query.get(int(user_id))
             
             if user:
-                # Check if this transaction was already processed
-                transaction_id = data.get('id')
-                # In production, you'd want to store processed transaction IDs
-                
                 user.add_bonus_invoices(int(quantity))
                 db.session.commit()
                 current_app.logger.info(f"Added {quantity} top-up invoices to user {user.id}")
