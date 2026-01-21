@@ -174,6 +174,9 @@ Paddle.Initialize({
     token: '{{ paddle_client_token }}'
 });
 
+// Top-up price ID from Paddle
+const topupPriceId = '{{ paddle_price_topup }}';
+
 function topupPage() {
     return {
         quantity: 10,
@@ -219,52 +222,29 @@ function topupPage() {
             this.quantity = this.customQuantity;
         },
         
-        async purchase() {
+        purchase() {
             this.loading = true;
             this.error = null;
             
-            try {
-                // Call our backend to create the Paddle transaction
-                const response = await fetch('/billing/topup/checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        quantity: this.quantity
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok && data.success) {
-                    if (data.checkout_url) {
-                        // Redirect to Paddle checkout
-                        window.location.href = data.checkout_url;
-                    } else if (data.transaction_id) {
-                        // Open checkout overlay with transaction ID
-                        Paddle.Checkout.open({
-                            transactionId: data.transaction_id,
-                            settings: {
-                                displayMode: 'overlay',
-                                theme: 'light',
-                                locale: 'en'
-                            }
-                        });
-                        this.loading = false;
-                    } else {
-                        this.error = 'No checkout URL returned';
-                        this.loading = false;
-                    }
-                } else {
-                    this.error = data.error || 'Failed to create checkout';
-                    this.loading = false;
+            const quantity = this.quantity;
+            
+            // Open Paddle checkout directly with quantity
+            Paddle.Checkout.open({
+                items: [{ 
+                    priceId: topupPriceId, 
+                    quantity: quantity 
+                }],
+                customData: {
+                    user_id: '{{ current_user.id }}',
+                    type: 'topup',
+                    quantity: String(quantity)
+                },
+                settings: {
+                    successUrl: window.location.origin + '/billing/topup/success?quantity=' + quantity
                 }
-            } catch (err) {
-                this.error = 'Network error. Please try again.';
-                this.loading = false;
-                console.error('Checkout error:', err);
-            }
+            });
+            
+            this.loading = false;
         }
     }
 }
