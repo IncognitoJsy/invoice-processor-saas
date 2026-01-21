@@ -291,17 +291,9 @@ function openPaddleCheckout(plan) {
     
     Paddle.Checkout.open({
         items: [{ priceId: priceId, quantity: 1 }],
-        customer: {
-            email: '{{ current_user.email }}'
-        },
         customData: {
             user_id: '{{ current_user.id }}',
             plan: plan
-        },
-        settings: {
-            displayMode: 'overlay',
-            theme: 'light',
-            locale: 'en'
         }
     });
 }
