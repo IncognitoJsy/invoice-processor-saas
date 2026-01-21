@@ -110,7 +110,7 @@ def topup():
 @bp.route('/topup/checkout', methods=['POST'])
 @login_required
 def topup_checkout():
-    """Create Paddle checkout for top-up purchase"""
+    """Create Paddle transaction for top-up purchase using Transaction API"""
     if current_user.subscription_plan not in ['basic']:
         return jsonify({'error': 'Top-ups are only available for Basic plan subscribers'}), 400
     
@@ -131,20 +131,92 @@ def topup_checkout():
     if quantity > 500:
         return jsonify({'error': 'Maximum purchase is 500 invoices at once'}), 400
     
-    # Calculate price in pence
-    amount_pence = int(quantity * TOPUP_PRICE_PER_INVOICE * 100)
+    # Calculate price (Paddle uses string amounts with decimal)
+    amount = str(int(quantity * TOPUP_PRICE_PER_INVOICE * 100))  # In pence/cents
     
-    # Return data for Paddle.js overlay checkout
-    return jsonify({
-        'success': True,
-        'checkout_data': {
-            'user_id': current_user.id,
-            'user_email': current_user.email,
-            'quantity': quantity,
-            'amount': amount_pence,
-            'type': 'topup'
+    config = get_paddle_config()
+    
+    try:
+        # First, get or create Paddle customer
+        customer_id = current_user.paddle_customer_id
+        
+        if not customer_id:
+            # Create customer in Paddle
+            customer_response = paddle_api_request('POST', '/customers', {
+                'email': current_user.email,
+                'name': f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email,
+                'custom_data': {
+                    'user_id': str(current_user.id)
+                }
+            })
+            
+            if customer_response.get('data'):
+                customer_id = customer_response['data']['id']
+                current_user.paddle_customer_id = customer_id
+                db.session.commit()
+            else:
+                current_app.logger.error(f"Failed to create Paddle customer: {customer_response}")
+                return jsonify({'error': 'Failed to create customer'}), 500
+        
+        # Create a transaction for the top-up
+        # Using Paddle's "custom" items for one-time variable pricing
+        transaction_data = {
+            'items': [{
+                'price': {
+                    'description': f'GoZappify Invoice Top-Up ({quantity} credits)',
+                    'name': f'{quantity} Invoice Credits',
+                    'billing_cycle': None,  # One-time payment
+                    'trial_period': None,
+                    'tax_mode': 'account_setting',
+                    'unit_price': {
+                        'amount': amount,
+                        'currency_code': 'GBP'
+                    },
+                    'product': {
+                        'name': 'Invoice Processing Credits',
+                        'description': 'Additional invoice processing credits for GoZappify',
+                        'tax_category': 'standard'
+                    }
+                },
+                'quantity': 1
+            }],
+            'customer_id': customer_id,
+            'custom_data': {
+                'user_id': str(current_user.id),
+                'type': 'topup',
+                'quantity': str(quantity)
+            },
+            'checkout': {
+                'url': request.host_url.rstrip('/') + url_for('billing.topup_success') + f'?quantity={quantity}'
+            }
         }
-    })
+        
+        response = paddle_api_request('POST', '/transactions', transaction_data)
+        
+        if response.get('data'):
+            transaction = response['data']
+            checkout_url = transaction.get('checkout', {}).get('url')
+            
+            if checkout_url:
+                return jsonify({
+                    'success': True,
+                    'checkout_url': checkout_url,
+                    'transaction_id': transaction.get('id')
+                })
+            else:
+                # If no checkout URL, return transaction ID for client-side checkout
+                return jsonify({
+                    'success': True,
+                    'transaction_id': transaction.get('id')
+                })
+        else:
+            error_msg = response.get('error', {}).get('detail', 'Failed to create transaction')
+            current_app.logger.error(f"Paddle transaction error: {response}")
+            return jsonify({'error': error_msg}), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Top-up checkout error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/topup/success')

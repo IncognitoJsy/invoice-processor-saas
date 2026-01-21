@@ -223,40 +223,47 @@ function topupPage() {
             this.loading = true;
             this.error = null;
             
-            const pricePerInvoice = {{ price_per_invoice }};
-            const totalAmount = (this.quantity * pricePerInvoice * 100).toFixed(0); // In pence
-            
             try {
-                // Open Paddle checkout with custom price
-                Paddle.Checkout.open({
-                    items: [{
-                        priceId: null, // For custom amounts, we use a different approach
-                        quantity: 1
-                    }],
-                    // For one-time purchases with custom amounts, you need a "top-up" product in Paddle
-                    // OR use the transaction API. For now, we'll use a simplified approach:
-                    customData: {
-                        user_id: '{{ current_user.id }}',
-                        type: 'topup',
+                // Call our backend to create the Paddle transaction
+                const response = await fetch('/billing/topup/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
                         quantity: this.quantity
-                    },
-                    customer: {
-                        email: '{{ current_user.email }}'
-                    },
-                    settings: {
-                        displayMode: 'overlay',
-                        theme: 'light',
-                        locale: 'en',
-                        successUrl: '{{ url_for("billing.topup_success", _external=True) }}?quantity=' + this.quantity,
-                        allowLogout: false
-                    }
+                    })
                 });
                 
-                this.loading = false;
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    if (data.checkout_url) {
+                        // Redirect to Paddle checkout
+                        window.location.href = data.checkout_url;
+                    } else if (data.transaction_id) {
+                        // Open checkout overlay with transaction ID
+                        Paddle.Checkout.open({
+                            transactionId: data.transaction_id,
+                            settings: {
+                                displayMode: 'overlay',
+                                theme: 'light',
+                                locale: 'en'
+                            }
+                        });
+                        this.loading = false;
+                    } else {
+                        this.error = 'No checkout URL returned';
+                        this.loading = false;
+                    }
+                } else {
+                    this.error = data.error || 'Failed to create checkout';
+                    this.loading = false;
+                }
             } catch (err) {
-                this.error = 'Failed to open checkout. Please try again.';
+                this.error = 'Network error. Please try again.';
                 this.loading = false;
-                console.error('Paddle checkout error:', err);
+                console.error('Checkout error:', err);
             }
         }
     }
