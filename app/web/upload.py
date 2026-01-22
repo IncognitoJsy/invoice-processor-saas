@@ -9,7 +9,7 @@ from decimal import Decimal
 bp = Blueprint('upload', __name__)
 
 UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
+ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -116,7 +116,7 @@ def api_upload_single():
             return jsonify({'error': 'No file selected'}), 400
         
         if not allowed_file(file.filename):
-            return jsonify({'error': 'Only PDF files are allowed'}), 400
+            return jsonify({'error': 'Only PDF and image files (JPG, PNG, GIF, WEBP) are allowed'}), 400
         
         from app.parsers.parser_service import InvoiceParserService
         from app.extensions import db
