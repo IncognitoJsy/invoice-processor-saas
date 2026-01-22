@@ -117,7 +117,7 @@ CRITICAL: First, identify what TYPE of document this is by looking for keywords:
 - QUOTATION, QUOTE, ESTIMATE, PROFORMA = This is a QUOTE
 - INVOICE, TAX INVOICE, BILL = This is an INVOICE  
 - CREDIT, CREDIT NOTE = This is a CREDIT NOTE
-- ORDER ACKNOWLEDGEMENT, SALES ORDER, ORDER CONFIRMATION, PURCHASE ORDER = This is an ORDER (treat as invoice)
+- ORDER ACKNOWLEDGEMENT, SALES ORDER, ORDER CONFIRMATION, PURCHASE ORDER, ADVICE NOTE, DELIVERY NOTE = This is an ORDER (treat as invoice)
 
 CRITICAL: This PDF may contain MULTIPLE invoices/quotes (consolidated). Each has its own job reference and should be treated separately.
 
@@ -159,7 +159,7 @@ DOCUMENT TYPE DETECTION - VERY IMPORTANT:
 7. **QUOTE/QUOTATION**: Look for "QUOTATION", "QUOTE", "ESTIMATE", "PROFORMA" prominently displayed at top
 8. **INVOICE**: Look for "INVOICE", "TAX INVOICE", "BILL" prominently displayed
 9. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts
-10. **ORDER**: Look for "ORDER ACKNOWLEDGEMENT", "SALES ORDER", "ORDER CONFIRMATION" - treat same as invoice
+10. **ORDER**: Look for "ORDER ACKNOWLEDGEMENT", "SALES ORDER", "ORDER CONFIRMATION", "ADVICE NOTE", "DELIVERY NOTE" - treat same as invoice
 11. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
 12. Set each document's "document_type" accordingly
 
@@ -233,8 +233,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             # Normalize detected type
             if detected_type in ['quote', 'quotation', 'estimate', 'proforma']:
                 detected_type = 'quote'
-            elif detected_type in ['invoice', 'tax invoice', 'bill', 'order', 'order acknowledgement', 'sales order', 'order confirmation']:
-                detected_type = 'invoice'  # Treat orders as invoices
+            elif detected_type in ['invoice', 'tax invoice', 'bill', 'order', 'order acknowledgement', 'sales order', 'order confirmation', 'advice note', 'advice_note', 'delivery note', 'delivery_note']:
+                detected_type = 'invoice'  # Treat orders/advice notes as invoices
             elif detected_type in ['credit', 'credit_note', 'credit note']:
                 detected_type = 'credit_note'
             
