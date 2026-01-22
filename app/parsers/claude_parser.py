@@ -48,30 +48,45 @@ class ClaudeInvoiceParser:
         
         try:
             from flask_login import current_user
-            from app.models.integration import Integration
             
             if not current_user or not current_user.is_authenticated:
                 self.logger.warning("⚠️ No authenticated user - cannot load products")
                 self._known_products_cache = known_products
                 return known_products
             
-            # Check which platform is connected
-            qb_integration = Integration.query.filter_by(
-                user_id=current_user.id,
-                provider='quickbooks'
-            ).first()
+            # Check QuickBooks connection
+            qb_connection = None
+            try:
+                from app.models.quickbooks import QuickBooksConnection
+                qb_connection = QuickBooksConnection.query.filter_by(
+                    user_id=current_user.id,
+                    is_active=True
+                ).first()
+            except Exception as e:
+                self.logger.debug(f"QuickBooks model check failed: {e}")
             
-            xero_integration = Integration.query.filter_by(
-                user_id=current_user.id,
-                provider='xero'
-            ).first()
+            # Check Xero connection
+            xero_connection = None
+            try:
+                from app.models.xero import XeroConnection
+                xero_connection = XeroConnection.query.filter_by(
+                    user_id=current_user.id,
+                    is_active=True
+                ).first()
+            except Exception as e:
+                self.logger.debug(f"Xero model check failed: {e}")
             
             # Load from QuickBooks if connected
-            if qb_integration and qb_integration.realm_id:
+            if qb_connection and qb_connection.realm_id:
                 self.logger.info("📗 User has QuickBooks connected - loading products...")
                 try:
-                    from app.services.quickbooks_service import QuickBooksService
-                    qb_service = QuickBooksService(current_user.id, qb_integration.realm_id)
+                    # Try both import paths
+                    try:
+                        from app.services.quickbooks_service import QuickBooksService
+                    except ImportError:
+                        from app.integrations.quickbooks_service import QuickBooksService
+                    
+                    qb_service = QuickBooksService(current_user.id)
                     
                     if qb_service.is_connected():
                         items = qb_service.get_items()
@@ -97,13 +112,13 @@ class ClaudeInvoiceParser:
                         
                         self.logger.info(f"✅ Loaded {qb_count} products from QuickBooks")
                     else:
-                        self.logger.warning("⚠️ QuickBooks integration found but not connected")
+                        self.logger.warning("⚠️ QuickBooks connection found but service not connected")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load QuickBooks products: {e}")
             
             # Load from Xero if connected (only if QuickBooks is NOT connected)
-            elif xero_integration and xero_integration.tenant_id:
+            elif xero_connection and xero_connection.tenant_id:
                 self.logger.info("📘 User has Xero connected - loading products...")
                 try:
                     try:
@@ -137,14 +152,14 @@ class ClaudeInvoiceParser:
                         
                         self.logger.info(f"✅ Loaded {xero_count} products from Xero")
                     else:
-                        self.logger.warning("⚠️ Xero integration found but not connected")
+                        self.logger.warning("⚠️ Xero connection found but service not connected")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load Xero products: {e}")
             
             else:
                 self.logger.warning("⚠️ No accounting software connected")
-                self.logger.warning(" Connect QuickBooks or Xero to enable part number validation")
+                self.logger.warning("   Connect QuickBooks or Xero to enable part number validation")
             
             if known_products:
                 self.logger.info(f"📦 Total products loaded: {len(known_products)}")
@@ -153,6 +168,8 @@ class ClaudeInvoiceParser:
                     
         except Exception as e:
             self.logger.error(f"❌ Error loading known products: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
         
         self._known_products_cache = known_products
         return known_products
@@ -166,7 +183,7 @@ class ClaudeInvoiceParser:
         
         if not known_products:
             self.logger.warning("⚠️ No known products loaded - part number validation skipped")
-            self.logger.warning(" Connect QuickBooks or Xero to enable part number cross-checking")
+            self.logger.warning("   Connect QuickBooks or Xero to enable part number cross-checking")
             return items
         
         self.logger.info(f"✅ Validating {len(items)} part numbers against {len(known_products)} known products")
@@ -417,7 +434,7 @@ class ClaudeInvoiceParser:
             # Call Claude API with document/image
             message = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=8192, # Increased for consolidated invoices
+                max_tokens=8192,  # Increased for consolidated invoices
                 messages=[{
                     "role": "user",
                     "content": [
@@ -577,7 +594,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             if detected_type in ['quote', 'quotation', 'estimate', 'proforma']:
                 detected_type = 'quote'
             elif detected_type in ['invoice', 'tax invoice', 'bill', 'order', 'order acknowledgement', 'sales order', 'order confirmation', 'advice note', 'advice_note', 'delivery note', 'delivery_note']:
-                detected_type = 'invoice' # Treat orders/advice notes as invoices
+                detected_type = 'invoice'  # Treat orders/advice notes as invoices
             elif detected_type in ['credit', 'credit_note', 'credit note']:
                 detected_type = 'credit_note'
             
@@ -671,7 +688,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'job_reference': invoice_data.get('job_reference'),
                     'supplier': supplier,
                     'invoice_number': invoice_number,
-                    'supplier_account_number': supplier_account_number, # Same for all in consolidated
+                    'supplier_account_number': supplier_account_number,  # Same for all in consolidated
                     'document_type': expected_document_type,
                     'method': 'claude_api',
                     'consolidated': True,
@@ -847,13 +864,13 @@ Double-check your work - missing items, wrong document type, wrong account numbe
     def _get_admin_tiered_markup(self, discount_val: float) -> float:
         """Get markup for admin user based on discount tiers"""
         if discount_val == 0:
-            return 0.20 # 20% markup
+            return 0.20  # 20% markup
         elif 1 <= discount_val <= 30:
-            return 0.40 # 40% markup
+            return 0.40  # 40% markup
         elif 30 < discount_val <= 70:
-            return 0.50 # 50% markup
+            return 0.50  # 50% markup
         else:
-            return 0.70 # 70% markup
+            return 0.70  # 70% markup
     
     def _transform_items(self, items: List[Dict], supplier: str = 'Unknown') -> List[Dict]:
         """Transform items to our internal format with pricing
@@ -866,14 +883,14 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         # Get user markup settings
         is_admin = self.user_markup_settings.get('is_admin', False)
-        user_default_markup = self.user_markup_settings.get('default_markup', 50.0) / 100 # Convert to decimal
+        user_default_markup = self.user_markup_settings.get('default_markup', 50.0) / 100  # Convert to decimal
         
         self.logger.info(f"Transform items: is_admin={is_admin}, user_markup={user_default_markup*100}%")
         
         for item in items:
             try:
                 quantity = float(item['quantity'])
-                total_amount = float(item['total_amount']) # This is BEFORE discount for Wholesale
+                total_amount = float(item['total_amount'])  # This is BEFORE discount for Wholesale
                 
                 # Get discount percentage
                 discount = str(item.get('discount', '0')).replace('%', '')
@@ -908,7 +925,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'original_unit_price': float(item.get('original_unit_price', 0)),
                     'discount': discount,
                     'cost_per_item': cost_per_item,
-                    'total_amount': discounted_total, # Store the DISCOUNTED total
+                    'total_amount': discounted_total,  # Store the DISCOUNTED total
                     'selling_price': selling_price,
                     'markup_percent': int(markup * 100),
                     'profit_per_item': profit_per_item
