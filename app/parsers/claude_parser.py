@@ -30,6 +30,170 @@ class ClaudeInvoiceParser:
             max_retries=2
         )
         self.logger = logging.getLogger(__name__)
+        self._known_products_cache = None
+    
+    def _load_known_products(self, user_id: int = None) -> Dict[str, Dict]:
+        """
+        Load known products from QuickBooks/Xero for part number validation.
+        Returns a dict mapping part_number -> product info
+        """
+        if self._known_products_cache is not None:
+            return self._known_products_cache
+        
+        known_products = {}
+        
+        try:
+            # Try to load from QuickBooks
+            from flask_login import current_user
+            from app.services.quickbooks_service import QuickBooksService
+            
+            if current_user and current_user.is_authenticated:
+                try:
+                    qb_service = QuickBooksService(current_user.id)
+                    if qb_service.is_connected():
+                        items = qb_service.get_items()
+                        for item in items:
+                            sku = item.get('Sku') or item.get('Name', '')
+                            if sku:
+                                known_products[sku.upper()] = {
+                                    'name': item.get('Name', ''),
+                                    'sku': sku,
+                                    'source': 'quickbooks'
+                                }
+                        self.logger.info(f"Loaded {len(known_products)} products from QuickBooks")
+                except Exception as e:
+                    self.logger.debug(f"Could not load QuickBooks products: {e}")
+            
+            # Try to load from Xero if QuickBooks didn't have items
+            if not known_products:
+                try:
+                    from app.services.xero_service import XeroService
+                    if current_user and current_user.is_authenticated:
+                        xero_service = XeroService(current_user.id)
+                        if xero_service.is_connected():
+                            items = xero_service.get_items()
+                            for item in items:
+                                code = item.get('Code', '')
+                                if code:
+                                    known_products[code.upper()] = {
+                                        'name': item.get('Name', ''),
+                                        'sku': code,
+                                        'source': 'xero'
+                                    }
+                            self.logger.info(f"Loaded {len(known_products)} products from Xero")
+                except Exception as e:
+                    self.logger.debug(f"Could not load Xero products: {e}")
+                    
+        except Exception as e:
+            self.logger.debug(f"Could not load known products: {e}")
+        
+        self._known_products_cache = known_products
+        return known_products
+    
+    def _validate_part_numbers(self, items: List[Dict]) -> List[Dict]:
+        """
+        Validate and correct part numbers by comparing against known products.
+        Uses fuzzy matching to handle OCR errors like 0/O, 8/B, 1/I/L confusions.
+        """
+        known_products = self._load_known_products()
+        
+        if not known_products:
+            self.logger.debug("No known products loaded, skipping part number validation")
+            return items
+        
+        # Common OCR confusions for alphanumeric codes
+        ocr_substitutions = {
+            '0': ['O', 'D', 'Q'],
+            'O': ['0', 'D', 'Q'],
+            '8': ['B', '3'],
+            'B': ['8', '3'],
+            '1': ['I', 'L', '7'],
+            'I': ['1', 'L'],
+            'L': ['1', 'I'],
+            '5': ['S'],
+            'S': ['5'],
+            '2': ['Z'],
+            'Z': ['2'],
+            '6': ['G'],
+            'G': ['6'],
+        }
+        
+        def generate_variants(part_number: str) -> List[str]:
+            """Generate possible variants of a part number with OCR corrections"""
+            variants = [part_number]
+            part_upper = part_number.upper()
+            
+            # Generate variants by substituting potentially misread characters
+            for i, char in enumerate(part_upper):
+                if char in ocr_substitutions:
+                    for sub in ocr_substitutions[char]:
+                        variant = part_upper[:i] + sub + part_upper[i+1:]
+                        variants.append(variant)
+            
+            return list(set(variants))
+        
+        def find_best_match(part_number: str) -> tuple:
+            """Find best matching product, returns (matched_sku, confidence)"""
+            if not part_number:
+                return None, 0
+            
+            part_upper = part_number.upper().strip()
+            
+            # Exact match
+            if part_upper in known_products:
+                return known_products[part_upper]['sku'], 100
+            
+            # Try OCR variant matches
+            variants = generate_variants(part_upper)
+            for variant in variants:
+                if variant in known_products:
+                    self.logger.info(f"Part number correction: '{part_number}' -> '{known_products[variant]['sku']}' (OCR fix)")
+                    return known_products[variant]['sku'], 95
+            
+            # Try partial/fuzzy matching for longer part numbers
+            if len(part_upper) >= 4:
+                best_match = None
+                best_score = 0
+                
+                for known_sku in known_products.keys():
+                    # Check if one contains the other (for partial matches)
+                    if part_upper in known_sku or known_sku in part_upper:
+                        score = min(len(part_upper), len(known_sku)) / max(len(part_upper), len(known_sku)) * 100
+                        if score > best_score and score >= 80:
+                            best_score = score
+                            best_match = known_sku
+                    
+                    # Check character-by-character similarity
+                    if len(part_upper) == len(known_sku):
+                        matches = sum(1 for a, b in zip(part_upper, known_sku) if a == b)
+                        score = (matches / len(part_upper)) * 100
+                        if score > best_score and score >= 85:
+                            best_score = score
+                            best_match = known_sku
+                
+                if best_match:
+                    self.logger.info(f"Part number fuzzy match: '{part_number}' -> '{known_products[best_match]['sku']}' ({best_score:.0f}% confidence)")
+                    return known_products[best_match]['sku'], best_score
+            
+            return None, 0
+        
+        # Validate each item's part number
+        corrected_items = []
+        for item in items:
+            item_copy = item.copy()
+            original_part = item.get('part_number', '')
+            
+            matched_sku, confidence = find_best_match(original_part)
+            
+            if matched_sku and matched_sku.upper() != original_part.upper():
+                item_copy['part_number'] = matched_sku
+                item_copy['original_ocr_part_number'] = original_part
+                item_copy['part_number_confidence'] = confidence
+                self.logger.info(f"Corrected part number: '{original_part}' -> '{matched_sku}'")
+            
+            corrected_items.append(item_copy)
+        
+        return corrected_items
     
     def _preprocess_image(self, image_path: str) -> bytes:
         """
@@ -650,5 +814,11 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             except Exception as e:
                 self.logger.error(f"Error processing item: {str(e)}")
                 continue
+        
+        # Validate and correct part numbers against known products
+        try:
+            transformed = self._validate_part_numbers(transformed)
+        except Exception as e:
+            self.logger.warning(f"Part number validation skipped: {e}")
         
         return transformed
