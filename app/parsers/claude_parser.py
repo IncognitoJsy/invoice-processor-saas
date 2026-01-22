@@ -38,54 +38,105 @@ class ClaudeInvoiceParser:
         Returns a dict mapping part_number -> product info
         """
         if self._known_products_cache is not None:
+            self.logger.info(f"📦 Using cached products: {len(self._known_products_cache)} items")
             return self._known_products_cache
         
         known_products = {}
         
+        self.logger.info("🔍 Loading known products from accounting software...")
+        
         try:
-            # Try to load from QuickBooks
             from flask_login import current_user
-            from app.services.quickbooks_service import QuickBooksService
             
-            if current_user and current_user.is_authenticated:
-                try:
-                    qb_service = QuickBooksService(current_user.id)
-                    if qb_service.is_connected():
-                        items = qb_service.get_items()
-                        for item in items:
-                            sku = item.get('Sku') or item.get('Name', '')
-                            if sku:
-                                known_products[sku.upper()] = {
-                                    'name': item.get('Name', ''),
-                                    'sku': sku,
-                                    'source': 'quickbooks'
+            if not current_user or not current_user.is_authenticated:
+                self.logger.warning("⚠️ No authenticated user - cannot load products")
+                self._known_products_cache = known_products
+                return known_products
+            
+            # Try to load from QuickBooks
+            try:
+                from app.services.quickbooks_service import QuickBooksService
+                qb_service = QuickBooksService(current_user.id)
+                
+                if qb_service.is_connected():
+                    self.logger.info("📗 QuickBooks connected - loading products...")
+                    items = qb_service.get_items()
+                    qb_count = 0
+                    for item in items:
+                        # Try SKU first, then Name
+                        sku = item.get('Sku') or ''
+                        name = item.get('Name', '')
+                        
+                        # Add by SKU if available
+                        if sku:
+                            known_products[sku.upper()] = {
+                                'name': name,
+                                'sku': sku,
+                                'source': 'quickbooks'
+                            }
+                            qb_count += 1
+                        
+                        # Also add by Name for matching (some suppliers use product names)
+                        if name and name.upper() not in known_products:
+                            known_products[name.upper()] = {
+                                'name': name,
+                                'sku': sku or name,
+                                'source': 'quickbooks'
+                            }
+                    
+                    self.logger.info(f"✅ Loaded {qb_count} products from QuickBooks")
+                else:
+                    self.logger.info("📗 QuickBooks not connected")
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not load QuickBooks products: {e}")
+            
+            # Also try to load from Xero (load from both if both connected)
+            try:
+                from app.services.xero_service import XeroService
+                xero_service = XeroService(current_user.id)
+                
+                if xero_service.is_connected():
+                    self.logger.info("📘 Xero connected - loading products...")
+                    items = xero_service.get_items()
+                    xero_count = 0
+                    for item in items:
+                        code = item.get('Code', '')
+                        name = item.get('Name', '')
+                        
+                        if code:
+                            # Don't overwrite if already loaded from QB
+                            if code.upper() not in known_products:
+                                known_products[code.upper()] = {
+                                    'name': name,
+                                    'sku': code,
+                                    'source': 'xero'
                                 }
-                        self.logger.info(f"Loaded {len(known_products)} products from QuickBooks")
-                except Exception as e:
-                    self.logger.debug(f"Could not load QuickBooks products: {e}")
+                                xero_count += 1
+                        
+                        if name and name.upper() not in known_products:
+                            known_products[name.upper()] = {
+                                'name': name,
+                                'sku': code or name,
+                                'source': 'xero'
+                            }
+                    
+                    self.logger.info(f"✅ Loaded {xero_count} products from Xero")
+                else:
+                    self.logger.info("📘 Xero not connected")
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not load Xero products: {e}")
             
-            # Try to load from Xero if QuickBooks didn't have items
-            if not known_products:
-                try:
-                    from app.services.xero_service import XeroService
-                    if current_user and current_user.is_authenticated:
-                        xero_service = XeroService(current_user.id)
-                        if xero_service.is_connected():
-                            items = xero_service.get_items()
-                            for item in items:
-                                code = item.get('Code', '')
-                                if code:
-                                    known_products[code.upper()] = {
-                                        'name': item.get('Name', ''),
-                                        'sku': code,
-                                        'source': 'xero'
-                                    }
-                            self.logger.info(f"Loaded {len(known_products)} products from Xero")
-                except Exception as e:
-                    self.logger.debug(f"Could not load Xero products: {e}")
+            self.logger.info(f"📦 Total known products loaded: {len(known_products)}")
+            
+            # Log a few sample product codes for debugging
+            if known_products:
+                sample_codes = list(known_products.keys())[:10]
+                self.logger.info(f"📋 Sample product codes: {sample_codes}")
                     
         except Exception as e:
-            self.logger.debug(f"Could not load known products: {e}")
+            self.logger.error(f"❌ Error loading known products: {e}")
         
         self._known_products_cache = known_products
         return known_products
@@ -98,8 +149,11 @@ class ClaudeInvoiceParser:
         known_products = self._load_known_products()
         
         if not known_products:
-            self.logger.debug("No known products loaded, skipping part number validation")
+            self.logger.warning("⚠️ No known products loaded - part number validation skipped")
+            self.logger.warning("   Connect QuickBooks or Xero to enable part number cross-checking")
             return items
+        
+        self.logger.info(f"✅ Validating {len(items)} part numbers against {len(known_products)} known products")
         
         # Common OCR confusions for alphanumeric codes
         ocr_substitutions = {
@@ -116,21 +170,53 @@ class ClaudeInvoiceParser:
             'Z': ['2'],
             '6': ['G'],
             'G': ['6'],
+            'K': ['X', 'R'],
+            'R': ['K', 'P', 'B'],
+            'W': ['VV', 'M', 'UV'],
+            'M': ['W', 'N', 'NN'],
+            'N': ['M', 'H'],
+            'H': ['N', 'U'],
+            'U': ['V', 'H'],
+            'V': ['U', 'Y'],
+            'C': ['G', 'O', '0'],
+            'E': ['F', '3'],
+            'F': ['E', 'P'],
+            'P': ['R', 'F'],
+            'D': ['O', '0'],
+            'Q': ['O', '0', '9'],
+            '9': ['Q', 'G'],
+            '4': ['A'],
+            'A': ['4', 'R'],
+            '3': ['8', 'E'],
+            '7': ['1', 'T'],
+            'T': ['7', 'I'],
         }
         
         def generate_variants(part_number: str) -> List[str]:
-            """Generate possible variants of a part number with OCR corrections"""
-            variants = [part_number]
+            """Generate possible variants of a part number with OCR corrections.
+            Handles up to 2 character substitutions to catch multiple OCR errors."""
+            variants = set([part_number])
             part_upper = part_number.upper()
             
-            # Generate variants by substituting potentially misread characters
+            # First pass: single character substitutions
+            first_pass = set([part_upper])
             for i, char in enumerate(part_upper):
                 if char in ocr_substitutions:
                     for sub in ocr_substitutions[char]:
                         variant = part_upper[:i] + sub + part_upper[i+1:]
-                        variants.append(variant)
+                        first_pass.add(variant)
             
-            return list(set(variants))
+            variants.update(first_pass)
+            
+            # Second pass: apply substitutions to first pass results (handles 2 OCR errors)
+            for base_variant in list(first_pass):
+                for i, char in enumerate(base_variant):
+                    if char in ocr_substitutions:
+                        for sub in ocr_substitutions[char]:
+                            variant = base_variant[:i] + sub + base_variant[i+1:]
+                            variants.add(variant)
+            
+            return list(variants)
         
         def find_best_match(part_number: str) -> tuple:
             """Find best matching product, returns (matched_sku, confidence)"""
