@@ -5,7 +5,15 @@ import base64
 import json
 import logging
 import re
+import io
 from typing import Dict, List
+
+# Try to import PIL for image enhancement
+try:
+    from PIL import Image, ImageEnhance, ImageFilter
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +30,67 @@ class ClaudeInvoiceParser:
             max_retries=2
         )
         self.logger = logging.getLogger(__name__)
+    
+    def _preprocess_image(self, image_path: str) -> bytes:
+        """
+        Preprocess image to improve OCR quality before sending to Claude.
+        - Upscales small images
+        - Enhances contrast and sharpness
+        - Converts to high-quality JPEG
+        
+        Returns: Preprocessed image as bytes
+        """
+        if not PIL_AVAILABLE:
+            self.logger.warning("PIL not available, skipping image preprocessing")
+            with open(image_path, 'rb') as f:
+                return f.read()
+        
+        try:
+            img = Image.open(image_path)
+            original_size = img.size
+            self.logger.info(f"Original image size: {original_size}")
+            
+            # Convert to RGB if necessary (for JPEG output)
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Upscale if image is small (less than 2000px on longest side)
+            max_dim = max(img.size)
+            if max_dim < 2000:
+                scale_factor = 2000 / max_dim
+                # Cap scale factor at 3x to avoid huge images
+                scale_factor = min(scale_factor, 3.0)
+                new_size = (int(img.size[0] * scale_factor), int(img.size[1] * scale_factor))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+                self.logger.info(f"Upscaled image to: {new_size}")
+            
+            # Apply slight sharpening to make text clearer
+            img = img.filter(ImageFilter.SHARPEN)
+            
+            # Enhance contrast slightly (1.0 = original, >1.0 = more contrast)
+            contrast_enhancer = ImageEnhance.Contrast(img)
+            img = contrast_enhancer.enhance(1.2)
+            
+            # Enhance sharpness further (1.0 = original, >1.0 = sharper)
+            sharpness_enhancer = ImageEnhance.Sharpness(img)
+            img = sharpness_enhancer.enhance(1.5)
+            
+            # Convert back to bytes
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=95)
+            buffer.seek(0)
+            
+            processed_bytes = buffer.read()
+            self.logger.info(f"Preprocessed image: {len(processed_bytes)} bytes")
+            
+            return processed_bytes
+            
+        except Exception as e:
+            self.logger.warning(f"Image preprocessing failed: {e}, using original")
+            with open(image_path, 'rb') as f:
+                return f.read()
     
     def parse(self, pdf_path: str, expected_document_type: str = 'invoice', user_markup_settings: Dict = None) -> Dict:
         """
@@ -61,9 +130,17 @@ class ClaudeInvoiceParser:
                     'error': f'Unsupported file type: {file_ext}. Supported types: PDF, JPG, PNG, GIF, WEBP'
                 }
             
-            # Read file as binary and encode to base64
-            with open(pdf_path, 'rb') as f:
-                file_data = base64.standard_b64encode(f.read()).decode('utf-8')
+            # Read and preprocess file
+            if media_type.startswith('image/'):
+                # Preprocess images for better OCR
+                file_bytes = self._preprocess_image(pdf_path)
+                file_data = base64.standard_b64encode(file_bytes).decode('utf-8')
+                # After preprocessing, output is always JPEG
+                media_type = 'image/jpeg'
+            else:
+                # PDF - read as-is
+                with open(pdf_path, 'rb') as f:
+                    file_data = base64.standard_b64encode(f.read()).decode('utf-8')
             
             # Determine content type for API call
             if media_type == 'application/pdf':
