@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8" x-data="managePage()">
         
         <!-- Header -->
         <div class="mb-8">
@@ -16,6 +16,26 @@
             </a>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Manage Subscription</h1>
             <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage your subscription details</p>
+        </div>
+        
+        <!-- Success/Error Messages -->
+        <div x-show="message" x-transition class="mb-6">
+            <div :class="messageType === 'success' ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'" 
+                 class="border rounded-xl p-4">
+                <div class="flex items-start">
+                    <template x-if="messageType === 'success'">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </template>
+                    <template x-if="messageType === 'error'">
+                        <svg class="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </template>
+                    <p :class="messageType === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'" x-text="message"></p>
+                </div>
+            </div>
         </div>
         
         <!-- Current Plan Card -->
@@ -45,7 +65,11 @@
                         {% else %}
                             bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400
                         {% endif %}">
-                        {{ current_user.subscription_status|capitalize }}
+                        {% if current_user.subscription_status == 'cancelled' %}
+                            Cancels at period end
+                        {% else %}
+                            {{ current_user.subscription_status|capitalize }}
+                        {% endif %}
                     </span>
                 </div>
                 
@@ -93,18 +117,34 @@
                 <h3 class="font-semibold text-gray-900 dark:text-white">Buy More Invoices</h3>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Top up with extra invoice credits</p>
             </a>
-            {% endif %}
             
-            {% if current_user.subscription_plan == 'basic' %}
-            <a href="{{ url_for('billing.index') }}" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-purple-500 dark:hover:border-purple-500 transition group">
+            <!-- Upgrade to Pro -->
+            <button @click="changePlan('pro')" 
+                    :disabled="loading"
+                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-purple-500 dark:hover:border-purple-500 transition group text-left w-full">
                 <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
                     <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
                     </svg>
                 </div>
                 <h3 class="font-semibold text-gray-900 dark:text-white">Upgrade to Pro</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Get unlimited invoices</p>
-            </a>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Get unlimited invoices for £79/month</p>
+            </button>
+            {% endif %}
+            
+            {% if current_user.subscription_plan == 'pro' %}
+            <!-- Downgrade to Basic -->
+            <button @click="confirmDowngrade()" 
+                    :disabled="loading"
+                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-gray-400 dark:hover:border-gray-500 transition group text-left w-full">
+                <div class="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center mb-4 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition">
+                    <svg class="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-gray-900 dark:text-white">Downgrade to Basic</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Switch to 100 invoices/month for £39</p>
+            </button>
             {% endif %}
         </div>
         
@@ -118,78 +158,168 @@
                 <p class="text-gray-600 dark:text-gray-400 mb-4">
                     If you cancel, you'll keep access until the end of your current billing period. Your data will be preserved if you decide to resubscribe.
                 </p>
-                <button onclick="confirmCancel()" class="px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg font-medium transition">
+                <button @click="confirmCancel()" 
+                        :disabled="loading"
+                        class="px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg font-medium transition disabled:opacity-50">
                     Cancel Subscription
                 </button>
             </div>
         </div>
-        {% endif %}
-        
-    </div>
-</div>
-
-<!-- Cancel Confirmation Modal -->
-<div id="cancelModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50">
-    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
-        <div class="text-center">
-            <div class="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {% elif current_user.subscription_status == 'cancelled' %}
+        <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6">
+            <div class="flex items-start">
+                <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-            </div>
-            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Cancel Subscription?</h3>
-            <p class="text-gray-600 dark:text-gray-400 mb-6">
-                Are you sure you want to cancel? You'll lose access to GoZappify at the end of your billing period.
-            </p>
-            <div class="flex gap-4">
-                <button onclick="closeModal()" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
-                    Keep Subscription
-                </button>
-                <button onclick="cancelSubscription()" id="confirmCancelBtn" class="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition">
-                    Yes, Cancel
-                </button>
+                <div>
+                    <h3 class="font-semibold text-yellow-800 dark:text-yellow-200">Subscription Cancelled</h3>
+                    <p class="text-yellow-700 dark:text-yellow-300 mt-1">
+                        Your subscription has been cancelled. You'll keep access until the end of your current billing period.
+                    </p>
+                    <a href="{{ url_for('billing.index') }}" class="inline-flex items-center mt-4 text-yellow-800 dark:text-yellow-200 font-medium hover:underline">
+                        Resubscribe →
+                    </a>
+                </div>
             </div>
         </div>
+        {% endif %}
+        
+        <!-- Cancel Confirmation Modal -->
+        <div x-show="showCancelModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div @click.away="showCancelModal = false" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Cancel Subscription?</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-6">
+                        Are you sure you want to cancel? You'll lose access to GoZappify at the end of your billing period.
+                    </p>
+                    <div class="flex gap-4">
+                        <button @click="showCancelModal = false" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
+                            Keep Subscription
+                        </button>
+                        <button @click="cancelSubscription()" :disabled="loading" class="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
+                            <span x-show="!loading">Yes, Cancel</span>
+                            <span x-show="loading">Cancelling...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Downgrade Confirmation Modal -->
+        <div x-show="showDowngradeModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div @click.away="showDowngradeModal = false" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Downgrade to Basic?</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-6">
+                        You'll keep Pro access until your next billing date. Then you'll be charged £39/month for the Basic plan with 100 invoices per month.
+                    </p>
+                    <div class="flex gap-4">
+                        <button @click="showDowngradeModal = false" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
+                            Keep Pro
+                        </button>
+                        <button @click="changePlan('basic')" :disabled="loading" class="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
+                            <span x-show="!loading">Downgrade</span>
+                            <span x-show="loading">Processing...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
     </div>
 </div>
 
 <script>
-function confirmCancel() {
-    document.getElementById('cancelModal').classList.remove('hidden');
-    document.getElementById('cancelModal').classList.add('flex');
-}
-
-function closeModal() {
-    document.getElementById('cancelModal').classList.add('hidden');
-    document.getElementById('cancelModal').classList.remove('flex');
-}
-
-async function cancelSubscription() {
-    const btn = document.getElementById('confirmCancelBtn');
-    btn.disabled = true;
-    btn.innerHTML = 'Cancelling...';
-    
-    try {
-        const response = await fetch('{{ url_for("billing.cancel") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+function managePage() {
+    return {
+        loading: false,
+        message: null,
+        messageType: 'success',
+        showCancelModal: false,
+        showDowngradeModal: false,
+        
+        confirmCancel() {
+            this.showCancelModal = true;
+        },
+        
+        confirmDowngrade() {
+            this.showDowngradeModal = true;
+        },
+        
+        async cancelSubscription() {
+            this.loading = true;
+            this.message = null;
+            
+            try {
+                const response = await fetch('{{ url_for("billing.cancel") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.message = data.message;
+                    this.messageType = 'success';
+                    this.showCancelModal = false;
+                    // Reload page after short delay to show updated status
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    this.message = data.error || 'Failed to cancel subscription';
+                    this.messageType = 'error';
+                }
+            } catch (err) {
+                this.message = 'An error occurred. Please try again.';
+                this.messageType = 'error';
+            } finally {
+                this.loading = false;
             }
-        });
+        },
         
-        const data = await response.json();
-        
-        if (data.success) {
-            window.location.href = '{{ url_for("billing.index") }}';
-        } else {
-            alert(data.error || 'Failed to cancel subscription');
-            btn.disabled = false;
-            btn.innerHTML = 'Yes, Cancel';
+        async changePlan(newPlan) {
+            this.loading = true;
+            this.message = null;
+            this.showDowngradeModal = false;
+            
+            try {
+                const response = await fetch('{{ url_for("billing.change_plan") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ plan: newPlan })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.message = data.message;
+                    this.messageType = 'success';
+                    // Reload page after short delay to show updated status
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    this.message = data.error || 'Failed to change plan';
+                    this.messageType = 'error';
+                }
+            } catch (err) {
+                this.message = 'An error occurred. Please try again.';
+                this.messageType = 'error';
+            } finally {
+                this.loading = false;
+            }
         }
-    } catch (err) {
-        alert('An error occurred. Please try again.');
-        btn.disabled = false;
-        btn.innerHTML = 'Yes, Cancel';
     }
 }
 </script>

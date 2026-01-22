@@ -155,7 +155,25 @@ def subscribe(plan):
 @login_required
 def success():
     """Subscription success page"""
-    return render_template('billing/success.html')
+    # Get the plan from URL param (passed from Paddle checkout success URL)
+    # This is more reliable than current_user since webhook may not have processed yet
+    plan = request.args.get('plan', '')
+    
+    # Determine display values based on plan param or fall back to current_user
+    if plan == 'pro':
+        plan_name = 'Pro'
+        invoice_limit = 'Unlimited'
+    elif plan == 'basic':
+        plan_name = 'Basic'
+        invoice_limit = '100'
+    else:
+        # Fall back to current_user (webhook may have already processed)
+        plan_name = current_user.plan_display_name
+        invoice_limit = 'Unlimited' if current_user.subscription_plan == 'pro' else '100'
+    
+    return render_template('billing/success.html',
+                          plan_name=plan_name,
+                          invoice_limit=invoice_limit)
 
 
 @bp.route('/manage')
@@ -165,7 +183,93 @@ def manage():
     if not current_user.paddle_subscription_id:
         return redirect(url_for('billing.index'))
     
-    return render_template('billing/manage.html')
+    config = get_paddle_config()
+    
+    return render_template('billing/manage.html',
+                          paddle_price_basic=config['price_basic'],
+                          paddle_price_pro=config['price_pro'])
+
+
+@bp.route('/change-plan', methods=['POST'])
+@login_required
+def change_plan():
+    """Change subscription plan (upgrade or downgrade)"""
+    import requests
+    
+    if not current_user.paddle_subscription_id:
+        return jsonify({'error': 'No active subscription'}), 400
+    
+    data = request.get_json() or {}
+    new_plan = data.get('plan')
+    
+    if new_plan not in ['basic', 'pro']:
+        return jsonify({'error': 'Invalid plan'}), 400
+    
+    # Don't allow changing to the same plan
+    if new_plan == current_user.subscription_plan:
+        return jsonify({'error': 'You are already on this plan'}), 400
+    
+    config = get_paddle_config()
+    
+    # Get the new price ID
+    new_price_id = config['price_basic'] if new_plan == 'basic' else config['price_pro']
+    
+    try:
+        # Determine API URL based on environment
+        if config['environment'] == 'production':
+            api_url = 'https://api.paddle.com'
+        else:
+            api_url = 'https://sandbox-api.paddle.com'
+        
+        # Update subscription with new price
+        # proration_billing_mode options:
+        # - "prorated_immediately" - charge/credit immediately
+        # - "prorated_next_billing_period" - apply at next billing (good for downgrades)
+        # - "full_immediately" - charge full amount immediately
+        # - "full_next_billing_period" - charge full amount at next billing
+        
+        # For upgrades: charge immediately (prorated)
+        # For downgrades: apply at next billing period
+        is_downgrade = new_plan == 'basic' and current_user.subscription_plan == 'pro'
+        proration_mode = 'prorated_next_billing_period' if is_downgrade else 'prorated_immediately'
+        
+        response = requests.patch(
+            f"{api_url}/subscriptions/{current_user.paddle_subscription_id}",
+            headers={
+                'Authorization': f"Bearer {config['api_key']}",
+                'Content-Type': 'application/json'
+            },
+            json={
+                'items': [{
+                    'price_id': new_price_id,
+                    'quantity': 1
+                }],
+                'proration_billing_mode': proration_mode
+            }
+        )
+        
+        result = response.json()
+        current_app.logger.info(f"Plan change response: {result}")
+        
+        if result.get('data'):
+            # For upgrades, update immediately; for downgrades, Paddle webhook will handle it
+            if not is_downgrade:
+                current_user.subscription_plan = new_plan
+                db.session.commit()
+            
+            message = 'Plan upgraded successfully!' if not is_downgrade else 'Plan will change to Basic at your next billing date. You keep Pro access until then.'
+            return jsonify({
+                'success': True, 
+                'message': message,
+                'is_downgrade': is_downgrade
+            })
+        else:
+            error_msg = result.get('error', {}).get('detail', 'Plan change failed')
+            return jsonify({'error': error_msg}), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Plan change error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/cancel', methods=['POST'])
@@ -201,7 +305,10 @@ def cancel():
         if result.get('data'):
             current_user.subscription_status = 'cancelled'
             db.session.commit()
-            return jsonify({'success': True, 'message': 'Subscription will cancel at end of billing period'})
+            return jsonify({
+                'success': True, 
+                'message': 'Your subscription has been cancelled. You will keep access until the end of your current billing period.'
+            })
         else:
             return jsonify({'error': result.get('error', {}).get('detail', 'Cancellation failed')}), 500
             
@@ -222,53 +329,64 @@ def webhook():
     # Verify webhook signature
     if webhook_secret and signature:
         if not verify_paddle_signature(payload, signature, webhook_secret):
-            current_app.logger.error("Invalid Paddle webhook signature")
-            return jsonify({'error': 'Invalid signature'}), 400
+            current_app.logger.warning("Invalid webhook signature")
+            return jsonify({'error': 'Invalid signature'}), 401
     
     try:
-        event = json.loads(payload)
+        data = json.loads(payload)
     except json.JSONDecodeError:
         return jsonify({'error': 'Invalid JSON'}), 400
     
-    event_type = event.get('event_type')
-    data = event.get('data', {})
+    event_type = data.get('event_type')
+    event_data = data.get('data', {})
     
     current_app.logger.info(f"Paddle webhook received: {event_type}")
+    current_app.logger.debug(f"Webhook data: {json.dumps(event_data, indent=2)}")
     
-    # Handle different event types
+    # Route to appropriate handler
     if event_type == 'subscription.created':
-        handle_subscription_created(data)
+        handle_subscription_created(event_data)
     elif event_type == 'subscription.updated':
-        handle_subscription_updated(data)
+        handle_subscription_updated(event_data)
     elif event_type == 'subscription.canceled':
-        handle_subscription_canceled(data)
+        handle_subscription_canceled(event_data)
     elif event_type == 'subscription.paused':
-        handle_subscription_paused(data)
+        handle_subscription_paused(event_data)
     elif event_type == 'transaction.completed':
-        handle_transaction_completed(data)
+        handle_transaction_completed(event_data)
+    else:
+        current_app.logger.info(f"Unhandled webhook event: {event_type}")
     
-    return jsonify({'received': True})
+    return jsonify({'status': 'success'}), 200
 
 
 def verify_paddle_signature(payload, signature, secret):
     """Verify Paddle webhook signature"""
     try:
-        parts = dict(part.split('=') for part in signature.split(';'))
-        timestamp = parts.get('ts')
-        received_hash = parts.get('h1')
+        # Parse the signature header
+        parts = {}
+        for part in signature.split(';'):
+            if '=' in part:
+                key, value = part.split('=', 1)
+                parts[key] = value
         
-        if not timestamp or not received_hash:
+        ts = parts.get('ts', '')
+        h1 = parts.get('h1', '')
+        
+        if not ts or not h1:
             return False
         
-        signed_payload = f"{timestamp}:{payload.decode('utf-8')}"
+        # Build the signed payload
+        signed_payload = f"{ts}:{payload.decode('utf-8')}"
         
-        expected_hash = hmac.new(
+        # Calculate expected signature
+        expected = hmac.new(
             secret.encode('utf-8'),
             signed_payload.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
         
-        return hmac.compare_digest(expected_hash, received_hash)
+        return hmac.compare_digest(expected, h1)
     except Exception as e:
         current_app.logger.error(f"Signature verification error: {str(e)}")
         return False
@@ -367,6 +485,24 @@ def handle_subscription_updated(data):
         return
     
     status = data.get('status')
+    
+    # Check for plan change (from items)
+    items = data.get('items') or []
+    if items:
+        price_id = items[0].get('price', {}).get('id')
+        config = get_paddle_config()
+        
+        if price_id == config['price_basic']:
+            new_plan = 'basic'
+        elif price_id == config['price_pro']:
+            new_plan = 'pro'
+        else:
+            new_plan = None
+        
+        if new_plan and new_plan != user.subscription_plan:
+            old_plan = user.subscription_plan
+            user.subscription_plan = new_plan
+            current_app.logger.info(f"Plan changed for user {user.id}: {old_plan} -> {new_plan}")
     
     # Check if this is a renewal
     billing_cycle = data.get('current_billing_period') or {}

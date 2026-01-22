@@ -16,7 +16,7 @@
         <!-- Message -->
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">You're all set!</h1>
         <p class="text-gray-600 dark:text-gray-400 mb-8">
-            Your subscription to <strong class="text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</strong> is now active. 
+            Your subscription to <strong class="text-gray-900 dark:text-white">{{ plan_name }}</strong> is now active. 
             You can start uploading invoices and syncing to your accounting software right away.
         </p>
         
@@ -24,13 +24,11 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mb-8">
             <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <span class="text-gray-600 dark:text-gray-400">Plan</span>
-                <span class="font-semibold text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</span>
+                <span class="font-semibold text-gray-900 dark:text-white">{{ plan_name }}</span>
             </div>
             <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <span class="text-gray-600 dark:text-gray-400">Monthly Invoices</span>
-                <span class="font-semibold text-gray-900 dark:text-white">
-                    {% if current_user.subscription_plan == 'pro' %}Unlimited{% else %}100{% endif %}
-                </span>
+                <span class="font-semibold text-gray-900 dark:text-white">{{ invoice_limit }}</span>
             </div>
             <div class="flex justify-between items-center">
                 <span class="text-gray-600 dark:text-gray-400">Accounting Sync</span>

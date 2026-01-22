@@ -293,7 +293,7 @@ function openPaddleCheckout(plan) {
             plan: plan
         },
         settings: {
-            successUrl: '{{ url_for("billing.success", _external=True) }}'
+            successUrl: '{{ url_for("billing.success", _external=True) }}?plan=' + plan
         }
     });
 }
