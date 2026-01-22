@@ -182,8 +182,36 @@ class QuickBooksService:
         return self.make_api_request(qb_connection, "query?query=SELECT * FROM Account WHERE AccountType = 'Expense' MAXRESULTS 1000")
     
     def get_items(self, qb_connection):
-        """Get all items/products"""
-        return self.make_api_request(qb_connection, "query?query=SELECT * FROM Item MAXRESULTS 1000")
+        """Get all items/products with pagination to handle large catalogs"""
+        all_items = []
+        start_position = 1
+        max_results = 1000
+        
+        while True:
+            query = f"query?query=SELECT * FROM Item STARTPOSITION {start_position} MAXRESULTS {max_results}"
+            response = self.make_api_request(qb_connection, query)
+            
+            if not response or 'error' in response:
+                break
+                
+            items = response.get('QueryResponse', {}).get('Item', [])
+            
+            if not items:
+                break
+                
+            all_items.extend(items)
+            current_app.logger.info(f"Loaded {len(all_items)} products so far...")
+            
+            # If we got fewer than max_results, we've reached the end
+            if len(items) < max_results:
+                break
+                
+            start_position += max_results
+        
+        current_app.logger.info(f"Total products loaded: {len(all_items)}")
+        
+        # Return in same format as before for compatibility
+        return {'QueryResponse': {'Item': all_items}}
     
     def create_vendor(self, qb_connection, vendor_name):
         """Create a new vendor"""
@@ -641,7 +669,7 @@ class QuickBooksService:
             current_app.logger.info(f"Matching job reference: {job_reference} against {len(customer_names)} customers")
             
             message = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
