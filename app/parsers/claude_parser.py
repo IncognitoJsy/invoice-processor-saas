@@ -26,9 +26,10 @@ class ClaudeInvoiceParser:
     def parse(self, pdf_path: str, expected_document_type: str = 'invoice', user_markup_settings: Dict = None) -> Dict:
         """
         Parse invoice using Claude API - handles consolidated invoices
+        Supports PDF, JPG, PNG, GIF, and WEBP files
         
         Args:
-            pdf_path: Path to PDF file
+            pdf_path: Path to PDF or image file
             expected_document_type: 'invoice' or 'quote' - what the user selected
             user_markup_settings: Dict with 'is_admin' and 'default_markup' keys
         """
@@ -40,11 +41,37 @@ class ClaudeInvoiceParser:
             # Store markup settings for use in transform
             self.user_markup_settings = user_markup_settings or {'is_admin': False, 'default_markup': 50.0}
             
-            # Read PDF file as binary and encode to base64
-            with open(pdf_path, 'rb') as f:
-                pdf_data = base64.standard_b64encode(f.read()).decode('utf-8')
+            # Determine file type and media type
+            file_ext = os.path.splitext(pdf_path)[1].lower()
             
-            # Call Claude API with PDF document
+            # Map extensions to media types
+            media_type_map = {
+                '.pdf': 'application/pdf',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp'
+            }
+            
+            media_type = media_type_map.get(file_ext)
+            if not media_type:
+                return {
+                    'success': False,
+                    'error': f'Unsupported file type: {file_ext}. Supported types: PDF, JPG, PNG, GIF, WEBP'
+                }
+            
+            # Read file as binary and encode to base64
+            with open(pdf_path, 'rb') as f:
+                file_data = base64.standard_b64encode(f.read()).decode('utf-8')
+            
+            # Determine content type for API call
+            if media_type == 'application/pdf':
+                content_type = "document"
+            else:
+                content_type = "image"
+            
+            # Call Claude API with document/image
             message = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=8192,  # Increased for consolidated invoices
@@ -52,11 +79,11 @@ class ClaudeInvoiceParser:
                     "role": "user",
                     "content": [
                         {
-                            "type": "document",
+                            "type": content_type,
                             "source": {
                                 "type": "base64",
-                                "media_type": "application/pdf",
-                                "data": pdf_data
+                                "media_type": media_type,
+                                "data": file_data
                             }
                         },
                         {
@@ -84,30 +111,31 @@ class ClaudeInvoiceParser:
     
     def _get_extraction_prompt(self) -> str:
         """Get the prompt for invoice extraction"""
-        return """You are an expert at extracting data from electrical supplier invoices and quotations (YESSS, CEF, Wholesale Electrics, etc).
+        return """You are an expert at extracting data from electrical supplier invoices, quotations, and order documents (YESSS, CEF, Wholesale Electrics, etc).
 
 CRITICAL: First, identify what TYPE of document this is by looking for keywords:
 - QUOTATION, QUOTE, ESTIMATE, PROFORMA = This is a QUOTE
 - INVOICE, TAX INVOICE, BILL = This is an INVOICE  
 - CREDIT, CREDIT NOTE = This is a CREDIT NOTE
+- ORDER ACKNOWLEDGEMENT, SALES ORDER, ORDER CONFIRMATION, PURCHASE ORDER = This is an ORDER (treat as invoice)
 
 CRITICAL: This PDF may contain MULTIPLE invoices/quotes (consolidated). Each has its own job reference and should be treated separately.
 
 Extract all documents and return ONLY valid JSON with no markdown formatting, no code blocks, no explanation:
 
 {
-    "detected_document_type": "invoice" or "quote" or "credit_note",
+    "detected_document_type": "invoice" or "quote" or "credit_note" or "order",
     "supplier_account_number": "the customer's account number with this supplier - VERY IMPORTANT",
     "invoices": [
         {
-            "document_type": "invoice" or "quote" or "credit_note",
+            "document_type": "invoice" or "quote" or "credit_note" or "order",
             "supplier": "name of supplier (e.g. YESSS Electrical, CEF, Wholesale Electrics)",
-            "invoice_number": "EXACT invoice/quote number as shown on document - THIS IS CRITICAL",
-            "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD, SARAH HOLT)",
+            "invoice_number": "EXACT invoice/quote/order number as shown on document - THIS IS CRITICAL",
+            "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD, SARAH HOLT, MATT NORIS)",
             "total_net_amount": 2788.74,
             "items": [
                 {
-                    "part_number": "exact part number from document (e.g. JFG320U, WMSSU83, 221-415, HV3PROAAUB075T2)",
+                    "part_number": "exact part number from document (e.g. JFG320U, WMSSU83, 221-415, HV3PROAAUB075T2, MMT2SFWH)",
                     "description": "complete item description, including all details even if multi-line",
                     "quantity": 2.0,
                     "original_unit_price": 1541.12,
@@ -121,7 +149,7 @@ Extract all documents and return ONLY valid JSON with no markdown formatting, no
 
 SUPPLIER ACCOUNT NUMBER EXTRACTION - CRITICAL FOR FRAUD PREVENTION:
 1. **WHOLESALE ELECTRICS**: Look for "Account" field in the header area, usually a 4-digit number (e.g., "6729")
-2. **YESSS ELECTRICAL**: Look for "ACCOUNT NUMBER" field, format like "093/47669" 
+2. **YESSS ELECTRICAL**: Look for "ACCOUNT NUMBER" field, format like "47669" or with branch prefix "093/47669" 
 3. **CEF**: Look for "Account Code:" field, usually an 8-digit number (e.g., "86100012")
 4. **OTHER SUPPLIERS**: Look for any field labeled "Account", "Account No", "Account Number", "Customer Account", "A/C No" etc.
 5. This is the CUSTOMER'S account with the supplier, NOT an invoice number
@@ -131,38 +159,40 @@ DOCUMENT TYPE DETECTION - VERY IMPORTANT:
 7. **QUOTE/QUOTATION**: Look for "QUOTATION", "QUOTE", "ESTIMATE", "PROFORMA" prominently displayed at top
 8. **INVOICE**: Look for "INVOICE", "TAX INVOICE", "BILL" prominently displayed
 9. **CREDIT NOTE**: Has "CREDIT" or "CREDIT NOTE" prominently displayed, negative amounts
-10. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
-11. Set each document's "document_type" accordingly
+10. **ORDER**: Look for "ORDER ACKNOWLEDGEMENT", "SALES ORDER", "ORDER CONFIRMATION" - treat same as invoice
+11. Set "detected_document_type" to the OVERALL type of the PDF (what's shown at the top)
+12. Set each document's "document_type" accordingly
 
-INVOICE/QUOTE NUMBER EXTRACTION - VERY IMPORTANT:
-12. **CEF**: Number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
-13. **YESSS Invoices**: Number is under "INVOICE NUMBER", starts with "093" (e.g., 0931234567)
-14. **YESSS Quotes**: Number is under "DOCUMENT NUMBER", format like "093QO69883"
-15. **Wholesale Electrics**: Number is below "INVOICE NUMBER", starts with "IN" (e.g., IN123456)
-16. Extract the EXACT number - do not modify or abbreviate it
+INVOICE/QUOTE/ORDER NUMBER EXTRACTION - VERY IMPORTANT:
+13. **CEF**: Number is in TOP RIGHT, starts with "JER" (e.g., JER753997, JER765610)
+14. **YESSS Invoices**: Number is under "INVOICE NUMBER", starts with "093" (e.g., 0931234567)
+15. **YESSS Quotes**: Number is under "DOCUMENT NUMBER", format like "093QO69883"
+16. **YESSS Orders**: Number is under "DOCUMENT NUMBER", format like "006SO201866"
+17. **Wholesale Electrics**: Number is below "INVOICE NUMBER", starts with "IN" (e.g., IN123456)
+18. Extract the EXACT number - do not modify or abbreviate it
 
 CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
-17. **DETECT MULTIPLE ORDERS**: Look for job reference changes
-18. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
-19. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
-20. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
-21. **ACCOUNT NUMBER IS SAME**: The supplier_account_number is the same for all invoices in a consolidated PDF
+19. **DETECT MULTIPLE ORDERS**: Look for job reference changes
+20. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
+21. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
+22. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
+23. **ACCOUNT NUMBER IS SAME**: The supplier_account_number is the same for all invoices in a consolidated PDF
 
 CRITICAL PRICING RULES FOR WHOLESALE ELECTRICS:
-22. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
-23. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
-24. Extract total_amount as the BEFORE-discount amount from the Amount column
-25. Extract discount as just the number (e.g. "51" not "51%")
-26. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
+24. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
+25. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
+26. Extract total_amount as the BEFORE-discount amount from the Amount column
+27. Extract discount as just the number (e.g. "51" not "51%")
+28. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
 
 STANDARD RULES:
-27. Extract EVERY SINGLE item from the document - do not skip any
-28. Part numbers must be EXACT as shown on document
-29. Descriptions must be COMPLETE - include all text even if it spans multiple lines
-30. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
-31. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
-32. original_unit_price is the price BEFORE discount is applied
-33. total_amount is the line total shown in the Amount column
+29. Extract EVERY SINGLE item from the document - do not skip any
+30. Part numbers must be EXACT as shown on document
+31. Descriptions must be COMPLETE - include all text even if it spans multiple lines
+32. Prices must be NUMERIC ONLY (no £, $, or currency symbols)
+33. Discount is the percentage as a STRING (e.g. "45" not "45%" or 45)
+34. original_unit_price is the price BEFORE discount is applied
+35. total_amount is the line total shown in the Amount column
 34. If quantity is not explicitly shown, it's usually 1
 35. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
@@ -203,8 +233,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             # Normalize detected type
             if detected_type in ['quote', 'quotation', 'estimate', 'proforma']:
                 detected_type = 'quote'
-            elif detected_type in ['invoice', 'tax invoice', 'bill']:
-                detected_type = 'invoice'
+            elif detected_type in ['invoice', 'tax invoice', 'bill', 'order', 'order acknowledgement', 'sales order', 'order confirmation']:
+                detected_type = 'invoice'  # Treat orders as invoices
             elif detected_type in ['credit', 'credit_note', 'credit note']:
                 detected_type = 'credit_note'
             
@@ -429,14 +459,19 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         # YESSS validation
         if 'yesss' in supplier_lower:
-            # YESSS account numbers contain "/" (e.g., "093/47669")
+            # YESSS account numbers can be:
+            # - With slash: "093/47669"
+            # - Just the number: "47669"
             # Invoice numbers contain "IN" (e.g., "093IN1101998")
-            if 'IN' in account_number.upper():
-                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - looks like an invoice number (contains 'IN')")
+            # Quote numbers contain "QO" (e.g., "093QO69883")
+            # Order numbers contain "SO" (e.g., "006SO201866")
+            if 'IN' in account_number.upper() or 'QO' in account_number.upper() or 'SO' in account_number.upper():
+                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - looks like an invoice/quote/order number")
                 return None
-            # Valid YESSS account should have format like 093/xxxxx
-            if '/' not in account_number:
-                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - missing expected '/' format")
+            # Valid YESSS account should be numeric (possibly with slash)
+            clean_account = account_number.replace('/', '').replace(' ', '')
+            if not clean_account.isdigit():
+                self.logger.warning(f"Rejecting YESSS account number '{account_number}' - should be numeric")
                 return None
                 
         # CEF validation  
