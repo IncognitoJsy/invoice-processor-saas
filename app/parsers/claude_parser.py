@@ -80,18 +80,16 @@ class ClaudeInvoiceParser:
             if qb_connection and qb_connection.realm_id:
                 self.logger.info(f"📗 User has QuickBooks connected (realm: {qb_connection.realm_id}) - loading products...")
                 try:
-                    # Try both import paths
-                    try:
-                        from app.services.quickbooks_service import QuickBooksService
-                    except ImportError:
-                        from app.integrations.quickbooks_service import QuickBooksService
+                    # Use the integrations QuickBooksService which has get_items()
+                    from app.integrations.quickbooks_service import QuickBooksService
                     
-                    # Pass both user_id and realm_id
-                    qb_service = QuickBooksService(current_user.id, qb_connection.realm_id)
+                    qb_service = QuickBooksService()
                     
-                    if qb_service.is_connected():
-                        items = qb_service.get_items()
-                        qb_count = 0
+                    # get_items expects the qb_connection object
+                    items = qb_service.get_items(qb_connection)
+                    qb_count = 0
+                    
+                    if items:
                         for item in items:
                             sku = item.get('Sku') or ''
                             name = item.get('Name', '')
@@ -113,7 +111,7 @@ class ClaudeInvoiceParser:
                         
                         self.logger.info(f"✅ Loaded {qb_count} products from QuickBooks")
                     else:
-                        self.logger.warning("⚠️ QuickBooks connection found but service not connected")
+                        self.logger.warning("⚠️ No products returned from QuickBooks")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load QuickBooks products: {e}")
@@ -122,18 +120,18 @@ class ClaudeInvoiceParser:
             
             # Load from Xero if connected (only if QuickBooks is NOT connected)
             elif xero_connection and xero_connection.tenant_id:
-                self.logger.info("📘 User has Xero connected - loading products...")
+                self.logger.info(f"📘 User has Xero connected (tenant: {xero_connection.tenant_id}) - loading products...")
                 try:
-                    try:
-                        from app.services.xero_service import XeroService
-                    except ImportError:
-                        from app.integrations.xero_service import XeroService
+                    # Use the integrations XeroService which has get_items()
+                    from app.integrations.xero_service import XeroService
                     
-                    xero_service = XeroService(current_user.id)
+                    xero_service = XeroService()
                     
-                    if xero_service.is_connected():
-                        items = xero_service.get_items()
-                        xero_count = 0
+                    # get_items expects the xero_connection object
+                    items = xero_service.get_items(xero_connection)
+                    xero_count = 0
+                    
+                    if items:
                         for item in items:
                             code = item.get('Code', '')
                             name = item.get('Name', '')
@@ -155,10 +153,12 @@ class ClaudeInvoiceParser:
                         
                         self.logger.info(f"✅ Loaded {xero_count} products from Xero")
                     else:
-                        self.logger.warning("⚠️ Xero connection found but service not connected")
+                        self.logger.warning("⚠️ No products returned from Xero")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load Xero products: {e}")
+                    import traceback
+                    self.logger.debug(traceback.format_exc())
             
             else:
                 self.logger.warning("⚠️ No accounting software connected")
