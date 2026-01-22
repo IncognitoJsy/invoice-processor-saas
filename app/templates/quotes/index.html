@@ -282,8 +282,8 @@
 function quotesPage() {
     return {
         files: [], dragover: false, uploading: false, uploadSuccess: false, uploadError: false, uploadMessage: '', errorMessage: '', wrongDocType: false,
-        handleDrop(e) { this.dragover = false; this.files = [...this.files, ...Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf')]; },
-        handleFileSelect(e) { this.files = [...this.files, ...Array.from(e.target.files).filter(f => f.type === 'application/pdf')]; },
+        handleDrop(e) { this.dragover = false; const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']; this.files = [...this.files, ...Array.from(e.dataTransfer.files).filter(f => allowedTypes.includes(f.type))]; },
+        handleFileSelect(e) { const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']; this.files = [...this.files, ...Array.from(e.target.files).filter(f => allowedTypes.includes(f.type))]; },
         formatFileSize(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]; },
         async uploadFiles() {
             this.uploading = true; this.uploadSuccess = false; this.uploadError = false; this.wrongDocType = false;
