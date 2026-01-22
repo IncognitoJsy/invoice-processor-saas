@@ -204,14 +204,14 @@ class ClaudeInvoiceParser:
         
         # Common OCR confusions for alphanumeric codes
         ocr_substitutions = {
-            '0': ['O', 'D', 'Q'],
+            '0': ['O', 'D', 'Q', '5'],
             'O': ['0', 'D', 'Q'],
             '8': ['B', '3'],
             'B': ['8', '3'],
             '1': ['I', 'L', '7'],
             'I': ['1', 'L'],
             'L': ['1', 'I'],
-            '5': ['S'],
+            '5': ['S', '0'],
             'S': ['5'],
             '2': ['Z'],
             'Z': ['2'],
