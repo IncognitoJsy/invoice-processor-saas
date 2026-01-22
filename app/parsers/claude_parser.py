@@ -86,32 +86,40 @@ class ClaudeInvoiceParser:
                     qb_service = QuickBooksService()
                     
                     # get_items expects the qb_connection object
-                    items = qb_service.get_items(qb_connection)
+                    response = qb_service.get_items(qb_connection)
                     qb_count = 0
                     
-                    if items:
-                        for item in items:
-                            sku = item.get('Sku') or ''
-                            name = item.get('Name', '')
+                    # QuickBooks API returns: {"QueryResponse": {"Item": [...]}}
+                    if response and isinstance(response, dict):
+                        if 'error' in response:
+                            self.logger.warning(f"⚠️ QuickBooks API error: {response.get('error')}")
+                        else:
+                            items = response.get('QueryResponse', {}).get('Item', [])
+                            self.logger.info(f"📦 Found {len(items)} items in QuickBooks")
                             
-                            if sku:
-                                known_products[sku.upper()] = {
-                                    'name': name,
-                                    'sku': sku,
-                                    'source': 'quickbooks'
-                                }
-                                qb_count += 1
+                            for item in items:
+                                if isinstance(item, dict):
+                                    sku = item.get('Sku') or ''
+                                    name = item.get('Name', '')
+                                    
+                                    if sku:
+                                        known_products[sku.upper()] = {
+                                            'name': name,
+                                            'sku': sku,
+                                            'source': 'quickbooks'
+                                        }
+                                        qb_count += 1
+                                    
+                                    if name and name.upper() not in known_products:
+                                        known_products[name.upper()] = {
+                                            'name': name,
+                                            'sku': sku or name,
+                                            'source': 'quickbooks'
+                                        }
                             
-                            if name and name.upper() not in known_products:
-                                known_products[name.upper()] = {
-                                    'name': name,
-                                    'sku': sku or name,
-                                    'source': 'quickbooks'
-                                }
-                        
-                        self.logger.info(f"✅ Loaded {qb_count} products from QuickBooks")
+                            self.logger.info(f"✅ Loaded {qb_count} products with SKUs from QuickBooks")
                     else:
-                        self.logger.warning("⚠️ No products returned from QuickBooks")
+                        self.logger.warning(f"⚠️ Unexpected response format from QuickBooks: {type(response)}")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load QuickBooks products: {e}")
@@ -127,33 +135,36 @@ class ClaudeInvoiceParser:
                     
                     xero_service = XeroService()
                     
-                    # get_items expects the xero_connection object
+                    # get_items expects the xero_connection object and returns a list
                     items = xero_service.get_items(xero_connection)
                     xero_count = 0
                     
-                    if items:
-                        for item in items:
-                            code = item.get('Code', '')
-                            name = item.get('Name', '')
-                            
-                            if code:
-                                known_products[code.upper()] = {
-                                    'name': name,
-                                    'sku': code,
-                                    'source': 'xero'
-                                }
-                                xero_count += 1
-                            
-                            if name and name.upper() not in known_products:
-                                known_products[name.upper()] = {
-                                    'name': name,
-                                    'sku': code or name,
-                                    'source': 'xero'
-                                }
+                    if items and isinstance(items, list):
+                        self.logger.info(f"📦 Found {len(items)} items in Xero")
                         
-                        self.logger.info(f"✅ Loaded {xero_count} products from Xero")
+                        for item in items:
+                            if isinstance(item, dict):
+                                code = item.get('Code', '')
+                                name = item.get('Name', '')
+                                
+                                if code:
+                                    known_products[code.upper()] = {
+                                        'name': name,
+                                        'sku': code,
+                                        'source': 'xero'
+                                    }
+                                    xero_count += 1
+                                
+                                if name and name.upper() not in known_products:
+                                    known_products[name.upper()] = {
+                                        'name': name,
+                                        'sku': code or name,
+                                        'source': 'xero'
+                                    }
+                        
+                        self.logger.info(f"✅ Loaded {xero_count} products with codes from Xero")
                     else:
-                        self.logger.warning("⚠️ No products returned from Xero")
+                        self.logger.warning(f"⚠️ No products returned from Xero or unexpected format: {type(items)}")
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load Xero products: {e}")
