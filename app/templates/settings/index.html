@@ -88,8 +88,16 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
                         <div>
+                            {% if current_user.xero_tenant_id %}
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">Using Xero tax settings</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">GST/VAT is automatically applied based on your Xero configuration</p>
+                            {% elif current_user.quickbooks_realm_id %}
                             <p class="text-sm font-medium text-gray-900 dark:text-white">Using QuickBooks tax settings</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">GST/VAT is automatically applied based on your QuickBooks configuration</p>
+                            {% else %}
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">No accounting software connected</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Connect QuickBooks or Xero to enable automatic tax handling</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -179,7 +187,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Integrations</h2>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect to QuickBooks and other services</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect to QuickBooks, Xero, and other services</p>
                     </div>
                     <a href="{{ url_for('integrations.integrations_overview') }}"
                        class="px-6 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition flex items-center">
