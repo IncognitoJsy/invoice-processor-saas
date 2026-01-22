@@ -20,3 +20,9 @@ def privacy():
 def terms():
     """Terms of Service page"""
     return render_template('pages/terms.html')
+
+
+@bp.route('/refund-policy')
+def refund_policy():
+    """Refund Policy page"""
+    return render_template('pages/refund.html')
