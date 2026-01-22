@@ -118,10 +118,10 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Top up with extra invoice credits</p>
             </a>
             
-            <!-- Upgrade to Pro -->
-            <button @click="changePlan('pro')" 
+            <!-- Upgrade to Pro - Opens Paddle Checkout -->
+            <button @click="upgradeToPro()" 
                     :disabled="loading"
-                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-purple-500 dark:hover:border-purple-500 transition group text-left w-full">
+                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-purple-500 dark:hover:border-purple-500 transition group text-left w-full disabled:opacity-50">
                 <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
                     <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
@@ -227,7 +227,7 @@
                         <button @click="showDowngradeModal = false" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
                             Keep Pro
                         </button>
-                        <button @click="changePlan('basic')" :disabled="loading" class="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
+                        <button @click="downgradeToBasic()" :disabled="loading" class="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
                             <span x-show="!loading">Downgrade</span>
                             <span x-show="loading">Processing...</span>
                         </button>
@@ -239,7 +239,17 @@
     </div>
 </div>
 
+<!-- Paddle.js for upgrades -->
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script>
+// Initialize Paddle
+Paddle.Environment.set('{{ paddle_environment }}');
+Paddle.Initialize({
+    token: '{{ paddle_client_token }}'
+});
+
+const proPriceId = '{{ paddle_price_pro }}';
+
 function managePage() {
     return {
         loading: false,
@@ -254,6 +264,59 @@ function managePage() {
         
         confirmDowngrade() {
             this.showDowngradeModal = true;
+        },
+        
+        // Upgrade to Pro - opens Paddle checkout for payment
+        upgradeToPro() {
+            this.loading = true;
+            this.message = null;
+            
+            Paddle.Checkout.open({
+                items: [{ priceId: proPriceId, quantity: 1 }],
+                customData: {
+                    user_id: '{{ current_user.id }}',
+                    plan: 'pro'
+                },
+                settings: {
+                    successUrl: '{{ url_for("billing.success", _external=True) }}?plan=pro'
+                }
+            });
+            
+            this.loading = false;
+        },
+        
+        // Downgrade to Basic - uses API (no payment needed)
+        async downgradeToBasic() {
+            this.loading = true;
+            this.message = null;
+            this.showDowngradeModal = false;
+            
+            try {
+                const response = await fetch('{{ url_for("billing.change_plan") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ plan: 'basic' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.message = data.message;
+                    this.messageType = 'success';
+                    // Reload page after short delay to show updated status
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    this.message = data.error || 'Failed to change plan';
+                    this.messageType = 'error';
+                }
+            } catch (err) {
+                this.message = 'An error occurred. Please try again.';
+                this.messageType = 'error';
+            } finally {
+                this.loading = false;
+            }
         },
         
         async cancelSubscription() {
@@ -278,39 +341,6 @@ function managePage() {
                     setTimeout(() => window.location.reload(), 2000);
                 } else {
                     this.message = data.error || 'Failed to cancel subscription';
-                    this.messageType = 'error';
-                }
-            } catch (err) {
-                this.message = 'An error occurred. Please try again.';
-                this.messageType = 'error';
-            } finally {
-                this.loading = false;
-            }
-        },
-        
-        async changePlan(newPlan) {
-            this.loading = true;
-            this.message = null;
-            this.showDowngradeModal = false;
-            
-            try {
-                const response = await fetch('{{ url_for("billing.change_plan") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ plan: newPlan })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    this.message = data.message;
-                    this.messageType = 'success';
-                    // Reload page after short delay to show updated status
-                    setTimeout(() => window.location.reload(), 2000);
-                } else {
-                    this.message = data.error || 'Failed to change plan';
                     this.messageType = 'error';
                 }
             } catch (err) {

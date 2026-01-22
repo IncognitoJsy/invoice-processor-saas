@@ -186,6 +186,8 @@ def manage():
     config = get_paddle_config()
     
     return render_template('billing/manage.html',
+                          paddle_client_token=config['client_token'],
+                          paddle_environment=config['environment'],
                           paddle_price_basic=config['price_basic'],
                           paddle_price_pro=config['price_pro'])
 
@@ -193,7 +195,7 @@ def manage():
 @bp.route('/change-plan', methods=['POST'])
 @login_required
 def change_plan():
-    """Change subscription plan (upgrade or downgrade)"""
+    """Change subscription plan - only for DOWNGRADES. Upgrades must go through Paddle checkout."""
     import requests
     
     if not current_user.paddle_subscription_id:
@@ -209,10 +211,15 @@ def change_plan():
     if new_plan == current_user.subscription_plan:
         return jsonify({'error': 'You are already on this plan'}), 400
     
-    config = get_paddle_config()
+    # Only allow downgrades through this endpoint
+    # Upgrades MUST go through Paddle checkout to collect payment
+    is_downgrade = new_plan == 'basic' and current_user.subscription_plan == 'pro'
     
-    # Get the new price ID
-    new_price_id = config['price_basic'] if new_plan == 'basic' else config['price_pro']
+    if not is_downgrade:
+        return jsonify({'error': 'Upgrades must go through checkout'}), 400
+    
+    config = get_paddle_config()
+    new_price_id = config['price_basic']
     
     try:
         # Determine API URL based on environment
@@ -221,18 +228,8 @@ def change_plan():
         else:
             api_url = 'https://sandbox-api.paddle.com'
         
-        # Update subscription with new price
-        # proration_billing_mode options:
-        # - "prorated_immediately" - charge/credit immediately
-        # - "prorated_next_billing_period" - apply at next billing (good for downgrades)
-        # - "full_immediately" - charge full amount immediately
-        # - "full_next_billing_period" - charge full amount at next billing
-        
-        # For upgrades: charge immediately (prorated)
-        # For downgrades: apply at next billing period
-        is_downgrade = new_plan == 'basic' and current_user.subscription_plan == 'pro'
-        proration_mode = 'prorated_next_billing_period' if is_downgrade else 'prorated_immediately'
-        
+        # Schedule downgrade for next billing period
+        # User keeps Pro access until then, no refund needed
         response = requests.patch(
             f"{api_url}/subscriptions/{current_user.paddle_subscription_id}",
             headers={
@@ -244,31 +241,27 @@ def change_plan():
                     'price_id': new_price_id,
                     'quantity': 1
                 }],
-                'proration_billing_mode': proration_mode
+                'proration_billing_mode': 'prorated_next_billing_period',
+                'on_payment_failure': 'prevent_change'
             }
         )
         
         result = response.json()
-        current_app.logger.info(f"Plan change response: {result}")
+        current_app.logger.info(f"Downgrade response: {result}")
         
         if result.get('data'):
-            # For upgrades, update immediately; for downgrades, Paddle webhook will handle it
-            if not is_downgrade:
-                current_user.subscription_plan = new_plan
-                db.session.commit()
-            
-            message = 'Plan upgraded successfully!' if not is_downgrade else 'Plan will change to Basic at your next billing date. You keep Pro access until then.'
+            # Don't change plan yet - Paddle webhook will handle it at next billing
             return jsonify({
                 'success': True, 
-                'message': message,
-                'is_downgrade': is_downgrade
+                'message': 'Plan will change to Basic at your next billing date. You keep Pro access until then.',
+                'is_downgrade': True
             })
         else:
-            error_msg = result.get('error', {}).get('detail', 'Plan change failed')
+            error_msg = result.get('error', {}).get('detail', 'Downgrade failed')
             return jsonify({'error': error_msg}), 500
             
     except Exception as e:
-        current_app.logger.error(f"Plan change error: {str(e)}")
+        current_app.logger.error(f"Downgrade error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
