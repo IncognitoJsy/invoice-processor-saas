@@ -88,7 +88,7 @@
                         {% else %}
                             {{ current_user.invoices_remaining }}
                             {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
-                                <span class="text-sm text-gray-500">({{ current_user.bonus_invoices }} bonus)</span>
+                                <span class="text-sm text-gray-500">({{ current_user.bonus_invoices }} purchased top-ups)</span>
                             {% endif %}
                         {% endif %}
                     </span>

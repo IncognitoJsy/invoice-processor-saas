@@ -26,7 +26,7 @@
                             {% if current_user.subscription_plan == 'basic' %}
                                 {{ current_user.invoices_remaining }} invoices remaining this month
                                 {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
-                                    (includes {{ current_user.bonus_invoices }} bonus)
+                                    (includes {{ current_user.bonus_invoices }} purchased top-ups)
                                 {% endif %}
                             {% else %}
                                 Unlimited invoices

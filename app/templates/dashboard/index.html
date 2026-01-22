@@ -103,7 +103,7 @@
                                 {% else %}
                                     {{ current_user.invoices_remaining }} invoices remaining this month
                                     {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
-                                        (includes {{ current_user.bonus_invoices }} bonus)
+                                        (includes {{ current_user.bonus_invoices }} purchased top-ups)
                                     {% endif %}
                                 {% endif %}
                             </p>
