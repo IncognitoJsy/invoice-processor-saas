@@ -78,7 +78,7 @@ class ClaudeInvoiceParser:
             
             # Load from QuickBooks if connected
             if qb_connection and qb_connection.realm_id:
-                self.logger.info("📗 User has QuickBooks connected - loading products...")
+                self.logger.info(f"📗 User has QuickBooks connected (realm: {qb_connection.realm_id}) - loading products...")
                 try:
                     # Try both import paths
                     try:
@@ -86,7 +86,8 @@ class ClaudeInvoiceParser:
                     except ImportError:
                         from app.integrations.quickbooks_service import QuickBooksService
                     
-                    qb_service = QuickBooksService(current_user.id)
+                    # Pass both user_id and realm_id
+                    qb_service = QuickBooksService(current_user.id, qb_connection.realm_id)
                     
                     if qb_service.is_connected():
                         items = qb_service.get_items()
@@ -116,6 +117,8 @@ class ClaudeInvoiceParser:
                         
                 except Exception as e:
                     self.logger.warning(f"⚠️ Could not load QuickBooks products: {e}")
+                    import traceback
+                    self.logger.debug(traceback.format_exc())
             
             # Load from Xero if connected (only if QuickBooks is NOT connected)
             elif xero_connection and xero_connection.tenant_id:
