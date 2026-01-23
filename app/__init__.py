@@ -63,7 +63,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup
+    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
@@ -84,6 +84,7 @@ def register_blueprints(app):
     app.register_blueprint(upload.bp)
     app.register_blueprint(user_api.bp)
     app.register_blueprint(pages.bp)
+    app.register_blueprint(part_number_routes.part_number_bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)

@@ -188,19 +188,59 @@ class ClaudeInvoiceParser:
         self._known_products_cache = known_products
         return known_products
     
-    def _validate_part_numbers(self, items: List[Dict]) -> List[Dict]:
+    def _load_learned_corrections(self, supplier_name: str = None) -> Dict[str, str]:
+        """
+        Load learned part number corrections from user's previous edits.
+        Returns a dict: {original_ocr_upper: corrected_part}
+        """
+        learned = {}
+        
+        try:
+            from flask_login import current_user
+            
+            if not current_user or not current_user.is_authenticated:
+                return learned
+            
+            try:
+                from app.models.part_number_correction import PartNumberCorrection
+                
+                learned = PartNumberCorrection.get_all_corrections_for_user(
+                    user_id=current_user.id,
+                    supplier_name=supplier_name
+                )
+                
+                if learned:
+                    self.logger.info(f"🧠 Loaded {len(learned)} learned corrections for user")
+                    
+            except ImportError:
+                self.logger.debug("PartNumberCorrection model not found - learned corrections disabled")
+            except Exception as e:
+                self.logger.debug(f"Could not load learned corrections: {e}")
+                
+        except Exception as e:
+            self.logger.debug(f"Error loading learned corrections: {e}")
+        
+        return learned
+    
+    def _validate_part_numbers(self, items: List[Dict], supplier_name: str = None) -> List[Dict]:
         """
         Validate and correct part numbers by comparing against known products.
-        Uses fuzzy matching to handle OCR errors like 0/O, 8/B, 1/I/L confusions.
+        
+        Priority order:
+        1. Check learned corrections from user edits (highest confidence)
+        2. Check exact match in QuickBooks/Xero products
+        3. Try OCR variant matching
+        4. Try fuzzy matching
         """
         known_products = self._load_known_products()
+        learned_corrections = self._load_learned_corrections(supplier_name)
         
-        if not known_products:
-            self.logger.warning("⚠️ No known products loaded - part number validation skipped")
+        if not known_products and not learned_corrections:
+            self.logger.warning("⚠️ No known products or learned corrections - part number validation skipped")
             self.logger.warning("   Connect QuickBooks or Xero to enable part number cross-checking")
             return items
         
-        self.logger.info(f"✅ Validating {len(items)} part numbers against {len(known_products)} known products")
+        self.logger.info(f"✅ Validating {len(items)} part numbers against {len(known_products)} products and {len(learned_corrections)} learned corrections")
         
         # Common OCR confusions for alphanumeric codes
         ocr_substitutions = {
@@ -266,24 +306,37 @@ class ClaudeInvoiceParser:
             return list(variants)
         
         def find_best_match(part_number: str) -> tuple:
-            """Find best matching product, returns (matched_sku, confidence)"""
+            """Find best matching product, returns (matched_sku, confidence, source)
+            
+            Priority:
+            1. Learned corrections (100% confidence - user verified)
+            2. Exact match in products (100% confidence)
+            3. OCR variant match (95% confidence)
+            4. Fuzzy match (85-95% confidence)
+            """
             if not part_number:
-                return None, 0
+                return None, 0, None
             
             part_upper = part_number.upper().strip()
             
-            # Exact match
-            if part_upper in known_products:
-                return known_products[part_upper]['sku'], 100
+            # 1. Check learned corrections FIRST (highest priority - user verified)
+            if part_upper in learned_corrections:
+                corrected = learned_corrections[part_upper]
+                self.logger.info(f"🧠 Learned correction: '{part_number}' -> '{corrected}' (user verified)")
+                return corrected, 100, 'learned'
             
-            # Try OCR variant matches
+            # 2. Exact match in products
+            if part_upper in known_products:
+                return known_products[part_upper]['sku'], 100, 'exact'
+            
+            # 3. Try OCR variant matches
             variants = generate_variants(part_upper)
             for variant in variants:
                 if variant in known_products:
                     self.logger.info(f"Part number correction: '{part_number}' -> '{known_products[variant]['sku']}' (OCR fix)")
-                    return known_products[variant]['sku'], 95
+                    return known_products[variant]['sku'], 95, 'ocr'
             
-            # Try partial/fuzzy matching for longer part numbers
+            # 4. Try partial/fuzzy matching for longer part numbers
             if len(part_upper) >= 4:
                 best_match = None
                 best_score = 0
@@ -306,9 +359,9 @@ class ClaudeInvoiceParser:
                 
                 if best_match:
                     self.logger.info(f"Part number fuzzy match: '{part_number}' -> '{known_products[best_match]['sku']}' ({best_score:.0f}% confidence)")
-                    return known_products[best_match]['sku'], best_score
+                    return known_products[best_match]['sku'], best_score, 'fuzzy'
             
-            return None, 0
+            return None, 0, None
         
         # Validate each item's part number
         corrected_items = []
@@ -316,12 +369,13 @@ class ClaudeInvoiceParser:
             item_copy = item.copy()
             original_part = item.get('part_number', '')
             
-            matched_sku, confidence = find_best_match(original_part)
+            matched_sku, confidence, source = find_best_match(original_part)
             
             if matched_sku and matched_sku.upper() != original_part.upper():
                 item_copy['part_number'] = matched_sku
                 item_copy['original_ocr_part_number'] = original_part
                 item_copy['part_number_confidence'] = confidence
+                item_copy['correction_source'] = source  # 'learned', 'ocr', or 'fuzzy'
                 self.logger.info(f"Corrected part number: '{original_part}' -> '{matched_sku}'")
             
             corrected_items.append(item_copy)
@@ -950,7 +1004,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         # Validate and correct part numbers against known products
         try:
-            transformed = self._validate_part_numbers(transformed)
+            transformed = self._validate_part_numbers(transformed, supplier_name=supplier)
         except Exception as e:
             self.logger.warning(f"Part number validation skipped: {e}")
         

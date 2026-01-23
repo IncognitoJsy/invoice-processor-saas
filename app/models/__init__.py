@@ -6,5 +6,6 @@ from app.models.quickbooks import QuickBooksConnection
 from app.models.password_reset import PasswordResetToken
 from app.models.supplier_account import SupplierAccount
 from app.models.xero import XeroConnection
+from app.models.part_number_correction import PartNumberCorrection
 
 __all__ = ['User', 'Invoice', 'Product', 'QuickBooksConnection', 'PasswordResetToken', 'SupplierAccount']
