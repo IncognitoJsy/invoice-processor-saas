@@ -4,232 +4,198 @@
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8" x-data="managePage()">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <!-- Header -->
         <div class="mb-8">
-            <a href="{{ url_for('billing.index') }}" class="inline-flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            <a href="{{ url_for('billing.index') }}" class="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                 </svg>
                 Back to Billing
             </a>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Manage Subscription</h1>
-            <p class="mt-2 text-gray-600 dark:text-gray-400">View and manage your subscription details</p>
         </div>
         
-        <!-- Success/Error Messages -->
-        <div x-show="message" x-transition class="mb-6">
-            <div :class="messageType === 'success' ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'" 
-                 class="border rounded-xl p-4">
-                <div class="flex items-start">
-                    <template x-if="messageType === 'success'">
-                        <svg class="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        <!-- Payment Issue Warning -->
+        {% if current_user.subscription_status == 'suspended' %}
+        <div class="mb-8 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-xl p-6">
+            <div class="flex items-start">
+                <svg class="w-6 h-6 text-red-600 dark:text-red-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <div class="ml-4">
+                    <h3 class="font-semibold text-red-900 dark:text-red-100">Subscription Suspended</h3>
+                    <p class="mt-1 text-red-700 dark:text-red-300 text-sm">
+                        We couldn't process your payment. Please update your payment method to reactivate your subscription.
+                    </p>
+                    <a href="{{ update_payment_url }}" target="_blank" 
+                       class="inline-flex items-center mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition">
+                        Update Payment Method
+                        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                         </svg>
-                    </template>
-                    <template x-if="messageType === 'error'">
-                        <svg class="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </template>
-                    <p :class="messageType === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'" x-text="message"></p>
+                    </a>
                 </div>
             </div>
         </div>
+        {% elif current_user.subscription_status == 'past_due' %}
+        <div class="mb-8 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800 rounded-xl p-5">
+            <div class="flex items-start">
+                <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="ml-4">
+                    <h3 class="font-semibold text-amber-900 dark:text-amber-100">Payment Pending</h3>
+                    <p class="mt-1 text-amber-700 dark:text-amber-300 text-sm">
+                        We're retrying your payment. You can also update your payment method.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         
         <!-- Current Plan Card -->
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-8">
-            <div class="bg-gradient-to-r from-green-500 to-emerald-600 p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-green-100 text-sm font-medium">Current Plan</p>
-                        <h2 class="text-2xl font-bold text-white mt-1">{{ current_user.plan_display_name }}</h2>
-                    </div>
-                    <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                </div>
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Current Plan</h2>
             </div>
             
-            <div class="p-6 space-y-4">
-                <div class="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-700">
-                    <span class="text-gray-600 dark:text-gray-400">Status</span>
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium 
-                        {% if current_user.subscription_status == 'active' %}
-                            bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400
-                        {% elif current_user.subscription_status == 'cancelled' %}
-                            bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400
-                        {% else %}
-                            bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400
-                        {% endif %}">
-                        {% if current_user.subscription_status == 'cancelled' %}
-                            Cancels at period end
-                        {% else %}
-                            {{ current_user.subscription_status|capitalize }}
-                        {% endif %}
-                    </span>
-                </div>
-                
-                <div class="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-700">
-                    <span class="text-gray-600 dark:text-gray-400">Monthly Price</span>
-                    <span class="font-semibold text-gray-900 dark:text-white">
-                        {% if current_user.subscription_plan == 'basic' %}£39{% elif current_user.subscription_plan == 'pro' %}£79{% else %}—{% endif %}
-                    </span>
-                </div>
-                
-                <div class="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-700">
-                    <span class="text-gray-600 dark:text-gray-400">Invoices Remaining</span>
-                    <span class="font-semibold text-gray-900 dark:text-white">
-                        {% if current_user.subscription_plan == 'pro' %}
-                            Unlimited
-                        {% else %}
-                            {{ current_user.invoices_remaining }}
-                            {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
-                                <span class="text-sm text-gray-500">({{ current_user.bonus_invoices }} purchased top-ups)</span>
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</p>
+                        <p class="text-gray-500 dark:text-gray-400">
+                            {% if current_user.subscription_plan == 'basic' %}
+                                £39/month • 100 invoices
+                            {% elif current_user.subscription_plan == 'pro' %}
+                                £79/month • Unlimited invoices
                             {% endif %}
-                        {% endif %}
-                    </span>
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                            {% if current_user.subscription_status == 'active' %}
+                                bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400
+                            {% elif current_user.subscription_status == 'past_due' %}
+                                bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400
+                            {% elif current_user.subscription_status == 'suspended' %}
+                                bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400
+                            {% else %}
+                                bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400
+                            {% endif %}">
+                            {{ current_user.status_display_name }}
+                        </span>
+                    </div>
                 </div>
                 
-                {% if current_user.subscription_started_at %}
-                <div class="flex justify-between items-center py-3">
-                    <span class="text-gray-600 dark:text-gray-400">Member Since</span>
-                    <span class="font-semibold text-gray-900 dark:text-white">
-                        {{ current_user.subscription_started_at.strftime('%B %d, %Y') }}
-                    </span>
+                <!-- Usage Stats -->
+                {% if current_user.subscription_plan == 'basic' %}
+                <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">Invoices this period</span>
+                        <span class="font-semibold text-gray-900 dark:text-white">
+                            {{ current_user.get_invoices_this_period() }} / {{ current_user.monthly_invoice_limit }}
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                        {% set usage_percent = (current_user.get_invoices_this_period() / current_user.monthly_invoice_limit * 100) | int %}
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: {{ min(usage_percent, 100) }}%"></div>
+                    </div>
+                    {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        + {{ current_user.bonus_invoices }} bonus invoices
+                    </p>
+                    {% endif %}
                 </div>
                 {% endif %}
+                
+                <!-- Renewal Info -->
+                {% if current_user.days_until_renewal is not none %}
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Next billing date: {{ current_user.days_until_renewal }} days
+                </p>
+                {% endif %}
+                
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap gap-3">
+                    <a href="{{ update_payment_url }}" target="_blank"
+                       class="inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                        </svg>
+                        Update Payment Method
+                        <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                        </svg>
+                    </a>
+                    
+                    {% if current_user.subscription_plan == 'basic' %}
+                    <a href="{{ url_for('billing.topup') }}"
+                       class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Buy More Invoices
+                    </a>
+                    {% endif %}
+                </div>
             </div>
         </div>
         
-        <!-- Quick Actions -->
-        <div class="grid sm:grid-cols-2 gap-4 mb-8">
-            {% if current_user.subscription_plan == 'basic' %}
-            <a href="{{ url_for('billing.topup') }}" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-blue-500 dark:hover:border-blue-500 transition group">
-                <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition">
-                    <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-gray-900 dark:text-white">Buy More Invoices</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Top up with extra invoice credits</p>
-            </a>
-            
-            <!-- Upgrade to Pro - Opens Paddle Checkout -->
-            <button @click="upgradeToPro()" 
-                    :disabled="loading"
-                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-purple-500 dark:hover:border-purple-500 transition group text-left w-full disabled:opacity-50">
-                <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
-                    <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-gray-900 dark:text-white">Upgrade to Pro</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Get unlimited invoices for £79/month</p>
-            </button>
-            {% endif %}
-            
-            {% if current_user.subscription_plan == 'pro' %}
-            <!-- Downgrade to Basic -->
-            <button @click="confirmDowngrade()" 
-                    :disabled="loading"
-                    class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-gray-400 dark:hover:border-gray-500 transition group text-left w-full">
-                <div class="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center mb-4 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition">
-                    <svg class="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-gray-900 dark:text-white">Downgrade to Basic</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Switch to 100 invoices/month for £39</p>
-            </button>
-            {% endif %}
-        </div>
-        
-        <!-- Danger Zone -->
-        {% if current_user.subscription_status == 'active' %}
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-gray-900 dark:text-white">Cancel Subscription</h3>
+        <!-- Change Plan -->
+        {% if current_user.subscription_plan == 'basic' %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-8">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Upgrade Plan</h2>
             </div>
             <div class="p-6">
-                <p class="text-gray-600 dark:text-gray-400 mb-4">
-                    If you cancel, you'll keep access until the end of your current billing period. Your data will be preserved if you decide to resubscribe.
-                </p>
-                <button @click="confirmCancel()" 
-                        :disabled="loading"
-                        class="px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg font-medium transition disabled:opacity-50">
-                    Cancel Subscription
-                </button>
-            </div>
-        </div>
-        {% elif current_user.subscription_status == 'cancelled' %}
-        <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6">
-            <div class="flex items-start">
-                <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                </svg>
-                <div>
-                    <h3 class="font-semibold text-yellow-800 dark:text-yellow-200">Subscription Cancelled</h3>
-                    <p class="text-yellow-700 dark:text-yellow-300 mt-1">
-                        Your subscription has been cancelled. You'll keep access until the end of your current billing period.
-                    </p>
-                    <a href="{{ url_for('billing.index') }}" class="inline-flex items-center mt-4 text-yellow-800 dark:text-yellow-200 font-medium hover:underline">
-                        Resubscribe →
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-semibold text-gray-900 dark:text-white">Pro Plan</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">£79/month • Unlimited invoices</p>
+                    </div>
+                    <a href="{{ url_for('billing.subscribe', plan='pro') }}"
+                       class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
+                        Upgrade to Pro
                     </a>
                 </div>
             </div>
         </div>
         {% endif %}
         
-        <!-- Cancel Confirmation Modal -->
-        <div x-show="showCancelModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div @click.away="showCancelModal = false" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Cancel Subscription?</h3>
-                    <p class="text-gray-600 dark:text-gray-400 mb-6">
-                        Are you sure you want to cancel? You'll lose access to GoZappify at the end of your billing period.
-                    </p>
-                    <div class="flex gap-4">
-                        <button @click="showCancelModal = false" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
+        <!-- Cancel Subscription -->
+        <div x-data="cancelManager()" class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Cancel Subscription</h2>
+            </div>
+            <div class="p-6">
+                <p class="text-gray-600 dark:text-gray-400 mb-4">
+                    If you cancel, you'll keep access until the end of your current billing period. Your bonus invoices will be preserved if you resubscribe later.
+                </p>
+                
+                <div x-show="!showCancel">
+                    <button @click="showCancel = true" 
+                            class="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium">
+                        I want to cancel my subscription
+                    </button>
+                </div>
+                
+                <div x-show="showCancel" x-transition class="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                    <p class="text-red-800 dark:text-red-200 font-medium mb-3">Are you sure you want to cancel?</p>
+                    <div class="flex gap-3">
+                        <button @click="showCancel = false" 
+                                class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition">
                             Keep Subscription
                         </button>
-                        <button @click="cancelSubscription()" :disabled="loading" class="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
-                            <span x-show="!loading">Yes, Cancel</span>
-                            <span x-show="loading">Cancelling...</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Downgrade Confirmation Modal -->
-        <div x-show="showDowngradeModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div @click.away="showDowngradeModal = false" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Downgrade to Basic?</h3>
-                    <p class="text-gray-600 dark:text-gray-400 mb-6">
-                        You'll keep Pro access until your next billing date. Then you'll be charged £39/month for the Basic plan with 100 invoices per month.
-                    </p>
-                    <div class="flex gap-4">
-                        <button @click="showDowngradeModal = false" class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition">
-                            Keep Pro
-                        </button>
-                        <button @click="downgradeToBasic()" :disabled="loading" class="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-semibold transition disabled:opacity-50">
-                            <span x-show="!loading">Downgrade</span>
-                            <span x-show="loading">Processing...</span>
+                        <button @click="cancelSubscription()" 
+                                :disabled="cancelling"
+                                class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+                            <span x-show="!cancelling">Yes, Cancel</span>
+                            <span x-show="cancelling">Cancelling...</span>
                         </button>
                     </div>
                 </div>
@@ -239,116 +205,35 @@
     </div>
 </div>
 
-<!-- Paddle.js for upgrades -->
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script>
-// Initialize Paddle
-Paddle.Environment.set('{{ paddle_environment }}');
-Paddle.Initialize({
-    token: '{{ paddle_client_token }}'
-});
-
-const proPriceId = '{{ paddle_price_pro }}';
-
-function managePage() {
+function cancelManager() {
     return {
-        loading: false,
-        message: null,
-        messageType: 'success',
-        showCancelModal: false,
-        showDowngradeModal: false,
+        showCancel: false,
+        cancelling: false,
         
-        confirmCancel() {
-            this.showCancelModal = true;
-        },
-        
-        confirmDowngrade() {
-            this.showDowngradeModal = true;
-        },
-        
-        // Upgrade to Pro - opens Paddle checkout for payment
-        upgradeToPro() {
-            this.loading = true;
-            this.message = null;
+        cancelSubscription() {
+            if (this.cancelling) return;
+            this.cancelling = true;
             
-            Paddle.Checkout.open({
-                items: [{ priceId: proPriceId, quantity: 1 }],
-                customData: {
-                    user_id: '{{ current_user.id }}',
-                    plan: 'pro'
-                },
-                settings: {
-                    successUrl: '{{ url_for("billing.success", _external=True) }}?plan=pro'
+            fetch('/billing/cancel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/billing?cancelled=1';
+                } else {
+                    alert(data.error || 'Failed to cancel subscription');
+                    this.cancelling = false;
+                }
+            })
+            .catch(err => {
+                alert('Network error. Please try again.');
+                this.cancelling = false;
             });
-            
-            this.loading = false;
-        },
-        
-        // Downgrade to Basic - uses API (no payment needed)
-        async downgradeToBasic() {
-            this.loading = true;
-            this.message = null;
-            this.showDowngradeModal = false;
-            
-            try {
-                const response = await fetch('{{ url_for("billing.change_plan") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ plan: 'basic' })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    this.message = data.message;
-                    this.messageType = 'success';
-                    // Reload page after short delay to show updated status
-                    setTimeout(() => window.location.reload(), 2000);
-                } else {
-                    this.message = data.error || 'Failed to change plan';
-                    this.messageType = 'error';
-                }
-            } catch (err) {
-                this.message = 'An error occurred. Please try again.';
-                this.messageType = 'error';
-            } finally {
-                this.loading = false;
-            }
-        },
-        
-        async cancelSubscription() {
-            this.loading = true;
-            this.message = null;
-            
-            try {
-                const response = await fetch('{{ url_for("billing.cancel") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    this.message = data.message;
-                    this.messageType = 'success';
-                    this.showCancelModal = false;
-                    // Reload page after short delay to show updated status
-                    setTimeout(() => window.location.reload(), 2000);
-                } else {
-                    this.message = data.error || 'Failed to cancel subscription';
-                    this.messageType = 'error';
-                }
-            } catch (err) {
-                this.message = 'An error occurred. Please try again.';
-                this.messageType = 'error';
-            } finally {
-                this.loading = false;
-            }
         }
     }
 }

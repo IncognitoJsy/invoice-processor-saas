@@ -16,13 +16,15 @@ class User(db.Model, UserMixin):
     
     # Subscription fields
     subscription_plan = db.Column(db.String(20), default='trial')  # trial, basic, pro, cancelled
-    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, cancelled, paused
+    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, suspended, cancelled, expired
     
-    # Paddle fields (replacing Stripe)
+    # PayPal fields
+    paypal_subscription_id = db.Column(db.String(255))
+    pending_subscription_id = db.Column(db.String(255))
+    
+    # Legacy fields (keep for backwards compatibility)
     paddle_customer_id = db.Column(db.String(255))
     paddle_subscription_id = db.Column(db.String(255))
-    
-    # Keep Stripe fields for migration/backwards compatibility (can remove later)
     stripe_customer_id = db.Column(db.String(255))
     stripe_subscription_id = db.Column(db.String(255))
     
@@ -41,6 +43,7 @@ class User(db.Model, UserMixin):
     
     # Email notifications
     trial_reminder_sent = db.Column(db.Boolean, default=False)
+    payment_failed_email_sent = db.Column(db.Boolean, default=False)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -48,38 +51,33 @@ class User(db.Model, UserMixin):
     last_login = db.Column(db.DateTime)
     
     def set_password(self, password):
-        """Hash and set password"""
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
-        """Check password against hash"""
         return check_password_hash(self.password_hash, password)
     
     def start_trial(self):
-        """Start 7-day free trial"""
         self.subscription_plan = 'trial'
         self.subscription_status = 'active'
         self.trial_ends_at = datetime.utcnow() + timedelta(days=7)
     
     def start_paid_subscription(self, plan='basic'):
-        """Start a paid subscription - resets quota"""
         self.subscription_plan = plan
         self.subscription_status = 'active'
         self.subscription_started_at = datetime.utcnow()
         self.bonus_invoices = 0
+        self.payment_failed_email_sent = False
     
     def renew_subscription(self):
-        """Called when subscription renews (e.g., from Paddle webhook)"""
         self.subscription_started_at = datetime.utcnow()
-        # Note: bonus_invoices are NOT reset on renewal - they carry over
+        self.subscription_status = 'active'
+        self.payment_failed_email_sent = False
     
     def add_bonus_invoices(self, count):
-        """Add purchased bonus invoices"""
         self.bonus_invoices = (self.bonus_invoices or 0) + count
     
     @property
     def is_trial_active(self):
-        """Check if trial is still active"""
         if self.subscription_plan != 'trial':
             return False
         if not self.trial_ends_at:
@@ -88,7 +86,6 @@ class User(db.Model, UserMixin):
     
     @property
     def trial_days_remaining(self):
-        """Get days remaining in trial"""
         if not self.trial_ends_at:
             return 0
         remaining = (self.trial_ends_at - datetime.utcnow()).days
@@ -96,85 +93,70 @@ class User(db.Model, UserMixin):
     
     @property
     def has_active_subscription(self):
-        """Check if user has active paid subscription or valid trial"""
         if self.is_admin:
             return True
-        if self.subscription_plan in ['basic', 'pro'] and self.subscription_status == 'active':
+        if self.subscription_plan in ['basic', 'pro'] and self.subscription_status in ['active', 'past_due']:
             return True
         if self.is_trial_active:
             return True
         return False
     
     @property
+    def has_payment_issue(self):
+        return self.subscription_status in ['suspended', 'past_due']
+    
+    @property
     def can_sync_to_accounting(self):
-        """Check if user can sync to QuickBooks/Xero"""
+        if self.is_admin:
+            return True
+        if self.subscription_status == 'suspended':
+            return False
         return self.has_active_subscription
     
     @property
     def monthly_invoice_limit(self):
-        """Get monthly invoice limit based on plan"""
         if self.is_admin:
             return float('inf')
-        limits = {
-            'trial': 25,
-            'basic': 100,
-            'pro': float('inf'),
-            'cancelled': 0
-        }
+        limits = {'trial': 25, 'basic': 100, 'pro': float('inf'), 'cancelled': 0}
         return limits.get(self.subscription_plan, 0)
     
     @property
     def billing_period_start(self):
-        """Get the start of the current billing period"""
         if self.subscription_plan == 'trial':
             return self.created_at
         
         if self.subscription_started_at:
             now = datetime.utcnow()
             start = self.subscription_started_at
-            
             months_elapsed = 0
             while True:
                 next_period = start + timedelta(days=30 * (months_elapsed + 1))
                 if next_period > now:
                     break
                 months_elapsed += 1
-            
             return start + timedelta(days=30 * months_elapsed)
         
         return datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     def get_invoices_this_period(self):
-        """Get count of invoices uploaded this billing period"""
         from app.models.invoice import Invoice
-        
         period_start = self.billing_period_start
-        count = Invoice.query.filter(
-            Invoice.user_id == self.id,
-            Invoice.created_at >= period_start
-        ).count()
-        return count
+        return Invoice.query.filter(Invoice.user_id == self.id, Invoice.created_at >= period_start).count()
     
     def get_invoices_this_month(self):
-        """Get count of invoices uploaded this billing period (deprecated name)"""
         return self.get_invoices_this_period()
     
     @property
     def invoices_remaining(self):
-        """Get remaining invoices for this billing period (including bonus)"""
         limit = self.monthly_invoice_limit
         if limit == float('inf'):
             return float('inf')
-        
         used = self.get_invoices_this_period()
         base_remaining = max(0, limit - used)
-        bonus = self.bonus_invoices or 0
-        
-        return base_remaining + bonus
+        return base_remaining + (self.bonus_invoices or 0)
     
     @property
     def base_invoices_remaining(self):
-        """Get remaining base invoices (excluding bonus)"""
         limit = self.monthly_invoice_limit
         if limit == float('inf'):
             return float('inf')
@@ -183,53 +165,64 @@ class User(db.Model, UserMixin):
     
     @property
     def can_upload_invoice(self):
-        """Check if user can upload more invoices"""
         if self.is_admin:
             return True
-        if not self.has_active_subscription:
+        if self.subscription_status == 'suspended':
             return False
-        return self.invoices_remaining > 0
+        if self.subscription_status in ['expired', 'cancelled']:
+            return False
+        if self.subscription_plan == 'cancelled':
+            return False
+        if self.subscription_plan == 'trial' and not self.is_trial_active:
+            return False
+        if self.invoices_remaining <= 0:
+            return False
+        return True
+    
+    @property
+    def upload_blocked_reason(self):
+        if self.is_admin:
+            return None
+        if self.subscription_status == 'suspended':
+            return 'payment_suspended'
+        if self.subscription_status in ['expired', 'cancelled']:
+            return 'subscription_ended'
+        if self.subscription_plan == 'cancelled':
+            return 'subscription_cancelled'
+        if self.subscription_plan == 'trial' and not self.is_trial_active:
+            return 'trial_expired'
+        if self.invoices_remaining <= 0:
+            return 'quota_exceeded'
+        return None
     
     def use_invoice_quota(self, count=1):
-        """
-        Use invoice quota - deducts from bonus first, then base allowance.
-        Returns True if quota was available, False if not.
-        """
         if self.is_admin:
             return True
-        
         if self.invoices_remaining < count:
             return False
-        
         base_remaining = self.base_invoices_remaining
-        
         if base_remaining < count:
             bonus_needed = count - base_remaining
             self.bonus_invoices = max(0, (self.bonus_invoices or 0) - bonus_needed)
-        
         return True
     
     @property 
     def plan_display_name(self):
-        """Get friendly plan name"""
-        names = {
-            'trial': 'Free Trial',
-            'basic': 'Basic',
-            'pro': 'Pro',
-            'cancelled': 'Cancelled'
-        }
+        names = {'trial': 'Free Trial', 'basic': 'Basic', 'pro': 'Pro', 'cancelled': 'Cancelled'}
         return names.get(self.subscription_plan, 'Unknown')
     
     @property
+    def status_display_name(self):
+        names = {'active': 'Active', 'past_due': 'Payment Pending', 'suspended': 'Suspended', 'cancelled': 'Cancelled', 'expired': 'Expired'}
+        return names.get(self.subscription_status, 'Unknown')
+    
+    @property
     def days_until_renewal(self):
-        """Get days until subscription renews"""
         if not self.subscription_started_at:
             return None
-        
         period_start = self.billing_period_start
         next_renewal = period_start + timedelta(days=30)
-        days = (next_renewal - datetime.utcnow()).days
-        return max(0, days)
+        return max(0, (next_renewal - datetime.utcnow()).days)
     
     def __repr__(self):
         return f'<User {self.email}>'
