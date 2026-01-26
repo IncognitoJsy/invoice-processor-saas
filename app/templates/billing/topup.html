@@ -183,7 +183,7 @@
         
         document.getElementById('custom-input').classList.add('hidden');
         document.getElementById('custom-toggle').textContent = '+ Enter custom amount';
-        hideMessages();
+        topupHideMessages();
     }
     
     function toggleCustom() {
@@ -207,7 +207,7 @@
         }
         
         updateDisplay();
-        hideMessages();
+        topupHideMessages();
     }
     
     function incrementCustom() {
@@ -248,24 +248,24 @@
         document.getElementById('display-total').textContent = (currentQuantity * pricePerInvoice).toFixed(2);
     }
     
-    function showError(message) {
+    function topupShowError(message) {
         document.getElementById('error-text').textContent = message;
         document.getElementById('error-message').classList.remove('hidden');
         document.getElementById('success-message').classList.add('hidden');
     }
     
-    function showSuccess(message) {
+    function topupShowSuccess(message) {
         document.getElementById('success-text').textContent = message;
         document.getElementById('success-message').classList.remove('hidden');
         document.getElementById('error-message').classList.add('hidden');
     }
     
-    function hideMessages() {
+    function topupHideMessages() {
         document.getElementById('error-message').classList.add('hidden');
         document.getElementById('success-message').classList.add('hidden');
     }
     
-    function showLoading(show) {
+    function topupShowLoading(show) {
         if (show) {
             document.getElementById('loading-state').classList.remove('hidden');
         } else {
@@ -288,8 +288,8 @@
                 },
                 
                 createOrder: async function(data, actions) {
-                    showLoading(true);
-                    hideMessages();
+                    topupShowLoading(true);
+                    topupHideMessages();
                     
                     try {
                         const response = await fetch('/billing/topup/create-order', {
@@ -305,24 +305,24 @@
                         const result = await response.json();
                         
                         if (!result.success) {
-                            showError(result.error || 'Failed to create order');
-                            showLoading(false);
+                            topupShowError(result.error || 'Failed to create order');
+                            topupShowLoading(false);
                             throw new Error(result.error);
                         }
                         
-                        showLoading(false);
+                        topupShowLoading(false);
                         return result.order_id;
                         
                     } catch (err) {
-                        showError(err.message || 'Network error. Please try again.');
-                        showLoading(false);
+                        topupShowError(err.message || 'Network error. Please try again.');
+                        topupShowLoading(false);
                         throw err;
                     }
                 },
                 
                 onApprove: async function(data, actions) {
-                    showLoading(true);
-                    hideMessages();
+                    topupShowLoading(true);
+                    topupHideMessages();
                     
                     try {
                         const response = await fetch('/billing/topup/capture-order', {
@@ -339,30 +339,30 @@
                         const result = await response.json();
                         
                         if (result.success) {
-                            showSuccess('Successfully added ' + result.quantity + ' invoice credits!');
+                            topupShowSuccess('Successfully added ' + result.quantity + ' invoice credits!');
                             setTimeout(() => {
                                 window.location.href = '/billing/topup/success?quantity=' + result.quantity;
                             }, 1500);
                         } else {
-                            showError(result.error || 'Payment capture failed');
+                            topupShowError(result.error || 'Payment capture failed');
                         }
                         
-                        showLoading(false);
+                        topupShowLoading(false);
                         
                     } catch (err) {
-                        showError('Network error. Please try again.');
-                        showLoading(false);
+                        topupShowError('Network error. Please try again.');
+                        topupShowLoading(false);
                     }
                 },
                 
                 onCancel: function(data) {
-                    showLoading(false);
-                    showError('Payment cancelled.');
+                    topupShowLoading(false);
+                    topupShowError('Payment cancelled.');
                 },
                 
                 onError: function(err) {
-                    showLoading(false);
-                    showError('An error occurred with PayPal. Please try again.');
+                    topupShowLoading(false);
+                    topupShowError('An error occurred with PayPal. Please try again.');
                     console.error('PayPal error:', err);
                 }
                 
