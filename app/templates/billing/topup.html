@@ -5,102 +5,150 @@
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        
+    
+        <!-- Header -->
         <div class="text-center">
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Buy More Invoices</h1>
             <p class="mt-2 text-gray-600 dark:text-gray-400">Top up your invoice processing credits</p>
         </div>
         
         {% if not can_purchase %}
+        <!-- Cannot Purchase Message -->
         <div class="bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-2xl p-8 text-center">
             <div class="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
             </div>
             <h2 class="text-xl font-bold text-yellow-900 dark:text-yellow-100 mb-2">{{ error }}</h2>
-            <a href="{{ url_for('billing.index') }}" class="inline-flex items-center mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                View Plans
-            </a>
+            <p class="text-yellow-700 dark:text-yellow-300 mb-6">Top-up invoices are only available for Basic plan subscribers.</p>
+            <div class="mt-6">
+                <a href="{{ url_for('billing.index') }}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    View Plans
+                </a>
+            </div>
         </div>
-        {% else %}
         
+        {% else %}
         <!-- Current Balance -->
         <div class="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl p-6 border border-blue-200 dark:border-blue-800">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-blue-700 dark:text-blue-300">Your Current Balance</p>
-                    <p class="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-1">{{ total_remaining }} invoices remaining</p>
-                    <p class="text-sm text-blue-600 dark:text-blue-400 mt-1">{{ base_remaining }} from plan + {{ current_bonus }} bonus</p>
+                    <p class="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-1">
+                        {{ total_remaining }} invoices remaining
+                    </p>
+                    <p class="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                        {{ base_remaining }} from plan + {{ current_bonus }} bonus
+                    </p>
                 </div>
                 <div class="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center">
-                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
                 </div>
             </div>
         </div>
         
         <!-- Purchase Form -->
-        <div x-data="topupPage()" x-init="init()" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div class="p-8">
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6">Select Quantity</h2>
                 
-                <div class="grid grid-cols-3 gap-4 mb-6">
+                <!-- Preset Options -->
+                <div id="quantity-selector" class="grid grid-cols-3 gap-4 mb-6">
                     {% for preset in presets %}
-                    <button @click="selectPreset({{ preset }})" :class="quantity === {{ preset }} && !customMode ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500' : 'border-gray-200 dark:border-gray-600 hover:border-blue-300'" class="p-6 rounded-xl border-2 transition-all text-center">
+                    <button onclick="selectPreset({{ preset }})"
+                            id="preset-{{ preset }}"
+                            class="preset-btn p-6 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 transition-all text-center">
                         <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ preset }}</p>
-                        <p class="text-sm text-gray-500">invoices</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">invoices</p>
                         <p class="text-lg font-bold text-blue-600 dark:text-blue-400 mt-2">£{{ "%.2f"|format(preset * price_per_invoice) }}</p>
                     </button>
                     {% endfor %}
                 </div>
                 
+                <!-- Custom Amount Toggle -->
                 <div class="mb-8">
-                    <button @click="toggleCustom()" class="text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium text-sm">
-                        <span x-show="!customMode">+ Enter custom amount</span>
-                        <span x-show="customMode">← Back to presets</span>
+                    <button onclick="toggleCustom()" id="custom-toggle"
+                            class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium text-sm">
+                        + Enter custom amount
                     </button>
-                    <div x-show="customMode" x-transition class="mt-4">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Custom quantity (multiples of 10)</label>
+                    
+                    <div id="custom-input" class="hidden mt-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Custom quantity (multiples of 10)
+                        </label>
                         <div class="flex items-center space-x-4">
-                            <button @click="decrementCustom()" :disabled="customQuantity <= 10" class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xl hover:bg-gray-200 disabled:opacity-50">-</button>
-                            <input type="number" x-model="customQuantity" @change="validateCustom()" min="10" max="500" step="10" class="w-32 text-center text-2xl font-bold border-2 border-gray-200 dark:border-gray-600 rounded-lg py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                            <button @click="incrementCustom()" :disabled="customQuantity >= 500" class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xl hover:bg-gray-200 disabled:opacity-50">+</button>
+                            <button onclick="decrementCustom()" 
+                                    class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xl hover:bg-gray-200 dark:hover:bg-gray-600">
+                                -
+                            </button>
+                            <input type="number" 
+                                   id="custom-quantity"
+                                   value="50"
+                                   onchange="validateCustom()"
+                                   min="{{ min_quantity }}" 
+                                   max="500" 
+                                   step="10"
+                                   class="w-32 text-center text-2xl font-bold border-2 border-gray-200 dark:border-gray-600 rounded-lg py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-blue-500">
+                            <button onclick="incrementCustom()" 
+                                    class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xl hover:bg-gray-200 dark:hover:bg-gray-600">
+                                +
+                            </button>
                         </div>
                     </div>
                 </div>
                 
+                <!-- Price Summary -->
                 <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 mb-6">
                     <div class="flex justify-between items-center mb-2">
-                        <span class="text-gray-600 dark:text-gray-400"><span x-text="quantity"></span> invoices × £{{ "%.2f"|format(price_per_invoice) }}</span>
-                        <span class="text-xl font-bold text-gray-900 dark:text-white">£<span x-text="(quantity * {{ price_per_invoice }}).toFixed(2)"></span></span>
+                        <span class="text-gray-600 dark:text-gray-400">
+                            <span id="display-quantity">10</span> invoices × £{{ "%.2f"|format(price_per_invoice) }}
+                        </span>
+                        <span class="text-xl font-bold text-gray-900 dark:text-white">
+                            £<span id="display-total">{{ "%.2f"|format(10 * price_per_invoice) }}</span>
+                        </span>
                     </div>
-                    <div class="text-sm text-gray-500">One-time payment • Credits never expire</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        One-time payment • Credits never expire
+                    </div>
                 </div>
                 
-                <div x-show="error" x-transition class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                    <p class="text-red-700 dark:text-red-300 text-sm" x-text="error"></p>
+                <!-- Error/Success Messages -->
+                <div id="error-message" class="hidden mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p class="text-red-700 dark:text-red-300 text-sm" id="error-text"></p>
                 </div>
                 
-                <div x-show="success" x-transition class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                    <p class="text-green-700 dark:text-green-300 text-sm" x-text="success"></p>
+                <div id="success-message" class="hidden mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <p class="text-green-700 dark:text-green-300 text-sm" id="success-text"></p>
                 </div>
                 
-                <div id="paypal-button-container" class="mb-4"></div>
+                <!-- PayPal Button Container -->
+                <div id="paypal-button-container"></div>
                 
-                <div x-show="loading" class="text-center py-4">
+                <!-- Loading State -->
+                <div id="loading-state" class="hidden text-center py-4">
                     <svg class="animate-spin h-8 w-8 mx-auto text-blue-600" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <p class="mt-2 text-gray-600">Processing...</p>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Processing...</p>
                 </div>
             </div>
             
+            <!-- Info Footer -->
             <div class="px-8 py-4 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700">
                 <div class="flex items-start space-x-3">
-                    <svg class="w-5 h-5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <svg class="w-5 h-5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         <p class="font-medium text-gray-900 dark:text-white">Secure payment via PayPal</p>
-                        <p>Pay with PayPal or any debit/credit card. Credits never expire.</p>
+                        <p>Pay with PayPal or any debit/credit card. Your purchased invoice credits never expire.</p>
                     </div>
                 </div>
             </div>
@@ -110,54 +158,227 @@
 </div>
 
 {% if can_purchase %}
+<!-- PayPal JS SDK -->
 <script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=GBP&intent=capture"></script>
 <script>
-function topupPage() {
-    return {
-        quantity: 10,
-        customQuantity: 50,
-        customMode: false,
-        loading: false,
-        error: null,
-        success: null,
+    const pricePerInvoice = {{ price_per_invoice }};
+    let currentQuantity = 10;
+    let customMode = false;
+    let paypalButtonsRendered = false;
+    
+    // Select preset quantity
+    function selectPreset(amount) {
+        customMode = false;
+        currentQuantity = amount;
+        updateDisplay();
         
-        init() { this.renderPayPalButtons(); },
-        selectPreset(amount) { this.customMode = false; this.quantity = amount; this.error = null; this.success = null; },
-        toggleCustom() { this.customMode = !this.customMode; this.quantity = this.customMode ? this.customQuantity : 10; this.error = null; },
-        incrementCustom() { if (this.customQuantity < 500) { this.customQuantity += 10; this.quantity = this.customQuantity; } },
-        decrementCustom() { if (this.customQuantity > 10) { this.customQuantity -= 10; this.quantity = this.customQuantity; } },
-        validateCustom() { this.customQuantity = Math.max(10, Math.min(500, Math.round(this.customQuantity / 10) * 10)); this.quantity = this.customQuantity; },
+        // Update button styles
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
+            btn.classList.add('border-gray-200', 'dark:border-gray-600');
+        });
         
-        renderPayPalButtons() {
-            const self = this;
-            paypal.Buttons({
-                style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' },
-                createOrder: async function() {
-                    self.loading = true; self.error = null; self.success = null;
-                    try {
-                        const r = await fetch('/billing/topup/create-order', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({quantity: self.quantity}) });
-                        const result = await r.json();
-                        if (!result.success) { self.error = result.error; self.loading = false; throw new Error(result.error); }
-                        self.loading = false;
-                        return result.order_id;
-                    } catch (err) { self.error = err.message || 'Error'; self.loading = false; throw err; }
-                },
-                onApprove: async function(data) {
-                    self.loading = true; self.error = null;
-                    try {
-                        const r = await fetch('/billing/topup/capture-order', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({order_id: data.orderID, quantity: self.quantity}) });
-                        const result = await r.json();
-                        if (result.success) { self.success = `Added ${result.quantity} invoice credits!`; setTimeout(() => { window.location.href = `/billing/topup/success?quantity=${result.quantity}`; }, 1500); }
-                        else { self.error = result.error; }
-                        self.loading = false;
-                    } catch (err) { self.error = 'Network error'; self.loading = false; }
-                },
-                onCancel: function() { self.loading = false; self.error = 'Payment cancelled.'; },
-                onError: function(err) { self.loading = false; self.error = 'PayPal error. Try again.'; console.error(err); }
-            }).render('#paypal-button-container');
+        const selectedBtn = document.getElementById('preset-' + amount);
+        if (selectedBtn) {
+            selectedBtn.classList.remove('border-gray-200', 'dark:border-gray-600');
+            selectedBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
+        }
+        
+        // Hide custom input
+        document.getElementById('custom-input').classList.add('hidden');
+        document.getElementById('custom-toggle').textContent = '+ Enter custom amount';
+        
+        hideMessages();
+    }
+    
+    // Toggle custom input
+    function toggleCustom() {
+        customMode = !customMode;
+        const customInput = document.getElementById('custom-input');
+        const toggle = document.getElementById('custom-toggle');
+        
+        if (customMode) {
+            customInput.classList.remove('hidden');
+            toggle.textContent = '← Back to presets';
+            currentQuantity = parseInt(document.getElementById('custom-quantity').value) || 50;
+            
+            // Deselect presets
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
+                btn.classList.add('border-gray-200', 'dark:border-gray-600');
+            });
+        } else {
+            customInput.classList.add('hidden');
+            toggle.textContent = '+ Enter custom amount';
+            selectPreset(10);
+        }
+        
+        updateDisplay();
+        hideMessages();
+    }
+    
+    function incrementCustom() {
+        const input = document.getElementById('custom-quantity');
+        let val = parseInt(input.value) || 50;
+        if (val < 500) {
+            val += 10;
+            input.value = val;
+            currentQuantity = val;
+            updateDisplay();
         }
     }
-}
+    
+    function decrementCustom() {
+        const input = document.getElementById('custom-quantity');
+        let val = parseInt(input.value) || 50;
+        if (val > 10) {
+            val -= 10;
+            input.value = val;
+            currentQuantity = val;
+            updateDisplay();
+        }
+    }
+    
+    function validateCustom() {
+        const input = document.getElementById('custom-quantity');
+        let val = parseInt(input.value) || 10;
+        val = Math.round(val / 10) * 10;
+        if (val < 10) val = 10;
+        if (val > 500) val = 500;
+        input.value = val;
+        currentQuantity = val;
+        updateDisplay();
+    }
+    
+    function updateDisplay() {
+        document.getElementById('display-quantity').textContent = currentQuantity;
+        document.getElementById('display-total').textContent = (currentQuantity * pricePerInvoice).toFixed(2);
+    }
+    
+    function showError(message) {
+        document.getElementById('error-text').textContent = message;
+        document.getElementById('error-message').classList.remove('hidden');
+        document.getElementById('success-message').classList.add('hidden');
+    }
+    
+    function showSuccess(message) {
+        document.getElementById('success-text').textContent = message;
+        document.getElementById('success-message').classList.remove('hidden');
+        document.getElementById('error-message').classList.add('hidden');
+    }
+    
+    function hideMessages() {
+        document.getElementById('error-message').classList.add('hidden');
+        document.getElementById('success-message').classList.add('hidden');
+    }
+    
+    function showLoading(show) {
+        if (show) {
+            document.getElementById('loading-state').classList.remove('hidden');
+        } else {
+            document.getElementById('loading-state').classList.add('hidden');
+        }
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Select first preset by default
+        selectPreset(10);
+        
+        // Render PayPal buttons only once
+        if (!paypalButtonsRendered) {
+            paypalButtonsRendered = true;
+            
+            paypal.Buttons({
+                style: {
+                    layout: 'vertical',
+                    color: 'blue',
+                    shape: 'rect',
+                    label: 'pay'
+                },
+                
+                createOrder: async function(data, actions) {
+                    showLoading(true);
+                    hideMessages();
+                    
+                    try {
+                        const response = await fetch('/billing/topup/create-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                quantity: currentQuantity
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (!result.success) {
+                            showError(result.error || 'Failed to create order');
+                            showLoading(false);
+                            throw new Error(result.error);
+                        }
+                        
+                        showLoading(false);
+                        return result.order_id;
+                        
+                    } catch (err) {
+                        showError(err.message || 'Network error. Please try again.');
+                        showLoading(false);
+                        throw err;
+                    }
+                },
+                
+                onApprove: async function(data, actions) {
+                    showLoading(true);
+                    hideMessages();
+                    
+                    try {
+                        const response = await fetch('/billing/topup/capture-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                order_id: data.orderID,
+                                quantity: currentQuantity
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            showSuccess('Successfully added ' + result.quantity + ' invoice credits!');
+                            setTimeout(() => {
+                                window.location.href = '/billing/topup/success?quantity=' + result.quantity;
+                            }, 1500);
+                        } else {
+                            showError(result.error || 'Payment capture failed');
+                        }
+                        
+                        showLoading(false);
+                        
+                    } catch (err) {
+                        showError('Network error. Please try again.');
+                        showLoading(false);
+                    }
+                },
+                
+                onCancel: function(data) {
+                    showLoading(false);
+                    showError('Payment cancelled.');
+                },
+                
+                onError: function(err) {
+                    showLoading(false);
+                    showError('An error occurred with PayPal. Please try again.');
+                    console.error('PayPal error:', err);
+                }
+                
+            }).render('#paypal-button-container');
+        }
+    });
 </script>
 {% endif %}
 {% endblock %}
