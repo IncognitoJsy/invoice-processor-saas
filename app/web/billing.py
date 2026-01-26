@@ -179,7 +179,8 @@ def manage():
 @login_required
 def cancel():
     if not current_user.paypal_subscription_id:
-        return jsonify({'error': 'No active subscription'}), 400
+        flash('No active subscription found.', 'error')
+        return redirect(url_for('billing.manage'))
     
     paypal = get_paypal_service()
     
@@ -187,12 +188,15 @@ def cancel():
         if paypal.cancel_subscription(current_user.paypal_subscription_id):
             current_user.subscription_status = 'cancelled'
             db.session.commit()
-            return jsonify({'success': True, 'message': 'Subscription cancelled'})
+            flash('Your subscription has been cancelled successfully.', 'success')
+            return redirect(url_for('billing.manage'))
         else:
-            return jsonify({'error': 'Failed to cancel subscription'}), 500
+            flash('Failed to cancel subscription. Please try again.', 'error')
+            return redirect(url_for('billing.manage'))
     except Exception as e:
         current_app.logger.error(f"Cancellation error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        flash('An error occurred while cancelling. Please try again.', 'error')
+        return redirect(url_for('billing.manage'))
 
 
 @bp.route('/topup/create-order', methods=['POST'])
