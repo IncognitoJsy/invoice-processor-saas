@@ -158,7 +158,6 @@
 </div>
 
 {% if can_purchase %}
-<!-- PayPal JS SDK -->
 <script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=GBP&intent=capture"></script>
 <script>
     const pricePerInvoice = {{ price_per_invoice }};
@@ -166,13 +165,11 @@
     let customMode = false;
     let paypalButtonsRendered = false;
     
-    // Select preset quantity
     function selectPreset(amount) {
         customMode = false;
         currentQuantity = amount;
         updateDisplay();
         
-        // Update button styles
         document.querySelectorAll('.preset-btn').forEach(btn => {
             btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
             btn.classList.add('border-gray-200', 'dark:border-gray-600');
@@ -184,14 +181,11 @@
             selectedBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
         }
         
-        // Hide custom input
         document.getElementById('custom-input').classList.add('hidden');
         document.getElementById('custom-toggle').textContent = '+ Enter custom amount';
-        
         hideMessages();
     }
     
-    // Toggle custom input
     function toggleCustom() {
         customMode = !customMode;
         const customInput = document.getElementById('custom-input');
@@ -202,7 +196,6 @@
             toggle.textContent = '← Back to presets';
             currentQuantity = parseInt(document.getElementById('custom-quantity').value) || 50;
             
-            // Deselect presets
             document.querySelectorAll('.preset-btn').forEach(btn => {
                 btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'ring-2', 'ring-blue-500');
                 btn.classList.add('border-gray-200', 'dark:border-gray-600');
@@ -280,12 +273,9 @@
         }
     }
     
-    // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
-        // Select first preset by default
         selectPreset(10);
         
-        // Render PayPal buttons only once
         if (!paypalButtonsRendered) {
             paypalButtonsRendered = true;
             
