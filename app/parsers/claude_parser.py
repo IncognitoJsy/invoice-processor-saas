@@ -957,11 +957,28 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         for item in items:
             try:
-                quantity = float(item['quantity'])
-                total_amount = float(item['total_amount'])  # This is BEFORE discount for Wholesale
+                # Safely parse values - handle 'None' strings and missing values
+                qty_raw = item.get('quantity')
+                if qty_raw is None or str(qty_raw).lower() == 'none':
+                    self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - no quantity")
+                    continue
+                quantity = float(qty_raw)
                 
-                # Get discount percentage
-                discount = str(item.get('discount', '0')).replace('%', '')
+                total_raw = item.get('total_amount')
+                if total_raw is None or str(total_raw).lower() == 'none':
+                    self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - no total_amount")
+                    continue
+                total_amount = float(total_raw)
+                
+                # Skip items with zero quantity or amount
+                if quantity <= 0 or total_amount <= 0:
+                    self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - zero value")
+                    continue
+                
+                # Get discount percentage - safely handle None
+                discount = str(item.get('discount', '0') or '0').replace('%', '')
+                if discount.lower() == 'none':
+                    discount = '0'
                 discount_val = float(discount) if discount else 0
                 
                 # Apply discount to get actual cost
