@@ -709,7 +709,12 @@ Rules:
             # Add customer IDs to matches
             for match in matches:
                 for customer in customers:
-                    if customer.get('DisplayName') == match.get('customer_name'):
+                    # Check both FullyQualifiedName (for sub-customers) and DisplayName
+                    customer_fqn = customer.get('FullyQualifiedName', '')
+                    customer_display = customer.get('DisplayName', '')
+                    match_name = match.get('customer_name', '')
+                    
+                    if match_name == customer_fqn or match_name == customer_display:
                         match['customer_id'] = customer.get('Id')
                         break
             
