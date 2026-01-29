@@ -1054,7 +1054,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'cost_per_item': cost_per_item,
                     'total_amount': discounted_total,  # Store the DISCOUNTED total
                     'selling_price': final_selling_price,
-                    'markup_percent': int(actual_markup * 100),
+                    'markup_percent': min(int(actual_markup * 100), 999),  # Cap at 999 for DB
                     'profit_per_item': profit_per_item
                 })
             except Exception as e:
