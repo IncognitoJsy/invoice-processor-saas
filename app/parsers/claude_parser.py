@@ -353,7 +353,7 @@ class ClaudeInvoiceParser:
                     return known_products[variant]['sku'], 95, 'ocr'
             
             # 4. Try partial/fuzzy matching for longer part numbers
-            if len(part_upper) >= 4:
+            if False and len(part_upper) >= 4:
                 best_match = None
                 best_score = 0
                 
