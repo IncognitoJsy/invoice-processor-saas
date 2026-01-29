@@ -623,11 +623,12 @@ CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
 23. **ACCOUNT NUMBER IS SAME**: The supplier_account_number is the same for all invoices in a consolidated PDF
 
 CRITICAL PRICING RULES FOR WHOLESALE ELECTRICS:
-24. For Wholesale Electrics invoices, the "Amount" column shows price BEFORE discount
-25. The discount percentage is shown separately (e.g. "51.00%", "77.50%", "90.00%")
-26. Extract total_amount as the BEFORE-discount amount from the Amount column
-27. Extract discount as just the number (e.g. "51" not "51%")
-28. The actual cost will be calculated by applying: total_amount * (1 - discount/100)
+24. Wholesale Electrics has columns: Quantity | Price Per | Amount | Code
+25. "Price Per" shows unit price (e.g., "293.16 100" means £293.16 per 100 units) - DO NOT USE THIS
+26. "Amount" is the ACTUAL LINE TOTAL you pay - THIS IS total_amount
+27. If a discount column/percentage exists, extract it. If no discount shown, discount is "0"
+28. EXAMPLE: "3 | 293.16 100 | 8.79 | 1" means qty=3, total_amount=8.79 (NOT 293.16)
+29. The Amount column is typically the LAST numeric column before any code/reference
 
 STANDARD RULES:
 29. Extract EVERY SINGLE item from the document - do not skip any
