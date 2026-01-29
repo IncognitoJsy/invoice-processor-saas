@@ -106,7 +106,8 @@ class ClaudeInvoiceParser:
                                         known_products[sku.upper()] = {
                                             'name': name,
                                             'sku': sku,
-                                            'source': 'quickbooks'
+                                            'source': 'quickbooks',
+                                            'sales_price': float(item.get('UnitPrice') or 0)
                                         }
                                         qb_count += 1
                                     
@@ -114,7 +115,8 @@ class ClaudeInvoiceParser:
                                         known_products[name.upper()] = {
                                             'name': name,
                                             'sku': sku or name,
-                                            'source': 'quickbooks'
+                                            'source': 'quickbooks',
+                                            'sales_price': float(item.get('UnitPrice') or 0)
                                         }
                             
                             self.logger.info(f"✅ Loaded {qb_count} products with SKUs from QuickBooks")
@@ -148,18 +150,32 @@ class ClaudeInvoiceParser:
                                 name = item.get('Name', '')
                                 
                                 if code:
+                                    # Get sales price from Xero SalesDetails
+                                    xero_sales_price = 0
+                                    sales_details = item.get('SalesDetails', {})
+                                    if sales_details:
+                                        xero_sales_price = float(sales_details.get('UnitPrice') or 0)
+                                    
                                     known_products[code.upper()] = {
                                         'name': name,
                                         'sku': code,
-                                        'source': 'xero'
+                                        'source': 'xero',
+                                        'sales_price': xero_sales_price
                                     }
                                     xero_count += 1
                                 
                                 if name and name.upper() not in known_products:
+                                    # Get sales price from Xero SalesDetails
+                                    xero_sales_price_name = 0
+                                    sales_details_name = item.get('SalesDetails', {})
+                                    if sales_details_name:
+                                        xero_sales_price_name = float(sales_details_name.get('UnitPrice') or 0)
+                                    
                                     known_products[name.upper()] = {
                                         'name': name,
                                         'sku': code or name,
-                                        'source': 'xero'
+                                        'source': 'xero',
+                                        'sales_price': xero_sales_price_name
                                     }
                         
                         self.logger.info(f"✅ Loaded {xero_count} products with codes from Xero")
@@ -945,6 +961,9 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         Admin users: Use tiered markup based on discount percentage
         Regular users: Use their flat default_markup setting
+        
+        PRICE COMPARISON: If product exists in QuickBooks/Xero with a HIGHER
+        sales price than calculated, use the higher price to protect margins.
         """
         transformed = []
         supplier_lower = supplier.lower() if supplier else ''
@@ -954,6 +973,9 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         user_default_markup = self.user_markup_settings.get('default_markup', 50.0) / 100  # Convert to decimal
         
         self.logger.info(f"Transform items: is_admin={is_admin}, user_markup={user_default_markup*100}%")
+        
+        # Load known products for price comparison
+        known_products = self._load_known_products()
         
         for item in items:
             try:
@@ -1000,19 +1022,38 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     # Regular users use their flat markup setting
                     markup = user_default_markup
                 
-                selling_price = round(cost_per_item * (1 + markup), 2)
-                profit_per_item = round(selling_price - cost_per_item, 2)
+                # Calculate selling price using markup rules
+                calculated_selling_price = round(cost_per_item * (1 + markup), 2)
+                
+                # PRICE COMPARISON: Check if accounting software has higher price
+                final_selling_price = calculated_selling_price
+                actual_markup = markup
+                
+                if known_products:
+                    part_upper = item.get('part_number', '').upper().strip() if item.get('part_number') else ''
+                    if part_upper and part_upper in known_products:
+                        existing_price = known_products[part_upper].get('sales_price', 0)
+                        if existing_price and existing_price > calculated_selling_price:
+                            # Use the higher existing price from accounting software
+                            final_selling_price = round(existing_price, 2)
+                            # Calculate actual markup based on existing price
+                            if cost_per_item > 0:
+                                actual_markup = (final_selling_price - cost_per_item) / cost_per_item
+                            source = known_products[part_upper].get('source', 'accounting')
+                            self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f} ({int(actual_markup * 100)}% markup)")
+                
+                profit_per_item = round(final_selling_price - cost_per_item, 2)
                 
                 transformed.append({
                     'part_number': item['part_number'],
                     'description': item['description'],
                     'quantity': quantity,
-                    'original_unit_price': float(item.get('original_unit_price', 0)),
+                    'original_unit_price': float(item.get('original_unit_price', 0) or 0),
                     'discount': discount,
                     'cost_per_item': cost_per_item,
                     'total_amount': discounted_total,  # Store the DISCOUNTED total
-                    'selling_price': selling_price,
-                    'markup_percent': int(markup * 100),
+                    'selling_price': final_selling_price,
+                    'markup_percent': int(actual_markup * 100),
                     'profit_per_item': profit_per_item
                 })
             except Exception as e:
