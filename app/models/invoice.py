@@ -135,7 +135,9 @@ class InvoiceItem(db.Model):
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)   # qty * cost
     
     # Selling price (with markup)
-    selling_price = db.Column(db.Numeric(10, 4))  # Price per item you charge
+    selling_price = db.Column(db.Numeric(10, 4))  # Price per item you charge (may be QB price if higher)
+    calculated_selling_price = db.Column(db.Numeric(10, 4))  # Price from markup rules
+    qb_selling_price = db.Column(db.Numeric(10, 4))  # Price from QuickBooks (if product exists)
     markup_percent = db.Column(db.Numeric(5, 2))  # Markup percentage applied
     profit_per_item = db.Column(db.Numeric(10, 4))  # selling - cost per item
     
@@ -152,6 +154,8 @@ class InvoiceItem(db.Model):
             'cost_per_item': float(self.cost_per_item),
             'total_amount': float(self.total_amount),
             'selling_price': float(self.selling_price) if self.selling_price else 0,
+            'calculated_selling_price': float(self.calculated_selling_price) if self.calculated_selling_price else 0,
+            'qb_selling_price': float(self.qb_selling_price) if self.qb_selling_price else None,
             'profit_per_item': float(self.profit_per_item) if self.profit_per_item else 0
         }
 

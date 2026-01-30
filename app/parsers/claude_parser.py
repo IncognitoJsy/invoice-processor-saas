@@ -1050,6 +1050,15 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 
                 profit_per_item = round(final_selling_price - cost_per_item, 2)
                 
+                # Track QB price if different from calculated
+                qb_price = None
+                if known_products:
+                    part_upper = item.get('part_number', '').upper().strip() if item.get('part_number') else ''
+                    if part_upper and part_upper in known_products:
+                        qb_price = known_products[part_upper].get('sales_price', 0)
+                        if qb_price == 0:
+                            qb_price = None
+                
                 transformed.append({
                     'part_number': item['part_number'],
                     'description': item['description'],
@@ -1059,6 +1068,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'cost_per_item': cost_per_item,
                     'total_amount': discounted_total,  # Store the DISCOUNTED total
                     'selling_price': final_selling_price,
+                    'calculated_selling_price': calculated_selling_price,  # Price from markup rules
+                    'qb_selling_price': qb_price,  # Price from QuickBooks (if exists)
                     'markup_percent': min(int(actual_markup * 100), 999),  # Cap at 999 for DB
                     'profit_per_item': profit_per_item
                 })

@@ -493,6 +493,8 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
             cost_per_item=Decimal(str(item_data.get('cost_per_item', 0))),
             total_amount=Decimal(str(item_data.get('total_amount', 0))),
             selling_price=Decimal(str(item_data.get('selling_price', 0))),
+            calculated_selling_price=Decimal(str(item_data.get('calculated_selling_price', 0))) if item_data.get('calculated_selling_price') else None,
+            qb_selling_price=Decimal(str(item_data.get('qb_selling_price', 0))) if item_data.get('qb_selling_price') else None,
             markup_percent=Decimal(str(item_data.get('markup_percent', 0))),
             profit_per_item=Decimal(str(item_data.get('profit_per_item', 0)))
         )
