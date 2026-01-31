@@ -191,6 +191,7 @@ def get_stats():
 def update_item_price(item_id):
     """Update the selling price for an invoice item"""
     from app.models.invoice import Invoice, InvoiceItem
+    from app.extensions import db
     from decimal import Decimal
     
     data = request.get_json()
