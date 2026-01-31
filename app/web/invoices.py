@@ -185,3 +185,46 @@ def get_stats():
             for s in by_supplier
         ]
     })
+
+@bp.route('/api/invoices/item/<int:item_id>/price', methods=['PUT'])
+@login_required
+def update_item_price(item_id):
+    """Update the selling price for an invoice item"""
+    from app.models.invoice import Invoice, InvoiceItem
+    from decimal import Decimal
+    
+    data = request.get_json()
+    new_price = data.get('selling_price')
+    
+    if new_price is None:
+        return jsonify({'success': False, 'error': 'Missing selling_price'}), 400
+    
+    # Find the item and verify ownership
+    item = InvoiceItem.query.get(item_id)
+    if not item:
+        return jsonify({'success': False, 'error': 'Item not found'}), 404
+    
+    invoice = Invoice.query.get(item.invoice_id)
+    if not invoice or invoice.user_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    
+    # Update the item
+    old_price = float(item.selling_price or 0)
+    item.selling_price = Decimal(str(new_price))
+    item.profit_per_item = item.selling_price - item.cost_per_item
+    
+    # Recalculate invoice totals
+    items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
+    invoice.total_selling = sum(Decimal(str(i.selling_price or 0)) * Decimal(str(i.quantity or 0)) for i in items)
+    invoice.total_profit = sum(Decimal(str(i.profit_per_item or 0)) * Decimal(str(i.quantity or 0)) for i in items)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'item': item.to_dict(),
+        'invoice_totals': {
+            'total_selling': float(invoice.total_selling),
+            'total_profit': float(invoice.total_profit)
+        }
+    })
