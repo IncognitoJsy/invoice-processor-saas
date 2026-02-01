@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import base64
 import json
+import time
 
 
 class QuickBooksService:
@@ -14,6 +15,11 @@ class QuickBooksService:
     TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
     API_BASE_URL = "https://quickbooks.api.intuit.com"
     SANDBOX_API_BASE_URL = "https://sandbox-quickbooks.api.intuit.com"
+    
+    # Rate limiting and retry configuration
+    MAX_RETRIES = 3
+    RETRY_BACKOFF_BASE = 1  # seconds - will be multiplied: 1s, 2s, 4s
+    RATE_LIMIT_WAIT = 60  # seconds to wait on 429
     
     def __init__(self, user=None):
         self.user = user
@@ -29,6 +35,62 @@ class QuickBooksService:
         if self.environment == 'sandbox':
             return self.SANDBOX_API_BASE_URL
         return self.API_BASE_URL
+    
+    # =========================================================================
+    # TOKEN ENCRYPTION HELPERS
+    # =========================================================================
+    
+    @staticmethod
+    def _get_cipher():
+        """Get Fernet cipher for token encryption"""
+        from cryptography.fernet import Fernet
+        import os
+        
+        key = os.environ.get('TOKEN_ENCRYPTION_KEY')
+        if not key:
+            current_app.logger.warning(
+                "TOKEN_ENCRYPTION_KEY not set - tokens will be stored unencrypted. "
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+            return None
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    
+    @staticmethod
+    def encrypt_token(plaintext_token):
+        """Encrypt a token for secure storage"""
+        if not plaintext_token:
+            return plaintext_token
+        
+        cipher = QuickBooksService._get_cipher()
+        if not cipher:
+            return plaintext_token  # Fallback to plaintext if no key configured
+        
+        try:
+            return cipher.encrypt(plaintext_token.encode()).decode()
+        except Exception as e:
+            current_app.logger.error(f"Token encryption failed: {type(e).__name__}")
+            return plaintext_token
+    
+    @staticmethod
+    def decrypt_token(encrypted_token):
+        """Decrypt a stored token"""
+        if not encrypted_token:
+            return encrypted_token
+        
+        cipher = QuickBooksService._get_cipher()
+        if not cipher:
+            return encrypted_token  # Assume plaintext if no key configured
+        
+        try:
+            return cipher.decrypt(encrypted_token.encode()).decode()
+        except Exception:
+            # Token might be stored in plaintext (pre-migration)
+            # Return as-is and it will work until next refresh encrypts it
+            return encrypted_token
+    
+    # =========================================================================
+    # OAUTH METHODS
+    # =========================================================================
     
     def get_auth_url(self, state=None):
         """Generate QuickBooks OAuth authorization URL"""
@@ -64,11 +126,14 @@ class QuickBooksService:
         if response.status_code == 200:
             return response.json()
         else:
-            current_app.logger.error(f"Token exchange failed: {response.text}")
+            current_app.logger.error(f"Token exchange failed: status={response.status_code}")
             return None
     
     def refresh_access_token(self, refresh_token):
         """Refresh the access token using refresh token"""
+        # Decrypt the refresh token if it's encrypted
+        decrypted_refresh = self.decrypt_token(refresh_token)
+        
         auth_header = base64.b64encode(
             f"{self.client_id}:{self.client_secret}".encode()
         ).decode()
@@ -81,7 +146,7 @@ class QuickBooksService:
         
         data = {
             'grant_type': 'refresh_token',
-            'refresh_token': refresh_token
+            'refresh_token': decrypted_refresh
         }
         
         response = requests.post(self.TOKEN_URL, headers=headers, data=data)
@@ -89,34 +154,89 @@ class QuickBooksService:
         if response.status_code == 200:
             return response.json()
         else:
-            current_app.logger.error(f"Token refresh failed: {response.text}")
+            current_app.logger.error(f"Token refresh failed: status={response.status_code}")
             return None
+    
+    def revoke_token(self, refresh_token):
+        """
+        Revoke OAuth tokens when user disconnects.
+        Required by Intuit for clean disconnect flow.
+        """
+        decrypted_refresh = self.decrypt_token(refresh_token)
+        
+        auth_header = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
+        
+        headers = {
+            'Authorization': f'Basic {auth_header}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        
+        data = {
+            'token': decrypted_refresh
+        }
+        
+        try:
+            response = requests.post(
+                'https://developer.api.intuit.com/v2/oauth2/tokens/revoke',
+                headers=headers,
+                json=data
+            )
+            if response.status_code in (200, 204):
+                current_app.logger.info("Successfully revoked QuickBooks OAuth tokens")
+                return True
+            else:
+                current_app.logger.warning(f"Token revocation returned status {response.status_code}")
+                return False
+        except Exception as e:
+            current_app.logger.error(f"Token revocation failed: {type(e).__name__}")
+            return False
     
     def get_valid_access_token(self, qb_connection):
         """Get a valid access token, refreshing if necessary"""
         from app.extensions import db
+        
+        # Decrypt the stored access token
+        access_token = self.decrypt_token(qb_connection.access_token)
         
         # Check if token is expired (with 5 min buffer)
         if qb_connection.token_expires_at and qb_connection.token_expires_at < datetime.utcnow() + timedelta(minutes=5):
             # Token expired or expiring soon, refresh it
             tokens = self.refresh_access_token(qb_connection.refresh_token)
             if tokens:
-                qb_connection.access_token = tokens['access_token']
-                qb_connection.refresh_token = tokens.get('refresh_token', qb_connection.refresh_token)
+                # Encrypt tokens before storing
+                qb_connection.access_token = self.encrypt_token(tokens['access_token'])
+                qb_connection.refresh_token = self.encrypt_token(
+                    tokens.get('refresh_token', self.decrypt_token(qb_connection.refresh_token))
+                )
                 qb_connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 3600))
                 db.session.commit()
-                return qb_connection.access_token
+                return tokens['access_token']  # Return plaintext for immediate use
             else:
                 return None
         
-        return qb_connection.access_token
+        return access_token
+    
+    # =========================================================================
+    # API REQUEST METHOD (with retry logic and rate limit handling)
+    # =========================================================================
     
     def make_api_request(self, qb_connection, endpoint, method='GET', data=None):
-        """Make an authenticated API request to QuickBooks"""
+        """
+        Make an authenticated API request to QuickBooks with retry logic.
+        
+        Handles:
+        - 401 Unauthorized: refresh token and retry once
+        - 429 Rate Limited: wait and retry with exponential backoff
+        - 503 Service Unavailable: retry with exponential backoff
+        - 5xx Server Errors: retry with exponential backoff
+        """
         access_token = self.get_valid_access_token(qb_connection)
         
         if not access_token:
-            return {'error': 'Unable to get valid access token'}
+            return {'error': 'Unable to get valid access token', 'error_code': 'auth_failed'}
         
         url = f"{self.api_base_url}/v3/company/{qb_connection.realm_id}/{endpoint}"
         
@@ -132,42 +252,199 @@ class QuickBooksService:
             'Content-Type': 'application/json'
         }
         
-        try:
-            if method == 'GET':
-                response = requests.get(url, headers=headers)
-            elif method == 'POST':
-                response = requests.post(url, headers=headers, json=data)
-            elif method == 'PUT':
-                response = requests.put(url, headers=headers, json=data)
-            else:
-                return {'error': f'Unsupported method: {method}'}
-            
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 401:
-                # Token might be invalid, try refreshing
-                tokens = self.refresh_access_token(qb_connection.refresh_token)
-                if tokens:
-                    from app.extensions import db
-                    qb_connection.access_token = tokens['access_token']
-                    qb_connection.refresh_token = tokens.get('refresh_token', qb_connection.refresh_token)
-                    qb_connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 3600))
-                    db.session.commit()
-                    # Retry request
-                    headers['Authorization'] = f'Bearer {tokens["access_token"]}'
-                    if method == 'GET':
-                        response = requests.get(url, headers=headers)
-                    elif method == 'POST':
-                        response = requests.post(url, headers=headers, json=data)
-                    return response.json() if response.status_code == 200 else {'error': response.text}
-                return {'error': 'Authentication failed'}
-            else:
-                current_app.logger.error(f"QBO API error: {response.status_code} - {response.text}")
-                return {'error': response.text}
+        last_error = None
+        
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                if method == 'GET':
+                    response = requests.get(url, headers=headers, timeout=30)
+                elif method == 'POST':
+                    response = requests.post(url, headers=headers, json=data, timeout=30)
+                elif method == 'PUT':
+                    response = requests.put(url, headers=headers, json=data, timeout=30)
+                else:
+                    return {'error': f'Unsupported method: {method}', 'error_code': 'invalid_method'}
                 
-        except Exception as e:
-            current_app.logger.error(f"QBO API exception: {str(e)}")
-            return {'error': str(e)}
+                # --- SUCCESS ---
+                if response.status_code == 200:
+                    return response.json()
+                
+                # --- 401 UNAUTHORIZED: Token expired, refresh and retry once ---
+                if response.status_code == 401:
+                    if attempt == 0:  # Only try refresh once
+                        current_app.logger.info("QB API 401 - refreshing access token")
+                        tokens = self.refresh_access_token(qb_connection.refresh_token)
+                        if tokens:
+                            from app.extensions import db
+                            qb_connection.access_token = self.encrypt_token(tokens['access_token'])
+                            qb_connection.refresh_token = self.encrypt_token(
+                                tokens.get('refresh_token', self.decrypt_token(qb_connection.refresh_token))
+                            )
+                            qb_connection.token_expires_at = datetime.utcnow() + timedelta(
+                                seconds=tokens.get('expires_in', 3600)
+                            )
+                            db.session.commit()
+                            headers['Authorization'] = f'Bearer {tokens["access_token"]}'
+                            continue  # Retry with new token
+                        else:
+                            return {
+                                'error': 'QuickBooks authentication failed. Please reconnect your account.',
+                                'error_code': 'auth_failed',
+                                'reconnect_required': True
+                            }
+                    else:
+                        return {
+                            'error': 'QuickBooks authentication failed after token refresh.',
+                            'error_code': 'auth_failed',
+                            'reconnect_required': True
+                        }
+                
+                # --- 429 RATE LIMITED: Wait and retry ---
+                if response.status_code == 429:
+                    # Use Retry-After header if provided, otherwise use default
+                    retry_after = int(response.headers.get('Retry-After', self.RATE_LIMIT_WAIT))
+                    wait_time = min(retry_after, 120)  # Cap at 2 minutes
+                    
+                    current_app.logger.warning(
+                        f"QB API rate limited (429). Attempt {attempt + 1}/{self.MAX_RETRIES}. "
+                        f"Waiting {wait_time}s before retry."
+                    )
+                    
+                    if attempt < self.MAX_RETRIES - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        return {
+                            'error': 'QuickBooks API rate limit exceeded. Please try again in a few minutes.',
+                            'error_code': 'rate_limited'
+                        }
+                
+                # --- 503 SERVICE UNAVAILABLE: Retry with backoff ---
+                if response.status_code == 503:
+                    wait_time = self.RETRY_BACKOFF_BASE * (2 ** attempt)  # 1s, 2s, 4s
+                    
+                    current_app.logger.warning(
+                        f"QB API unavailable (503). Attempt {attempt + 1}/{self.MAX_RETRIES}. "
+                        f"Waiting {wait_time}s before retry."
+                    )
+                    
+                    if attempt < self.MAX_RETRIES - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        return {
+                            'error': 'QuickBooks service is temporarily unavailable. Please try again shortly.',
+                            'error_code': 'service_unavailable'
+                        }
+                
+                # --- OTHER 5xx SERVER ERRORS: Retry with backoff ---
+                if 500 <= response.status_code < 600:
+                    wait_time = self.RETRY_BACKOFF_BASE * (2 ** attempt)
+                    
+                    current_app.logger.warning(
+                        f"QB API server error ({response.status_code}). "
+                        f"Attempt {attempt + 1}/{self.MAX_RETRIES}. Waiting {wait_time}s."
+                    )
+                    
+                    if attempt < self.MAX_RETRIES - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        return {
+                            'error': 'QuickBooks encountered a server error. Please try again later.',
+                            'error_code': 'server_error'
+                        }
+                
+                # --- 4xx CLIENT ERRORS (not 401/429): Don't retry ---
+                if 400 <= response.status_code < 500:
+                    # Parse error details safely without exposing raw response
+                    error_detail = self._parse_qb_error(response)
+                    current_app.logger.error(
+                        f"QB API client error: {response.status_code} on {endpoint}"
+                    )
+                    return {
+                        'error': error_detail,
+                        'error_code': 'client_error',
+                        'status_code': response.status_code
+                    }
+                
+                # --- UNEXPECTED STATUS ---
+                current_app.logger.error(
+                    f"QB API unexpected status: {response.status_code} on {endpoint}"
+                )
+                last_error = f"Unexpected response from QuickBooks (status {response.status_code})"
+                
+            except requests.exceptions.Timeout:
+                wait_time = self.RETRY_BACKOFF_BASE * (2 ** attempt)
+                current_app.logger.warning(
+                    f"QB API timeout on {endpoint}. Attempt {attempt + 1}/{self.MAX_RETRIES}. "
+                    f"Waiting {wait_time}s."
+                )
+                last_error = 'QuickBooks request timed out. Please try again.'
+                if attempt < self.MAX_RETRIES - 1:
+                    time.sleep(wait_time)
+                    continue
+                    
+            except requests.exceptions.ConnectionError:
+                wait_time = self.RETRY_BACKOFF_BASE * (2 ** attempt)
+                current_app.logger.warning(
+                    f"QB API connection error on {endpoint}. "
+                    f"Attempt {attempt + 1}/{self.MAX_RETRIES}."
+                )
+                last_error = 'Could not connect to QuickBooks. Please check your internet connection.'
+                if attempt < self.MAX_RETRIES - 1:
+                    time.sleep(wait_time)
+                    continue
+                    
+            except Exception as e:
+                current_app.logger.error(
+                    f"QB API unexpected error on {endpoint}: {type(e).__name__}"
+                )
+                return {
+                    'error': 'An unexpected error occurred while communicating with QuickBooks.',
+                    'error_code': 'unexpected_error'
+                }
+        
+        # All retries exhausted
+        return {'error': last_error or 'Request failed after multiple attempts', 'error_code': 'max_retries'}
+    
+    def _parse_qb_error(self, response):
+        """
+        Parse QuickBooks error response into a user-friendly message.
+        Never expose raw API responses to the user.
+        """
+        try:
+            error_data = response.json()
+            fault = error_data.get('Fault', {})
+            errors = fault.get('Error', [])
+            
+            if errors:
+                # Get the first error message
+                error = errors[0]
+                message = error.get('Message', '')
+                detail = error.get('Detail', '')
+                
+                # Map common errors to user-friendly messages
+                if 'Duplicate' in message or 'Duplicate' in detail:
+                    return 'A duplicate record was found in QuickBooks. Please check for existing entries.'
+                elif 'Stale Object' in message:
+                    return 'The record was modified by another process. Please refresh and try again.'
+                elif 'Business Validation' in message:
+                    return f'QuickBooks validation error: {detail[:200] if detail else message[:200]}'
+                elif 'Required' in detail:
+                    return f'Missing required field: {detail[:200]}'
+                else:
+                    # Return sanitised message (limit length, no raw data)
+                    return f'QuickBooks error: {message[:200]}' if message else 'QuickBooks returned an error.'
+            
+            return 'QuickBooks returned an error. Please try again.'
+            
+        except (ValueError, KeyError):
+            return 'QuickBooks returned an unexpected response.'
+    
+    # =========================================================================
+    # COMPANY & DATA QUERIES
+    # =========================================================================
     
     def get_company_info(self, qb_connection):
         """Get company information"""
@@ -392,7 +669,7 @@ class QuickBooksService:
             return None
             
         except Exception as e:
-            current_app.logger.error(f"Error getting default tax code: {str(e)}")
+            current_app.logger.error(f"Error getting default tax code: {type(e).__name__}")
             return None
     
     # =========================================================================
@@ -721,9 +998,7 @@ Rules:
             return matches[:10]
             
         except Exception as e:
-            current_app.logger.error(f"Customer matching error: {str(e)}")
-            import traceback
-            current_app.logger.error(traceback.format_exc())
+            current_app.logger.error(f"Customer matching error: {type(e).__name__}")
             # Fallback to simple search
             return self._simple_customer_match(customers, job_reference)
     
@@ -865,7 +1140,6 @@ Rules:
         tax_code = self.get_default_tax_code(qb_connection)
         
         # Build a map of existing items by ItemRef ID
-        # Structure: {item_id: {'line_index': idx, 'quantity': qty, 'line': line_obj}}
         existing_items_map = {}
         for idx, line in enumerate(existing_lines):
             if line.get('DetailType') == 'SalesItemLineDetail':
@@ -885,7 +1159,7 @@ Rules:
                 line_id = int(line.get('Id', 0))
                 if line_id > max_id:
                     max_id = line_id
-            except:
+            except (ValueError, TypeError):
                 pass
         
         # Process each new item
@@ -919,7 +1193,7 @@ Rules:
                     existing_lines[line_index]['SalesItemLineDetail']['TaxCodeRef'] = {"value": tax_code['value']}
                 
                 current_app.logger.info(
-                    f"Merged item {item_id}: {old_qty} + {new_qty} = {combined_qty} @ £{new_price}"
+                    f"Merged item {item_id}: {old_qty} + {new_qty} = {combined_qty}"
                 )
                 items_merged += 1
                 
@@ -958,7 +1232,7 @@ Rules:
                     'line': new_line
                 }
                 
-                current_app.logger.info(f"Added new item {item_id}: {new_qty} @ £{new_price}")
+                current_app.logger.info(f"Added new item {item_id}: {new_qty}")
                 items_added += 1
         
         # Update invoice
@@ -1071,7 +1345,7 @@ Rules:
         
         return results
 
-        # =========================================================================
+    # =========================================================================
     # ESTIMATE MANAGEMENT (for Quotes)
     # =========================================================================
     

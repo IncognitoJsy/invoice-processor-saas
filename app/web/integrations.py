@@ -88,6 +88,10 @@ def verify_oauth_state(state):
         return None
 
 
+# =============================================================================
+# QUICKBOOKS ROUTES
+# =============================================================================
+
 @bp.route('/quickbooks/connect')
 @login_required
 def quickbooks_connect():
@@ -126,13 +130,13 @@ def quickbooks_callback():
     # Get state from callback
     state = request.args.get('state')
     
-    current_app.logger.info(f"QuickBooks callback received with state: {state[:20] if state else 'None'}...")
+    current_app.logger.info(f"QuickBooks callback received")
     
     # Verify state and extract user ID
     user_id = verify_oauth_state(state)
     
     if not user_id:
-        current_app.logger.warning(f"Invalid OAuth state received: {state}")
+        current_app.logger.warning("Invalid OAuth state received in QuickBooks callback")
         flash('Invalid OAuth state. Please try again.', 'error')
         return redirect(url_for('auth.login'))
     
@@ -176,14 +180,18 @@ def quickbooks_callback():
             return redirect(url_for('setup.step', step=2))
         return redirect(url_for('settings.settings_page'))
     
+    # Encrypt tokens before storing
+    encrypted_access = QuickBooksService.encrypt_token(tokens['access_token'])
+    encrypted_refresh = QuickBooksService.encrypt_token(tokens['refresh_token'])
+    
     # Check if connection already exists for this user
     connection = QuickBooksConnection.query.filter_by(user_id=user.id).first()
     
     if connection:
         # Update existing connection
         connection.realm_id = realm_id
-        connection.access_token = tokens['access_token']
-        connection.refresh_token = tokens['refresh_token']
+        connection.access_token = encrypted_access
+        connection.refresh_token = encrypted_refresh
         connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 3600))
         connection.is_active = True
     else:
@@ -191,8 +199,8 @@ def quickbooks_callback():
         connection = QuickBooksConnection(
             user_id=user.id,
             realm_id=realm_id,
-            access_token=tokens['access_token'],
-            refresh_token=tokens['refresh_token'],
+            access_token=encrypted_access,
+            refresh_token=encrypted_refresh,
             token_expires_at=datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 3600))
         )
         db.session.add(connection)
@@ -224,18 +232,142 @@ def quickbooks_callback():
 @bp.route('/quickbooks/disconnect', methods=['POST'])
 @login_required
 def quickbooks_disconnect():
-    """Disconnect QuickBooks"""
+    """
+    Disconnect QuickBooks - proper flow required by Intuit:
+    1. Revoke OAuth tokens via Intuit's revocation endpoint
+    2. Clear stored tokens and mark connection inactive
+    3. Retain the connection record (so user can reconnect easily)
+    """
     from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
     from app.extensions import db
     
     connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
     
     if connection:
-        db.session.delete(connection)
+        # Step 1: Revoke tokens with Intuit (best effort - don't block disconnect on failure)
+        try:
+            qb = QuickBooksService(current_user)
+            revoked = qb.revoke_token(connection.refresh_token)
+            if revoked:
+                current_app.logger.info(f"Successfully revoked QB tokens for user {current_user.id}")
+            else:
+                current_app.logger.warning(f"Token revocation returned false for user {current_user.id} - proceeding with disconnect")
+        except Exception as e:
+            current_app.logger.warning(f"Token revocation failed for user {current_user.id}: {type(e).__name__} - proceeding with disconnect")
+        
+        # Step 2: Clear tokens and deactivate (keep the record for reconnect)
+        connection.access_token = ''
+        connection.refresh_token = ''
+        connection.token_expires_at = None
+        connection.is_active = False
         db.session.commit()
+        
+        current_app.logger.info(f"QuickBooks disconnected for user {current_user.id}")
         flash('QuickBooks disconnected successfully.', 'success')
     
     return redirect(url_for('integrations.quickbooks_settings'))
+
+
+@bp.route('/quickbooks/reconnect')
+@login_required
+def quickbooks_reconnect():
+    """
+    Reconnect URL - Required by Intuit App Store (mandatory since Jan 2026).
+    
+    This endpoint handles the scenario where a user's OAuth connection has expired
+    or been invalidated and they need to re-authorise. Intuit may link directly to 
+    this URL from the QuickBooks App Store or from within QuickBooks Online.
+    
+    The flow:
+    1. Check if user has an existing (inactive) connection
+    2. Show a friendly reconnect page OR redirect straight to OAuth
+    3. On successful callback, reactivate the existing connection
+    """
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+    
+    # Check existing connection state
+    connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
+    
+    if connection and connection.is_active:
+        # Already connected - verify it still works
+        qb = QuickBooksService(current_user)
+        test = qb.get_company_info(connection)
+        
+        if not test.get('error'):
+            flash('Your QuickBooks account is already connected and working.', 'info')
+            return redirect(url_for('integrations.quickbooks_settings'))
+        
+        # Connection exists but is stale - mark inactive and proceed to re-auth
+        current_app.logger.info(f"QuickBooks connection stale for user {current_user.id}, initiating reconnect")
+        connection.is_active = False
+        from app.extensions import db
+        db.session.commit()
+    
+    # Initiate fresh OAuth flow
+    return redirect(url_for('integrations.quickbooks_connect'))
+
+
+@bp.route('/quickbooks/app-disconnect', methods=['POST'])
+def quickbooks_app_disconnect():
+    """
+    Handle disconnect initiated from QuickBooks App Store side.
+    
+    When a user disconnects your app from within QuickBooks Online or the
+    App Store, Intuit sends a webhook/notification. This endpoint handles
+    that event by cleaning up the local connection.
+    
+    Intuit may also call this when revoking access during security reviews.
+    
+    Note: This endpoint does NOT require @login_required because it's called
+    by Intuit's servers, not by the user's browser.
+    """
+    from app.models.quickbooks import QuickBooksConnection
+    from app.extensions import db
+    
+    # Verify the request is from Intuit
+    # Intuit sends the realmId in the payload
+    data = request.get_json(silent=True) or {}
+    realm_id = data.get('realmId') or request.args.get('realmId')
+    
+    # Also check Intuit's webhook signature if available
+    intuit_signature = request.headers.get('intuit-signature')
+    verifier_token = os.getenv('QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN')
+    
+    if verifier_token and intuit_signature:
+        # Verify webhook signature
+        import base64
+        expected_signature = base64.b64encode(
+            hmac.new(
+                verifier_token.encode(),
+                request.get_data(),
+                hashlib.sha256
+            ).digest()
+        ).decode()
+        
+        if not hmac.compare_digest(intuit_signature, expected_signature):
+            current_app.logger.warning("Invalid Intuit webhook signature on app-disconnect")
+            return jsonify({'error': 'Invalid signature'}), 401
+    
+    if not realm_id:
+        current_app.logger.warning("App disconnect called without realmId")
+        return jsonify({'error': 'realmId required'}), 400
+    
+    # Find and deactivate the connection for this realm
+    connection = QuickBooksConnection.query.filter_by(realm_id=realm_id).first()
+    
+    if connection:
+        connection.access_token = ''
+        connection.refresh_token = ''
+        connection.token_expires_at = None
+        connection.is_active = False
+        db.session.commit()
+        current_app.logger.info(f"App-side disconnect processed for realm {realm_id}, user {connection.user_id}")
+    else:
+        current_app.logger.info(f"App disconnect for unknown realm {realm_id} - no action needed")
+    
+    return jsonify({'status': 'ok'}), 200
 
 
 @bp.route('/quickbooks/settings')
@@ -594,7 +726,10 @@ def quickbooks_create_estimate(quote_id):
             'error': '; '.join(result.get('errors', ['Unknown error']))
         }), 400
 
-# ==================== XERO ROUTES ====================
+
+# =============================================================================
+# XERO ROUTES (unchanged)
+# =============================================================================
 
 @bp.route('/xero/connect')
 @login_required

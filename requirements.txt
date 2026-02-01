@@ -82,3 +82,4 @@ httpx==0.27.0
 stripe>=5.0.0
 stripe>=5.0.0
 resend
+cryptography @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_19sc_35nzq/croot/cryptography_1694211574676/work
