@@ -2,7 +2,7 @@
 import logging
 from flask import Flask, redirect, url_for, render_template
 from app.config import config
-from app.extensions import db, migrate, login_manager, limiter
+from app.extensions import db, migrate, login_manager, limiter, csrf
 
 
 def create_app(config_name='default'):
@@ -15,6 +15,7 @@ def create_app(config_name='default'):
     migrate.init_app(app, db)
     login_manager.init_app(app)
     limiter.init_app(app)
+    csrf.init_app(app)
     
     # Create tables if they don't exist (for SQLite on Railway)
     with app.app_context():
@@ -25,6 +26,15 @@ def create_app(config_name='default'):
     
     # Register blueprints
     register_blueprints(app)
+    
+    # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
+    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing
+    csrf.exempt(upload.bp)
+    csrf.exempt(user_api.bp)
+    csrf.exempt(integrations.bp)
+    csrf.exempt(tasks.bp)
+    csrf.exempt(part_number_routes.part_number_bp)
+    csrf.exempt(billing.bp)
     
     # Register error handlers
     register_error_handlers(app)
