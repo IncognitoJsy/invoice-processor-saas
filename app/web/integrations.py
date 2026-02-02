@@ -2,12 +2,52 @@
 from flask import Blueprint, redirect, request, jsonify, render_template, flash, url_for, session, current_app
 from flask_login import login_required, current_user, login_user
 from datetime import datetime, timedelta
+import base64
 import secrets
 import hashlib
 import hmac
 import os
 
 bp = Blueprint('integrations', __name__, url_prefix='/integrations')
+
+
+def verify_intuit_webhook_signature(payload_bytes, signature_header):
+    """Verify Intuit webhook signature using HMAC-SHA256.
+    
+    Intuit sends an 'intuit-signature' header containing a Base64-encoded
+    HMAC-SHA256 hash of the raw request body, signed with the Webhook
+    Verifier Token from the Developer Portal.
+    
+    Args:
+        payload_bytes: Raw request body bytes (request.get_data())
+        signature_header: Value of the 'intuit-signature' HTTP header
+        
+    Returns:
+        tuple: (is_valid: bool, error_message: str or None)
+    """
+    verifier_token = os.getenv('QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN')
+    
+    if not verifier_token:
+        current_app.logger.error("QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN not configured")
+        return False, 'Webhook verifier token not configured'
+    
+    if not signature_header:
+        return False, 'Missing intuit-signature header'
+    
+    # Compute expected signature: Base64(HMAC-SHA256(verifier_token, payload))
+    expected_signature = base64.b64encode(
+        hmac.new(
+            verifier_token.encode('utf-8'),
+            payload_bytes,
+            hashlib.sha256
+        ).digest()
+    ).decode('utf-8')
+    
+    # Constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(signature_header, expected_signature):
+        return False, 'Signature mismatch'
+    
+    return True, None
 
 
 @bp.route('/overview')
@@ -322,33 +362,25 @@ def quickbooks_app_disconnect():
     
     Note: This endpoint does NOT require @login_required because it's called
     by Intuit's servers, not by the user's browser.
+    
+    Security: Verifies intuit-signature header using HMAC-SHA256 before
+    processing. Returns 401 if signature is missing or invalid.
     """
     from app.models.quickbooks import QuickBooksConnection
     from app.extensions import db
     
-    # Verify the request is from Intuit
-    # Intuit sends the realmId in the payload
+    # --- Webhook signature verification (mandatory) ---
+    payload_bytes = request.get_data()
+    intuit_signature = request.headers.get('intuit-signature')
+    
+    is_valid, error_msg = verify_intuit_webhook_signature(payload_bytes, intuit_signature)
+    if not is_valid:
+        current_app.logger.warning(f"App-disconnect signature verification failed: {error_msg}")
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # --- Process disconnect ---
     data = request.get_json(silent=True) or {}
     realm_id = data.get('realmId') or request.args.get('realmId')
-    
-    # Also check Intuit's webhook signature if available
-    intuit_signature = request.headers.get('intuit-signature')
-    verifier_token = os.getenv('QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN')
-    
-    if verifier_token and intuit_signature:
-        # Verify webhook signature
-        import base64
-        expected_signature = base64.b64encode(
-            hmac.new(
-                verifier_token.encode(),
-                request.get_data(),
-                hashlib.sha256
-            ).digest()
-        ).decode()
-        
-        if not hmac.compare_digest(intuit_signature, expected_signature):
-            current_app.logger.warning("Invalid Intuit webhook signature on app-disconnect")
-            return jsonify({'error': 'Invalid signature'}), 401
     
     if not realm_id:
         current_app.logger.warning("App disconnect called without realmId")
@@ -367,6 +399,82 @@ def quickbooks_app_disconnect():
     else:
         current_app.logger.info(f"App disconnect for unknown realm {realm_id} - no action needed")
     
+    return jsonify({'status': 'ok'}), 200
+
+
+@bp.route('/quickbooks/webhook', methods=['POST'])
+def quickbooks_webhook():
+    """
+    Handle QuickBooks data change webhook notifications.
+    
+    Intuit sends POST requests here when subscribed entities change in
+    QuickBooks Online (e.g. Item, Vendor, Bill, Invoice create/update/delete).
+    
+    Payload structure (current as of 2025):
+    {
+        "eventNotifications": [
+            {
+                "realmId": "1234567890",
+                "dataChangeEvent": {
+                    "entities": [
+                        {
+                            "name": "Item",
+                            "id": "42",
+                            "operation": "Create",
+                            "lastUpdated": "2025-03-20T12:00:00.000Z"
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    
+    Requirements:
+    - Must respond with HTTP 200 within 3 seconds (Intuit retries on failure)
+    - Must verify intuit-signature header via HMAC-SHA256
+    - Should process events asynchronously for anything heavy
+    - Must handle duplicate events idempotently
+    
+    Note: Intuit webhook payloads only include entity IDs, not full data.
+    Use the QuickBooks API to fetch full entity details if needed.
+    """
+    # --- Webhook signature verification (mandatory) ---
+    payload_bytes = request.get_data()
+    intuit_signature = request.headers.get('intuit-signature')
+    
+    is_valid, error_msg = verify_intuit_webhook_signature(payload_bytes, intuit_signature)
+    if not is_valid:
+        current_app.logger.warning(f"Webhook signature verification failed: {error_msg}")
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # --- Parse and log events ---
+    data = request.get_json(silent=True) or {}
+    notifications = data.get('eventNotifications', [])
+    
+    for notification in notifications:
+        realm_id = notification.get('realmId', 'unknown')
+        entities = (notification.get('dataChangeEvent', {})
+                    .get('entities', []))
+        
+        for entity in entities:
+            entity_name = entity.get('name', 'Unknown')
+            entity_id = entity.get('id', 'Unknown')
+            operation = entity.get('operation', 'Unknown')
+            last_updated = entity.get('lastUpdated', '')
+            
+            current_app.logger.info(
+                f"QB Webhook: realm={realm_id} entity={entity_name} "
+                f"id={entity_id} op={operation} updated={last_updated}"
+            )
+            
+            # TODO: Process events as needed. For now we log them.
+            # Future possibilities:
+            # - Item create/update: refresh local product cache
+            # - Vendor create/update: refresh supplier list
+            # - Bill update: sync status back to GoZappify
+            # - Invoice update: track payment status
+    
+    # Always respond 200 quickly - Intuit retries if no 200 within 3 seconds
     return jsonify({'status': 'ok'}), 200
 
 
