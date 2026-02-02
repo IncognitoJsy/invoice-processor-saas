@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /integrations/
+Disallow: /dashboard/
+Disallow: /invoices/
+Disallow: /quotes/
+Disallow: /settings/
+Disallow: /auth/
+Disallow: /setup/
+Disallow: /billing/
+
+Sitemap: https://gozappify.com/sitemap.xml

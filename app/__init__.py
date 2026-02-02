@@ -54,6 +54,14 @@ def create_app(config_name='default'):
             return redirect(url_for('dashboard.index'))
         return render_template('landing/index.html')
     
+    @app.route('/robots.txt')
+    def robots():
+        return app.send_static_file('robots.txt')
+    
+    @app.route('/favicon.ico')
+    def favicon():
+        return app.send_static_file('images/favicon.ico')
+    
     return app
 
 
