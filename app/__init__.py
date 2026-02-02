@@ -29,6 +29,9 @@ def create_app(config_name='default'):
     # Register error handlers
     register_error_handlers(app)
     
+    # Security headers
+    register_security_headers(app)
+    
     # Health check endpoint
     @app.route('/health')
     def health():
@@ -88,6 +91,49 @@ def register_blueprints(app):
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)
+
+
+def register_security_headers(app):
+    """Add security headers to all responses"""
+    
+    @app.after_request
+    def add_security_headers(response):
+        # Prevent clickjacking - block all framing
+        response.headers['X-Frame-Options'] = 'DENY'
+        
+        # Prevent MIME type sniffing
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        
+        # XSS protection (legacy browsers)
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        
+        # Referrer policy - send origin only to same-origin, nothing to cross-origin
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Permissions policy - disable unused browser features
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=(), payment=()'
+        
+        # HSTS - enforce HTTPS (1 year, include subdomains)
+        # Only set on HTTPS responses to avoid issues in local dev
+        if not app.debug:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        
+        # Content Security Policy
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+            "img-src 'self' data: https:",
+            "connect-src 'self' https://appcenter.intuit.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com",
+            "frame-src https://js.stripe.com https://appcenter.intuit.com",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self' https://appcenter.intuit.com",
+        ]
+        response.headers['Content-Security-Policy'] = '; '.join(csp_directives)
+        
+        return response
 
 
 def register_error_handlers(app):
