@@ -186,7 +186,7 @@ def get_stats():
         ]
     })
 
-@bp.route('/api/invoices/item/<int:item_id>/price', methods=['PUT'])
+@bp.route('/invoices/item/<int:item_id>/price', methods=['PUT'])
 @login_required
 def update_item_price(item_id):
     """Update the selling price for an invoice item"""
