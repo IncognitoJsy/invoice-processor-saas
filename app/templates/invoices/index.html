@@ -380,7 +380,7 @@ function startEditPartNumber(itemId, currentValue) {
 async function togglePrice(itemId, calculatedPrice) {
     // Update the item to use the calculated price instead of QB price
     try {
-        const response = await fetch('/api/invoices/item/' + itemId + '/price', {
+        const response = await fetch('/invoices/item/' + itemId + '/price', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ selling_price: calculatedPrice })
