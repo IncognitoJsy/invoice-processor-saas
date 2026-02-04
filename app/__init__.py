@@ -28,7 +28,7 @@ def create_app(config_name='default'):
     register_blueprints(app)
     
     # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
-    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices
+    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder
     csrf.exempt(upload.bp)
     csrf.exempt(user_api.bp)
     csrf.exempt(integrations.bp)
@@ -36,6 +36,7 @@ def create_app(config_name='default'):
     csrf.exempt(part_number_routes.part_number_bp)
     csrf.exempt(billing.bp)
     csrf.exempt(invoices.bp)
+    csrf.exempt(quotebuilder.bp)
     
     # Register error handlers
     register_error_handlers(app)
@@ -90,6 +91,7 @@ def register_blueprints(app):
     from app.web import user_api
     from app.web import tasks
     from app.web import pages
+    from app.web import quotebuilder
     
     # Auth (must be first!)
     app.register_blueprint(auth.bp)
@@ -107,6 +109,7 @@ def register_blueprints(app):
     app.register_blueprint(user_api.bp)
     app.register_blueprint(pages.bp)
     app.register_blueprint(part_number_routes.part_number_bp)
+    app.register_blueprint(quotebuilder.bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)

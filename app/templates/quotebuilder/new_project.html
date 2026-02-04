@@ -1,0 +1,231 @@
+{% extends "base/layout.html" %}
+
+{% block title %}New Project - Quote Builder - GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="newProject()">
+    
+    <!-- Header -->
+    <div class="mb-8">
+        <a href="/quotebuilder" class="inline-flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back to Projects
+        </a>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">New Project</h1>
+        <p class="mt-1 text-gray-500 dark:text-gray-400">Create a new quotation project</p>
+    </div>
+    
+    <!-- Form -->
+    <form @submit.prevent="createProject" class="space-y-6">
+        
+        <!-- Project Details -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Project Details</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Project Name <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" x-model="form.name" required
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                           placeholder="e.g., Smith Residence Extension">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Site Address
+                    </label>
+                    <textarea x-model="form.site_address" rows="2"
+                              class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              placeholder="Full site address"></textarea>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Supply Type
+                        </label>
+                        <select x-model="form.supply_type"
+                                class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <option value="single_phase">Single Phase (230V)</option>
+                            <option value="three_phase">Three Phase (400V)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Building Type
+                        </label>
+                        <select x-model="form.building_type"
+                                class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <option value="new_build">New Build</option>
+                            <option value="renovation">Renovation</option>
+                            <option value="retrofit">Retrofit</option>
+                            <option value="listed">Listed Building</option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Affects labour time calculations</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Client Details -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Client Details</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Client Name
+                    </label>
+                    <input type="text" x-model="form.client_name"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                           placeholder="Client or company name">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Email
+                        </label>
+                        <input type="email" x-model="form.client_email"
+                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                               placeholder="client@email.com">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Phone
+                        </label>
+                        <input type="tel" x-model="form.client_phone"
+                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                               placeholder="01234 567890">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pricing Settings -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Pricing Settings</h2>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Materials Markup %
+                        </label>
+                        <div class="relative">
+                            <input type="number" x-model="form.materials_markup_percent" min="0" max="200" step="1"
+                                   class="w-full px-4 py-2 pr-8 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Labour Rate (£/hr)
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">£</span>
+                            <input type="number" x-model="form.labour_rate_per_hour" min="0" step="0.50"
+                                   class="w-full pl-8 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Contingency %
+                        </label>
+                        <div class="relative">
+                            <input type="number" x-model="form.contingency_percent" min="0" max="50" step="1"
+                                   class="w-full px-4 py-2 pr-8 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    These are defaults for this project. You can adjust individual items later.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex justify-end space-x-3">
+            <a href="/quotebuilder" 
+               class="px-6 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Cancel
+            </a>
+            <button type="submit" 
+                    :disabled="submitting"
+                    class="px-6 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition disabled:opacity-50">
+                <span x-show="!submitting">Create Project</span>
+                <span x-show="submitting" class="flex items-center">
+                    <svg class="w-4 h-4 mr-2 spinner" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Creating...
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function newProject() {
+    return {
+        submitting: false,
+        form: {
+            name: '',
+            site_address: '',
+            supply_type: 'single_phase',
+            building_type: 'renovation',
+            client_name: '',
+            client_email: '',
+            client_phone: '',
+            materials_markup_percent: 25,
+            labour_rate_per_hour: 45,
+            contingency_percent: 10
+        },
+        
+        async createProject() {
+            if (!this.form.name.trim()) {
+                alert('Please enter a project name');
+                return;
+            }
+            
+            this.submitting = true;
+            
+            try {
+                const response = await fetch('/quotebuilder/api/projects', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.form)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Redirect to project page
+                    window.location.href = `/quotebuilder/project/${data.project.id}`;
+                } else {
+                    alert(data.error || 'Failed to create project');
+                }
+            } catch (error) {
+                console.error('Error creating project:', error);
+                alert('An error occurred while creating the project');
+            }
+            
+            this.submitting = false;
+        }
+    };
+}
+</script>
+{% endblock %}
