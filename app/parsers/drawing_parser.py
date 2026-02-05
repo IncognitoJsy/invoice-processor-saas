@@ -4,10 +4,17 @@ import os
 import base64
 import json
 import logging
+import re
+import tempfile
 from typing import Dict, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Max pages Anthropic API accepts per request
+MAX_PDF_PAGES = 100
+# We'll use a slightly lower chunk size to stay safe
+PDF_CHUNK_SIZE = 80
 
 
 class DrawingParser:
@@ -23,6 +30,120 @@ class DrawingParser:
             max_retries=2
         )
         self.logger = logging.getLogger(__name__)
+    
+    def _get_pdf_page_count(self, file_path: str) -> int:
+        """Get the number of pages in a PDF without heavy dependencies"""
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            
+            # Try PyPDF2/pypdf first (more reliable)
+            try:
+                from pypdf import PdfReader
+                reader = PdfReader(file_path)
+                return len(reader.pages)
+            except ImportError:
+                pass
+            
+            try:
+                from PyPDF2 import PdfReader
+                reader = PdfReader(file_path)
+                return len(reader.pages)
+            except ImportError:
+                pass
+            
+            # Fallback: count /Page objects in raw PDF (rough estimate)
+            # This regex finds /Type /Page (but not /Type /Pages)
+            page_count = len(re.findall(rb'/Type\s*/Page[^s]', content))
+            if page_count > 0:
+                return page_count
+            
+            # Last resort: assume it might be large
+            # If file is over 10MB, flag as potentially large
+            file_size_mb = len(content) / (1024 * 1024)
+            if file_size_mb > 10:
+                return 999  # Will trigger chunking or error
+            
+            return 1  # Default assumption
+            
+        except Exception as e:
+            self.logger.warning(f"Could not count PDF pages: {e}")
+            return 1
+    
+    def _split_pdf(self, file_path: str, chunk_size: int = PDF_CHUNK_SIZE) -> List[str]:
+        """Split a large PDF into smaller chunks, return list of temp file paths"""
+        try:
+            # Try pypdf first
+            try:
+                from pypdf import PdfReader, PdfWriter
+            except ImportError:
+                from PyPDF2 import PdfReader, PdfWriter
+            
+            reader = PdfReader(file_path)
+            total_pages = len(reader.pages)
+            chunk_paths = []
+            
+            for start in range(0, total_pages, chunk_size):
+                end = min(start + chunk_size, total_pages)
+                writer = PdfWriter()
+                
+                for page_num in range(start, end):
+                    writer.add_page(reader.pages[page_num])
+                
+                # Write chunk to temp file
+                chunk_path = tempfile.mktemp(suffix=f'_pages_{start+1}-{end}.pdf')
+                with open(chunk_path, 'wb') as f:
+                    writer.write(f)
+                
+                chunk_paths.append(chunk_path)
+                self.logger.info(f"Created PDF chunk: pages {start+1}-{end} of {total_pages}")
+            
+            return chunk_paths
+            
+        except ImportError:
+            self.logger.error("No PDF library available for splitting (need pypdf or PyPDF2)")
+            return []
+        except Exception as e:
+            self.logger.error(f"PDF split error: {e}")
+            return []
+    
+    def _merge_results(self, results: List[Dict]) -> Dict:
+        """Merge materials from multiple parse results (chunked PDFs)"""
+        all_materials = []
+        all_observations = []
+        drawing_info = {}
+        schedule_info = {}
+        all_circuits = []
+        cable_estimates = {
+            'estimated_lighting_cable_m': 0,
+            'estimated_power_cable_m': 0,
+            'estimated_data_cable_m': 0,
+        }
+        
+        for result in results:
+            if not result.get('success'):
+                continue
+            
+            all_materials.extend(result.get('materials', []))
+            all_observations.extend(result.get('observations', []))
+            all_circuits.extend(result.get('circuits', []))
+            
+            # Take the first valid drawing info
+            if not drawing_info and result.get('drawing_info'):
+                drawing_info = result['drawing_info']
+            if not schedule_info and result.get('schedule_info'):
+                schedule_info = result['schedule_info']
+        
+        return {
+            'success': True,
+            'materials': all_materials,
+            'drawing_info': drawing_info,
+            'schedule_info': schedule_info,
+            'circuits': all_circuits,
+            'observations': all_observations,
+            'scale': drawing_info.get('scale'),
+            'drawing_number': drawing_info.get('drawing_number'),
+        }
     
     def parse(self, file_path: str, document_type: str = 'drawing', 
               system_type: str = 'all', floor_level: str = None) -> Dict:
@@ -56,53 +177,121 @@ class DrawingParser:
             if not media_type:
                 return {'success': False, 'error': f'Unsupported file type: {file_ext}'}
             
-            # Read file
-            with open(file_path, 'rb') as f:
-                file_data = base64.standard_b64encode(f.read()).decode('utf-8')
-            
-            # Determine content type for API
-            content_type = "document" if media_type == 'application/pdf' else "image"
-            
-            # Get the appropriate prompt based on document type
-            if document_type == 'schedule':
-                prompt = self._get_schedule_prompt(system_type)
-            else:
-                prompt = self._get_drawing_prompt(system_type, floor_level)
-            
-            # Call Claude API
-            message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8192,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": content_type,
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": file_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+            # ---- Handle large PDFs ----
+            if media_type == 'application/pdf':
+                page_count = self._get_pdf_page_count(file_path)
+                self.logger.info(f"PDF page count: {page_count}")
+                
+                if page_count > MAX_PDF_PAGES:
+                    self.logger.info(f"PDF has {page_count} pages (>{MAX_PDF_PAGES}), splitting into chunks")
+                    
+                    chunk_paths = self._split_pdf(file_path)
+                    
+                    if not chunk_paths:
+                        return {
+                            'success': False, 
+                            'error': f'This PDF has {page_count} pages which exceeds the {MAX_PDF_PAGES} page limit. '
+                                     f'Please split it into smaller files and upload each section separately.'
                         }
-                    ]
-                }]
-            )
+                    
+                    # Parse each chunk
+                    chunk_results = []
+                    try:
+                        for i, chunk_path in enumerate(chunk_paths):
+                            self.logger.info(f"Parsing chunk {i+1}/{len(chunk_paths)}")
+                            result = self._parse_single_file(
+                                chunk_path, media_type, document_type, system_type, floor_level
+                            )
+                            chunk_results.append(result)
+                    finally:
+                        # Clean up temp files
+                        for chunk_path in chunk_paths:
+                            try:
+                                os.unlink(chunk_path)
+                            except OSError:
+                                pass
+                    
+                    # Merge all chunk results
+                    return self._merge_results(chunk_results)
             
-            # Parse response
-            response_text = message.content[0].text
-            self.logger.info(f"Claude response: {len(response_text)} chars")
+            # ---- Standard single-file parse ----
+            return self._parse_single_file(file_path, media_type, document_type, system_type, floor_level)
             
-            return self._parse_response(response_text, document_type)
+        except anthropic.BadRequestError as e:
+            error_msg = str(e)
+            self.logger.error(f"Anthropic API error: {error_msg}")
+            
+            # Friendly error for "Could not process PDF"
+            if 'Could not process PDF' in error_msg:
+                return {
+                    'success': False,
+                    'error': 'This PDF could not be processed. It may be corrupted, scanned at too low a resolution, '
+                             'or in an unsupported format. Try re-exporting it from the original software, '
+                             'or convert it to PNG/JPG images and upload those instead.'
+                }
+            
+            # Friendly error for page limit (shouldn't hit this now, but just in case)
+            if '100 PDF pages' in error_msg:
+                return {
+                    'success': False,
+                    'error': 'This PDF exceeds the 100 page limit. Please split it into smaller files '
+                             'and upload each section separately.'
+                }
+            
+            return {'success': False, 'error': f'API error: {error_msg}'}
             
         except Exception as e:
             self.logger.error(f"Drawing parse error: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
             return {'success': False, 'error': str(e)}
+    
+    def _parse_single_file(self, file_path: str, media_type: str,
+                           document_type: str, system_type: str, 
+                           floor_level: str) -> Dict:
+        """Parse a single file (PDF or image) through Claude API"""
+        
+        # Read file
+        with open(file_path, 'rb') as f:
+            file_data = base64.standard_b64encode(f.read()).decode('utf-8')
+        
+        # Determine content type for API
+        content_type = "document" if media_type == 'application/pdf' else "image"
+        
+        # Get the appropriate prompt based on document type
+        if document_type == 'schedule':
+            prompt = self._get_schedule_prompt(system_type)
+        else:
+            prompt = self._get_drawing_prompt(system_type, floor_level)
+        
+        # Call Claude API
+        message = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": content_type,
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": file_data
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }]
+        )
+        
+        # Parse response
+        response_text = message.content[0].text
+        self.logger.info(f"Claude response: {len(response_text)} chars")
+        
+        return self._parse_response(response_text, document_type)
     
     def _get_drawing_prompt(self, system_type: str, floor_level: str) -> str:
         """Get prompt for parsing electrical layout drawings"""
@@ -168,7 +357,7 @@ For each item found, determine:
 3. A standard part number if you can identify the specific product
 4. The appropriate category
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON, no markdown, no code fences, no explanation before or after:
 {{
     "success": true,
     "drawing_info": {{
@@ -227,7 +416,7 @@ BE THOROUGH - this will be used for pricing!"""
 
 Extract ALL circuits and components from this schedule.
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON, no markdown, no code fences, no explanation before or after:
 {
     "success": true,
     "schedule_info": {
@@ -277,15 +466,45 @@ EXTRACT:
 Be precise with cable lengths - they're shown on the schedule."""
 
     def _parse_response(self, text: str, document_type: str) -> Dict:
-        """Parse Claude's JSON response"""
+        """Parse Claude's JSON response with robust handling"""
         try:
-            # Clean up response
+            # Clean up response - strip whitespace
             text = text.strip()
-            if text.startswith('```'):
-                lines = text.split('\n')
-                text = '\n'.join(lines[1:-1])
             
-            data = json.loads(text)
+            # Remove markdown code fences (```json ... ``` or ``` ... ```)
+            if text.startswith('```'):
+                # Find the end fence
+                lines = text.split('\n')
+                # Remove first line (```json or ```)
+                lines = lines[1:]
+                # Remove last line if it's ```
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]
+                text = '\n'.join(lines).strip()
+            
+            # Also handle case where there's text before the JSON
+            # Find the first { and last }
+            json_start = text.find('{')
+            json_end = text.rfind('}')
+            
+            if json_start == -1 or json_end == -1:
+                self.logger.error(f"No JSON object found in response. First 200 chars: {text[:200]}")
+                return {'success': False, 'error': 'AI response did not contain valid JSON. Please try parsing again.'}
+            
+            json_text = text[json_start:json_end + 1]
+            
+            try:
+                data = json.loads(json_text)
+            except json.JSONDecodeError:
+                # Try fixing common issues: trailing commas
+                cleaned = re.sub(r',\s*}', '}', json_text)
+                cleaned = re.sub(r',\s*]', ']', cleaned)
+                try:
+                    data = json.loads(cleaned)
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"JSON parse error after cleanup: {str(e)}")
+                    self.logger.error(f"Response text (first 500 chars): {text[:500]}")
+                    return {'success': False, 'error': 'Failed to parse AI response. Please try parsing this drawing again.'}
             
             if not data.get('success', True):
                 return data
@@ -350,7 +569,7 @@ Be precise with cable lengths - they're shown on the schedule."""
             
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON parse error: {str(e)}")
-            return {'success': False, 'error': f'Failed to parse response: {str(e)}'}
+            return {'success': False, 'error': 'Failed to parse AI response. Please try parsing this drawing again.'}
         except Exception as e:
             self.logger.error(f"Response parsing error: {str(e)}")
             return {'success': False, 'error': str(e)}
