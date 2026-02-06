@@ -602,19 +602,24 @@ function takeoffCanvas(projectId, documentId) {
             // Detections
             for (const d of this.detections) {
                 if (d.rejected) continue;
-                const w = d.crop?.w||40, h = d.crop?.h||40;
                 const tpl = this.symbolTemplates.find(t=>t.symbol_type_id===d.symbol_type_id);
+                const w = tpl?.crop?.w || d.w || 40;
+                const h = tpl?.crop?.h || d.h || 40;
                 const col = tpl?.color || '#4ade80';
-                ctx.strokeStyle = col; ctx.lineWidth = lw(2);
+                // Box outline
+                ctx.strokeStyle = col; ctx.lineWidth = lw(3);
                 ctx.strokeRect(d.x-w/2, d.y-h/2, w, h);
-                // Label
+                // Semi-transparent fill
+                ctx.fillStyle = col.slice(0,7) + '30';
+                ctx.fillRect(d.x-w/2, d.y-h/2, w, h);
+                // Label badge
                 const label = d.symbol_label || '?';
-                ctx.font = `bold ${lw(10)}px system-ui`;
-                const tw = ctx.measureText(label).width + lw(8);
+                ctx.font = `bold ${lw(11)}px system-ui`;
+                const tw = ctx.measureText(label).width + lw(10);
                 ctx.fillStyle = col;
-                ctx.fillRect(d.x-w/2, d.y-h/2-lw(14), tw, lw(13));
-                ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-                ctx.fillText(label, d.x-w/2+lw(4), d.y-h/2-lw(13));
+                ctx.fillRect(d.x-w/2, d.y-h/2-lw(16), tw, lw(15));
+                ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                ctx.fillText(label, d.x-w/2+lw(5), d.y-h/2-lw(15));
             }
 
             // Cable runs
