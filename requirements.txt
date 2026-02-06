@@ -40,9 +40,12 @@ PyPDF2==3.0.1
 pdfplumber==0.10.3
 PyMuPDF
 opencv-python-headless
+pdf2image==1.17.0
+Pillow==10.1.0
 
 # AI
 openai==1.6.1
+anthropic>=0.40.0
 thefuzz==0.22.1
 
 # Utilities
@@ -55,7 +58,6 @@ sentry-sdk[flask]==1.39.2
 
 # Production Server
 gunicorn==21.2.0
-# gevent removed - incompatible with Python 3.11
 
 # Development
 pytest==7.4.3
@@ -64,23 +66,9 @@ pytest-flask==1.3.0
 black==23.12.1
 flake8==7.0.0
 
-# Claude API for intelligent invoice parsing
-anthropic==0.39.0
-pdf2image==1.17.0
-Pillow==10.1.0
-
-# Claude API for intelligent invoice parsing
-anthropic==0.39.0
-pdf2image==1.17.0
-Pillow==10.1.0
-
-# Claude API for intelligent invoice parsing
-anthropic==0.39.0
-pdf2image==1.17.0
-Pillow==10.1.0
-
 # Force specific httpx version for Anthropic compatibility
 httpx==0.27.0
-stripe>=5.0.0
+
+# Payments & Email
 stripe>=5.0.0
 resend
