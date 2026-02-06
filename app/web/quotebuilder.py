@@ -945,12 +945,17 @@ def render_document(project_id, doc_id):
     os.makedirs(render_dir, exist_ok=True)
     render_path = os.path.join(render_dir, f'doc_{doc_id}_page_{page}.png')
 
-    if not os.path.exists(render_path):
+    # Always re-render if file is empty or missing
+    if not os.path.exists(render_path) or os.path.getsize(render_path) == 0:
         mime = (document.mime_type or '').lower()
+        current_app.logger.info(f"Rendering doc {doc_id}, file_path={document.file_path}, exists={os.path.exists(document.file_path)}")
 
         if 'pdf' in mime or document.original_filename.lower().endswith('.pdf'):
             try:
                 import fitz  # PyMuPDF
+                if not os.path.exists(document.file_path):
+                    current_app.logger.error(f"PDF file not found: {document.file_path}")
+                    return jsonify({'success': False, 'error': f'PDF file not found: {document.file_path}'}), 404
                 doc = fitz.open(document.file_path)
                 if page <= len(doc):
                     pg = doc[page - 1]
