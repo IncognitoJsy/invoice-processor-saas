@@ -946,7 +946,7 @@ def render_document(project_id, doc_id):
             except ImportError:
                 return jsonify({'success': False, 'error': 'PyMuPDF not installed. Run: pip install PyMuPDF'}), 500
             except Exception as e:
-                return jsonify({'success': False, 'error': f'PDF render error: {str(e)}'}), 500
+                current_app.logger.error(f"PDF render error for {document.file_path}: {e}"); return jsonify({'success': False, 'error': f'PDF render error: {str(e)}'}), 500
 
         elif any(ext in mime for ext in ['png', 'jpeg', 'jpg']):
             # Already an image, just copy
