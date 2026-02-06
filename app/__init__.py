@@ -65,6 +65,16 @@ def create_app(config_name='default'):
     def favicon():
         return app.send_static_file('images/favicon.ico')
     
+    @app.route('/debug-files')
+    def debug_files():
+        import os
+        result = []
+        for root, dirs, files in os.walk('/app'):
+            for f in files:
+                if 'static' in root or f.endswith('.js'):
+                    result.append(os.path.join(root, f))
+        return '<br>'.join(sorted(result)[:100]) or 'No files found'
+    
     # Wrap with WhiteNoise for static files in production
     app.wsgi_app = WhiteNoise(app.wsgi_app, root='app/static/', prefix='static/')
     
