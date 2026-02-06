@@ -1340,12 +1340,16 @@ def detect_symbols(project_id, doc_id):
         api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
         
         if api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
-            # ── PRIMARY: Claude Vision detection ──────────────────
-            # Claude can see symbols at any rotation and distinguish
-            # text inside (S vs M vs H etc.)
             import anthropic
+            from PIL import Image as PILImage
             
             client = anthropic.Anthropic(api_key=api_key)
+            
+            # Get actual image dimensions BEFORE sending
+            pil_img = PILImage.open(render_path)
+            img_width, img_height = pil_img.size
+            pil_img.close()
+            current_app.logger.info(f"Drawing image size: {img_width}x{img_height}")
             
             with open(render_path, 'rb') as f:
                 drawing_b64 = base64.b64encode(f.read()).decode()
@@ -1360,18 +1364,20 @@ def detect_symbols(project_id, doc_id):
                                   f"Do not count any symbols within this region.")
             
             prompt = (
-                f'I need you to find ALL instances of the symbol shown in the second image on this architectural drawing.\n\n'
-                f'Here is the reference symbol cropped from the drawing key.\n\n'
+                f'Look at this architectural/electrical drawing (first image) and the reference symbol (second image).\n\n'
+                f'The drawing image is {img_width} pixels wide and {img_height} pixels tall.\n\n'
+                f'Find ALL instances on the drawing that VISUALLY match the reference symbol.\n\n'
                 f'IMPORTANT RULES:\n'
-                f'1. Find EVERY instance of this EXACT symbol on the drawing\n'
+                f'1. Match by VISUAL APPEARANCE only - find symbols that look the same as the reference image\n'
                 f'2. Symbols may be ROTATED at any angle (0, 90, 180, 270 or anything in between) '
                 f'since they are placed on walls facing different directions\n'
-                f'3. Only match symbols that are IDENTICAL - same shape AND same text/letter inside\n'
-                f'4. Similar symbols with DIFFERENT letters (e.g. circle with S vs M vs H) are NOT matches\n'
-                f'5. Do NOT include the symbol in the key/legend area itself'
+                f'3. Only match symbols that are IDENTICAL in shape AND any text/letter visible inside them\n'
+                f'4. Similar symbols with DIFFERENT letters inside (e.g. a circle with S vs M vs H) are NOT matches\n'
+                f'5. Do NOT include the symbol shown in the key/legend area'
                 f'{exclude_prompt}\n\n'
-                f'Return the pixel coordinates of the CENTER of each found symbol.\n\n'
-                f'Respond with ONLY a JSON array. Each item needs x, y (pixel coords) and confidence (0-1).\n'
+                f'Return the pixel coordinates (in the ORIGINAL {img_width}x{img_height} image space) '
+                f'of the CENTER of each found symbol.\n\n'
+                f'Respond with ONLY a JSON array. Each item needs x, y (pixel coords in the original image) and confidence (0-1).\n'
                 f'Example: [{{"x": 1500, "y": 800, "confidence": 0.95}}]\n'
                 f'If no matches found: []'
             )
@@ -1397,23 +1403,67 @@ def detect_symbols(project_id, doc_id):
                 raw_detections = json.loads(json_match.group())
                 detections = []
                 for d in raw_detections:
+                    raw_x = int(d['x'])
+                    raw_y = int(d['y'])
+                    
+                    # Validate coordinates are within image bounds
+                    if raw_x < 0 or raw_x > img_width or raw_y < 0 or raw_y > img_height:
+                        # Claude may have returned coordinates in a different scale
+                        # Try to detect and correct: if all coords are < 1600 but image is 4768,
+                        # Claude likely saw a ~1600px wide version
+                        current_app.logger.warning(
+                            f"Detection at ({raw_x},{raw_y}) - may need scaling for {img_width}x{img_height} image"
+                        )
+                    
+                    det_w = template.crop_w or 30
+                    det_h = template.crop_h or 30
                     detections.append({
-                        'x': int(d['x']),
-                        'y': int(d['y']),
-                        'w': template.crop_w or 30,
-                        'h': template.crop_h or 30,
+                        'x': raw_x,
+                        'y': raw_y,
+                        'w': det_w,
+                        'h': det_h,
                         'confidence': float(d.get('confidence', 0.85)),
-                        'box_x': int(d['x'] - (template.crop_w or 30) / 2),
-                        'box_y': int(d['y'] - (template.crop_h or 30) / 2),
+                        'box_x': int(raw_x - det_w / 2),
+                        'box_y': int(raw_y - det_h / 2),
                         'source': 'claude_vision',
                     })
+                
+                # Check if coordinates need scaling
+                # Claude's API resizes images to max ~1568px on longest side
+                # If ALL detections have coords much smaller than image dims, scale up
+                if detections and img_width > 2000:
+                    max_det_x = max(d['x'] for d in detections)
+                    max_det_y = max(d['y'] for d in detections)
+                    
+                    # Claude API typically resizes to ~1568px longest side
+                    claude_max = 1568
+                    if img_width > img_height:
+                        claude_w = claude_max
+                        claude_h = int(img_height * claude_max / img_width)
+                    else:
+                        claude_h = claude_max
+                        claude_w = int(img_width * claude_max / img_height)
+                    
+                    # If max detection coords fit in Claude's resized version but not the original
+                    if max_det_x < claude_w * 1.1 and max_det_x < img_width * 0.5:
+                        scale_x = img_width / claude_w
+                        scale_y = img_height / claude_h
+                        current_app.logger.info(
+                            f"Scaling Claude coords: claude={claude_w}x{claude_h}, "
+                            f"actual={img_width}x{img_height}, scale={scale_x:.2f}x{scale_y:.2f}"
+                        )
+                        for d in detections:
+                            d['x'] = int(d['x'] * scale_x)
+                            d['y'] = int(d['y'] * scale_y)
+                            d['box_x'] = int(d['x'] - (d['w']) / 2)
+                            d['box_y'] = int(d['y'] - (d['h']) / 2)
+                
                 current_app.logger.info(f"Claude Vision found {len(detections)} x {template.label}")
             else:
                 detections = []
                 current_app.logger.warning(f"No parseable JSON from Claude for {template.label}")
         
         else:
-            # ── FALLBACK: OpenCV ──────────────────────────────────
             current_app.logger.info("No API key or template image - using OpenCV fallback")
             detector = SymbolDetector()
             detections = detector.detect(
