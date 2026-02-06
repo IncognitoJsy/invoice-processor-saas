@@ -3,6 +3,7 @@ import logging
 from flask import Flask, redirect, url_for, render_template
 from app.config import config
 from app.extensions import db, migrate, login_manager, limiter, csrf
+from whitenoise import WhiteNoise
 
 
 def create_app(config_name='default'):
@@ -63,6 +64,9 @@ def create_app(config_name='default'):
     @app.route('/favicon.ico')
     def favicon():
         return app.send_static_file('images/favicon.ico')
+    
+    # Wrap with WhiteNoise for static files in production
+    app.wsgi_app = WhiteNoise(app.wsgi_app, root='app/static/', prefix='static/')
     
     return app
 

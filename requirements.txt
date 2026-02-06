@@ -72,3 +72,4 @@ httpx==0.27.0
 # Payments & Email
 stripe>=5.0.0
 resend
+whitenoise
