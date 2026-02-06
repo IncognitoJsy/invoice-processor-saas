@@ -38,6 +38,8 @@ google-api-python-client==2.111.0
 # PDF Processing
 PyPDF2==3.0.1
 pdfplumber==0.10.3
+PyMuPDF
+opencv-python-headless
 
 # AI
 openai==1.6.1
