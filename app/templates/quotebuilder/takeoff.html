@@ -152,22 +152,24 @@
                     <div class="mb-3 p-3 rounded-lg bg-gray-900/50 border border-gray-700">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-sm font-semibold text-gray-200" x-text="tpl.label"></span>
-                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-600/20 text-indigo-400" x-text="'×' + (tpl.total_found || 0)"></span>
-                        </div>
-                        <template x-if="tpl.default_part_number">
-                            <div class="text-xs">
-                                <span class="text-green-400 font-semibold" x-text="tpl.default_part_number"></span>
-                                <span class="text-gray-500 ml-1" x-text="tpl.default_product_description"></span>
-                                <div class="mt-1 text-gray-400">
-                                    Cost: <span class="text-red-400" x-text="'£' + (tpl.default_unit_cost || 0).toFixed(2)"></span>
-                                    → Sale: <span class="text-green-400" x-text="'£' + (tpl.default_unit_sell || 0).toFixed(2)"></span>
-                                </div>
-                                <button @click="openLinkProduct(tpl)" class="mt-1 text-xs text-indigo-400 hover:text-indigo-300">Change product</button>
+                            <div class="flex items-center gap-1">
+                                <span x-show="tpl.default_part_number" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-600/20 text-green-400">✓ Linked</span>
+                                <span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-600/20 text-indigo-400" x-text="'×' + (tpl.total_found || 0)"></span>
                             </div>
-                        </template>
-                        <template x-if="!tpl.default_part_number">
-                            <button @click="openLinkProduct(tpl)" class="w-full mt-1 px-3 py-1.5 border border-dashed border-indigo-600/40 rounded text-xs text-indigo-400 hover:bg-indigo-600/10 transition">+ Link Product</button>
-                        </template>
+                        </div>
+                        <!-- Linked product info -->
+                        <div x-show="tpl.default_part_number" class="text-xs">
+                            <span class="text-green-400 font-semibold" x-text="tpl.default_part_number"></span>
+                            <span class="text-gray-500 ml-1" x-text="tpl.default_product_description"></span>
+                            <div class="mt-1 text-gray-400">
+                                Cost: <span class="text-red-400" x-text="'£' + (tpl.default_unit_cost || 0).toFixed(2)"></span>
+                                → Sale: <span class="text-green-400" x-text="'£' + (tpl.default_unit_sell || 0).toFixed(2)"></span>
+                            </div>
+                            <button @click="openLinkProduct(tpl)" class="mt-1 text-xs text-indigo-400 hover:text-indigo-300">✏️ Change product</button>
+                        </div>
+                        <!-- Unlinked - show link button -->
+                        <button x-show="!tpl.default_part_number" @click="openLinkProduct(tpl)" class="w-full mt-1 px-3 py-1.5 border border-dashed border-indigo-600/40 rounded text-xs text-indigo-400 hover:bg-indigo-600/10 transition">+ Link Product</button>
+                        <!-- Re-scan -->
                         <button @click="runDetection(tpl)" :disabled="detecting" class="w-full mt-2 px-3 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition disabled:opacity-50">
                             <span x-show="!detecting">🔄 Re-scan</span><span x-show="detecting">Scanning...</span>
                         </button>

@@ -92,6 +92,10 @@ function takeoffCanvas(projectId, documentId) {
                     this.areas = d.areas || [];
                     this.scale = d.scale || 50;
                     if (d.scale && d.scale !== 50) this.scaleCalibrated = true;
+                    // Debug: log template linking status
+                    this.symbolTemplates.forEach(t => {
+                        console.log(`Template "${t.label}": part=${t.default_part_number || 'NONE'}, cost=${t.default_unit_cost}, sell=${t.default_unit_sell}`);
+                    });
                 }
             } catch (e) { console.error('Load state error:', e); }
         },
