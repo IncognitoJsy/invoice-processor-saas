@@ -22,6 +22,7 @@ function takeoffCanvas(projectId, documentId) {
         // Scale
         scale: 50, scaleCalibrated: false, scalePoints: [],
         showScaleModal: false, scaleRealDistance: '',
+        showAutoScaleModal: false, autoScaleRatio: '', autoScalePaper: 'A1', autoScaleOrientation: 'landscape',
 
         // Symbol detection
         symbolTemplates: [], detections: [], detecting: false,
@@ -388,6 +389,7 @@ function takeoffCanvas(projectId, documentId) {
             const dist = parseFloat(this.scaleRealDistance);
             if (!dist || dist <= 0 || this.scalePoints.length !== 2) return;
             const [p1,p2] = this.scalePoints;
+            // These are already in image pixel coords (zoom-independent)
             const pxDist = Math.sqrt(Math.pow(p2.x-p1.x,2)+Math.pow(p2.y-p1.y,2));
             this.scale = pxDist / dist;
             try {
@@ -395,9 +397,30 @@ function takeoffCanvas(projectId, documentId) {
                     method:'POST', headers:{'Content-Type':'application/json'},
                     body: JSON.stringify({pixel_distance: pxDist, real_distance: dist})
                 });
-                this.scaleCalibrated = true; this.notify('Scale calibrated');
+                this.scaleCalibrated = true; this.notify('Scale calibrated: ' + Math.round(this.scale) + ' px/m');
             } catch(e) { this.notify('Failed to save scale','error'); }
             this.showScaleModal = false; this.scalePoints = []; this.scaleRealDistance = ''; this.redraw();
+        },
+
+        async autoScale(scaleRatio, paperSize, orientation) {
+            // Calculate scale from drawing notation like "1:35 @ A1"
+            try {
+                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/auto-scale`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({scale_ratio: scaleRatio, paper_size: paperSize, orientation: orientation || 'landscape'})
+                });
+                const d = await r.json();
+                if (d.success) {
+                    this.scale = d.px_per_metre;
+                    this.scaleCalibrated = true;
+                    this.showAutoScaleModal = false;
+                    this.notify(`Scale set: ${d.description} (${d.px_per_metre} px/m)`);
+                    this.redraw();
+                } else {
+                    this.notify(d.error || 'Auto-scale failed', 'error');
+                }
+            } catch(e) { this.notify('Auto-scale error: ' + e.message, 'error'); }
+        },
         },
 
         // ── Rooms ────────────────────────────────────────────────

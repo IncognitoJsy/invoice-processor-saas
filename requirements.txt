@@ -73,3 +73,4 @@ httpx==0.27.0
 stripe>=5.0.0
 resend
 whitenoise
+pytesseract

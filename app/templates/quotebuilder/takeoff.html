@@ -22,7 +22,8 @@
         </div>
         <div class="flex items-center gap-2">
             <span x-show="scaleCalibrated" class="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded">✓ Scale calibrated</span>
-            <span x-show="!scaleCalibrated" class="text-xs text-amber-400 bg-amber-400/10 px-2 py-1 rounded cursor-pointer" @click="setMode('scale')">⚠ Calibrate scale</span>
+            <span x-show="!scaleCalibrated" class="text-xs text-amber-400 bg-amber-400/10 px-2 py-1 rounded cursor-pointer" @click="setMode('scale')">⚠ Manual scale</span>
+            <span x-show="!scaleCalibrated" class="text-xs text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded cursor-pointer" @click="showAutoScaleModal = true">📐 Auto-scale (1:XX)</span>
             <button @click="showSummary = !showSummary"
                     class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
                     :class="showSummary ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'">
@@ -274,10 +275,10 @@
         </div>
     </div>
 
-    <!-- Scale Modal -->
+    <!-- Scale Modal (manual - click two points) -->
     <div x-show="showScaleModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="showScaleModal=false;scalePoints=[];">
         <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-96">
-            <h3 class="text-base font-bold text-white mb-3">📏 Set Drawing Scale</h3>
+            <h3 class="text-base font-bold text-white mb-3">📏 Manual Scale — Two Points</h3>
             <p class="text-xs text-gray-400 mb-3">Enter the real distance between the two marked points</p>
             <input type="number" step="0.01" min="0.01" x-model="scaleRealDistance" @keyup.enter="saveScale()"
                    placeholder="Distance in metres (e.g. 0.9)"
@@ -286,6 +287,46 @@
             <div class="flex justify-end gap-2 mt-4">
                 <button @click="showScaleModal=false;scalePoints=[];" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
                 <button @click="saveScale()" :disabled="!scaleRealDistance" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-Scale Modal (from drawing notation like 1:35 @ A1) -->
+    <div x-show="showAutoScaleModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="showAutoScaleModal=false">
+        <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-96">
+            <h3 class="text-base font-bold text-white mb-3">📐 Auto-Scale from Drawing Title</h3>
+            <p class="text-xs text-gray-400 mb-4">Enter the scale notation from the drawing's title block (e.g. "1:35 @ A1")</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs text-gray-500 font-semibold block mb-1">SCALE RATIO (the number after 1:)</label>
+                    <input type="number" step="1" min="1" x-model="autoScaleRatio" placeholder="e.g. 35, 50, 100"
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
+                </div>
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="text-xs text-gray-500 font-semibold block mb-1">PAPER SIZE</label>
+                        <select x-model="autoScalePaper" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none">
+                            <option value="A0">A0</option>
+                            <option value="A1">A1</option>
+                            <option value="A2">A2</option>
+                            <option value="A3">A3</option>
+                            <option value="A4">A4</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-xs text-gray-500 font-semibold block mb-1">ORIENTATION</label>
+                        <select x-model="autoScaleOrientation" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none">
+                            <option value="landscape">Landscape</option>
+                            <option value="portrait">Portrait</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">Common scales: 1:50 (house plans), 1:100 (site), 1:35 (detail)</p>
+            <div class="flex justify-end gap-2 mt-4">
+                <button @click="showAutoScaleModal=false" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
+                <button @click="autoScale(parseInt(autoScaleRatio), autoScalePaper, autoScaleOrientation)" :disabled="!autoScaleRatio"
+                        class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Calculate & Save</button>
             </div>
         </div>
     </div>

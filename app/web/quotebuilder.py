@@ -12,6 +12,14 @@ import uuid
 import json
 import base64
 
+PAPER_SIZES_MM = {
+    'A0': (1189, 841),
+    'A1': (841, 594),
+    'A2': (594, 420),
+    'A3': (420, 297),
+    'A4': (297, 210),
+}
+
 bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
 
 
@@ -1081,6 +1089,94 @@ def _get_scale(document):
         except (json.JSONDecodeError, TypeError):
             pass
     return 50
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/auto-scale', methods=['POST'])
+@login_required
+def auto_scale(project_id, doc_id):
+    """Calculate scale automatically from drawing notation like '1:35 @ A1'.
+    
+    Request body:
+        {
+            "scale_ratio": 35,       # The '35' from '1:35'
+            "paper_size": "A1",      # Paper size
+            "orientation": "landscape"  # or "portrait" (default: landscape for drawings)
+        }
+    
+    Returns:
+        { "success": true, "px_per_metre": 168.5, "description": "1:35 @ A1 landscape" }
+    """
+    from app.models.project import Project, ProjectDocument
+    from app.extensions import db
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    data = request.get_json()
+    scale_ratio = data.get('scale_ratio')  # e.g. 35 for 1:35
+    paper_size = data.get('paper_size', 'A1').upper()
+    orientation = data.get('orientation', 'landscape')
+
+    if not scale_ratio or scale_ratio <= 0:
+        return jsonify({'success': False, 'error': 'Invalid scale ratio'}), 400
+
+    if paper_size not in PAPER_SIZES_MM:
+        return jsonify({'success': False, 'error': f'Unknown paper size: {paper_size}'}), 400
+
+    # Get paper dimensions
+    paper_w_mm, paper_h_mm = PAPER_SIZES_MM[paper_size]
+    if orientation == 'landscape':
+        paper_long_mm = max(paper_w_mm, paper_h_mm)
+    else:
+        paper_long_mm = min(paper_w_mm, paper_h_mm)
+
+    # Real-world distance that the paper width represents
+    real_width_mm = paper_long_mm * scale_ratio
+    real_width_m = real_width_mm / 1000.0
+
+    # Get rendered image dimensions
+    render_dir = os.path.join(current_app.root_path, 'uploads', 'projects', str(project_id), 'renders')
+    render_path = os.path.join(render_dir, f'doc_{doc_id}_page_1.png')
+
+    if not os.path.exists(render_path):
+        return jsonify({'success': False, 'error': 'Drawing not rendered yet'}), 400
+
+    import cv2
+    img = cv2.imread(render_path)
+    if img is None:
+        return jsonify({'success': False, 'error': 'Could not read rendered image'}), 500
+
+    img_width_px = img.shape[1]  # Width in pixels
+    img_height_px = img.shape[0]
+
+    # Use the longer dimension (usually landscape drawings)
+    img_long_px = max(img_width_px, img_height_px)
+
+    # Calculate pixels per metre
+    px_per_metre = img_long_px / real_width_m
+
+    # Save to document
+    document.scale = px_per_metre
+    db.session.commit()
+
+    description = f"1:{scale_ratio} @ {paper_size} {orientation}"
+
+    current_app.logger.info(
+        f"Auto-scale: {description} → paper={paper_long_mm}mm, "
+        f"real_width={real_width_m:.2f}m, img={img_long_px}px, "
+        f"px_per_metre={px_per_metre:.2f}"
+    )
+
+    return jsonify({
+        'success': True,
+        'px_per_metre': round(px_per_metre, 2),
+        'real_width_m': round(real_width_m, 2),
+        'description': description,
+    })    
 
 
 # =============================================================================
