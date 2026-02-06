@@ -1081,13 +1081,20 @@ def set_drawing_scale(project_id, doc_id):
 
 
 def _get_scale(document):
-    """Get the px_per_metre scale from a document"""
     if document.scale:
         try:
+            # Handle both JSON string and raw float
+            if isinstance(document.scale, (int, float)):
+                return float(document.scale)
             data = json.loads(document.scale)
+            if isinstance(data, (int, float)):
+                return float(data)
             return data.get('px_per_metre', 50)
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError, AttributeError, ValueError):
+            try:
+                return float(document.scale)
+            except (TypeError, ValueError):
+                pass
     return 50
 
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/auto-scale', methods=['POST'])
@@ -1353,8 +1360,8 @@ def detect_symbols(project_id, doc_id):
                                   f"Do not count any symbols within this region.")
             
             prompt = (
-                f'I need you to find ALL instances of a specific electrical symbol on this architectural drawing.\n\n'
-                f'Here is the reference symbol cropped from the drawing key. It is labeled "{template.label}".\n\n'
+                f'I need you to find ALL instances of the symbol shown in the second image on this architectural drawing.\n\n'
+                f'Here is the reference symbol cropped from the drawing key.\n\n'
                 f'IMPORTANT RULES:\n'
                 f'1. Find EVERY instance of this EXACT symbol on the drawing\n'
                 f'2. Symbols may be ROTATED at any angle (0, 90, 180, 270 or anything in between) '
