@@ -3,7 +3,7 @@ GoZappify Takeoff Models - Version 4
 Enhanced with colour, gang count, and AI detection fields
 """
 
-from app.models import db
+from app.extensions import db
 from datetime import datetime
 
 
