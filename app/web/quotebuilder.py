@@ -194,8 +194,12 @@ def update_project(project_id):
 @bp.route('/api/projects/<int:project_id>', methods=['DELETE'])
 @login_required
 def delete_project(project_id):
-    """Delete a project"""
-    from app.models.project import Project
+    """Delete a project and all related data"""
+    from app.models.project import Project, ProjectDocument
+    from app.models.takeoff import (
+        TakeoffRoom, TakeoffSymbolTemplate, TakeoffSymbolDetection,
+        TakeoffCableRun, TakeoffArea
+    )
     from app.extensions import db
     
     project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
@@ -203,10 +207,22 @@ def delete_project(project_id):
     if not project:
         return jsonify({'success': False, 'error': 'Project not found'}), 404
     
-    db.session.delete(project)
-    db.session.commit()
-    
-    return jsonify({'success': True})
+    try:
+        # Delete takeoff data first (foreign key constraints)
+        TakeoffSymbolDetection.query.filter_by(project_id=project_id).delete()
+        TakeoffSymbolTemplate.query.filter_by(project_id=project_id).delete()
+        TakeoffCableRun.query.filter_by(project_id=project_id).delete()
+        TakeoffRoom.query.filter_by(project_id=project_id).delete()
+        TakeoffArea.query.filter_by(project_id=project_id).delete()
+        
+        # Now delete the project (cascades to documents, materials, etc.)
+        db.session.delete(project)
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # =============================================================================
