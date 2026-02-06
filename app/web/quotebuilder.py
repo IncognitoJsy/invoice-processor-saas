@@ -1331,6 +1331,8 @@ def detect_symbols(project_id, doc_id):
 
     try:
         detector = SymbolDetector()
+
+        # Step 1: OpenCV finds all candidates (fast, but can't read text inside symbols)
         detections = detector.detect(
             drawing_path=render_path,
             template_path=template.crop_image_path,
@@ -1338,6 +1340,95 @@ def detect_symbols(project_id, doc_id):
             exclude_area=exclude_area,
             confidence_threshold=confidence_threshold,
         )
+
+        # Step 2: Use Claude Vision to verify each candidate
+        # This filters out similar-looking symbols (e.g. S vs M vs H in circles)
+        if detections and len(detections) > 0:
+            try:
+                import anthropic
+                import cv2
+
+                api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
+                if api_key:
+                    client = anthropic.Anthropic(api_key=api_key)
+
+                    # Load the template image for reference
+                    template_b64 = None
+                    if template.crop_image_path and os.path.exists(template.crop_image_path):
+                        with open(template.crop_image_path, 'rb') as f:
+                            template_b64 = base64.b64encode(f.read()).decode()
+
+                    # Load the full drawing
+                    drawing = cv2.imread(render_path)
+
+                    # Extract each candidate region and send to Claude in a batch
+                    candidate_crops = []
+                    for i, det in enumerate(detections):
+                        bx = max(0, det['box_x'] - 5)
+                        by = max(0, det['box_y'] - 5)
+                        bw = min(drawing.shape[1] - bx, det['w'] + 10)
+                        bh = min(drawing.shape[0] - by, det['h'] + 10)
+                        crop = drawing[by:by+bh, bx:bx+bw]
+                        _, buf = cv2.imencode('.png', crop)
+                        crop_b64 = base64.b64encode(buf).decode()
+                        candidate_crops.append({'index': i, 'b64': crop_b64})
+
+                    # Send to Claude - ask it to verify which candidates match
+                    content = []
+                    content.append({
+                        "type": "text",
+                        "text": f"I'm looking for instances of a specific electrical symbol on a drawing. "
+                                f"The symbol is labeled '{template.label}'. Here is the reference symbol from the drawing key:"
+                    })
+                    if template_b64:
+                        content.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": template_b64}
+                        })
+
+                    content.append({
+                        "type": "text",
+                        "text": f"Below are {len(candidate_crops)} candidate regions found by template matching. "
+                                f"For each one, tell me if it is the SAME symbol as the reference "
+                                f"(same shape AND same letter/text inside). "
+                                f"Similar symbols with different letters (e.g. S vs M vs H) are NOT matches.\n\n"
+                                f"Reply with ONLY a JSON array of the indices that are TRUE matches, e.g. [0, 2, 5]\n"
+                                f"If none match, reply with []"
+                    })
+
+                    for cc in candidate_crops:
+                        content.append({
+                            "type": "text",
+                            "text": f"Candidate #{cc['index']}:"
+                        })
+                        content.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": cc['b64']}
+                        })
+
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=500,
+                        messages=[{"role": "user", "content": content}],
+                    )
+
+                    response_text = response.content[0].text.strip()
+                    current_app.logger.info(f"Claude Vision verification: {response_text}")
+
+                    # Parse the matching indices
+                    import re
+                    json_match = re.search(r'\[.*?\]', response_text)
+                    if json_match:
+                        matching_indices = json.loads(json_match.group())
+                        original_count = len(detections)
+                        detections = [detections[i] for i in matching_indices if i < len(detections)]
+                        current_app.logger.info(
+                            f"Claude Vision filtered: {original_count} candidates → {len(detections)} verified matches"
+                        )
+
+            except Exception as vision_err:
+                current_app.logger.warning(f"Claude Vision verification failed (keeping OpenCV results): {vision_err}")
+
     except Exception as e:
         current_app.logger.error(f"Symbol detection error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
