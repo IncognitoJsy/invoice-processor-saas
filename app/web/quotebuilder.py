@@ -1330,107 +1330,96 @@ def detect_symbols(project_id, doc_id):
         return jsonify({'success': False, 'error': 'Drawing not rendered yet. Open the takeoff view first.'}), 400
 
     try:
-        detector = SymbolDetector()
+        api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
+        
+        if api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
+            # ── PRIMARY: Claude Vision detection ──────────────────
+            # Claude can see symbols at any rotation and distinguish
+            # text inside (S vs M vs H etc.)
+            import anthropic
+            
+            client = anthropic.Anthropic(api_key=api_key)
+            
+            with open(render_path, 'rb') as f:
+                drawing_b64 = base64.b64encode(f.read()).decode()
+            with open(template.crop_image_path, 'rb') as f:
+                template_b64 = base64.b64encode(f.read()).decode()
+            
+            exclude_prompt = ""
+            if exclude_area:
+                exclude_prompt = (f"\n\nEXCLUDE the key/legend area at approximately "
+                                  f"x={exclude_area['x']}, y={exclude_area['y']}, "
+                                  f"width={exclude_area['w']}, height={exclude_area['h']}. "
+                                  f"Do not count any symbols within this region.")
+            
+            prompt = (
+                f'I need you to find ALL instances of a specific electrical symbol on this architectural drawing.\n\n'
+                f'Here is the reference symbol cropped from the drawing key. It is labeled "{template.label}".\n\n'
+                f'IMPORTANT RULES:\n'
+                f'1. Find EVERY instance of this EXACT symbol on the drawing\n'
+                f'2. Symbols may be ROTATED at any angle (0, 90, 180, 270 or anything in between) '
+                f'since they are placed on walls facing different directions\n'
+                f'3. Only match symbols that are IDENTICAL - same shape AND same text/letter inside\n'
+                f'4. Similar symbols with DIFFERENT letters (e.g. circle with S vs M vs H) are NOT matches\n'
+                f'5. Do NOT include the symbol in the key/legend area itself'
+                f'{exclude_prompt}\n\n'
+                f'Return the pixel coordinates of the CENTER of each found symbol.\n\n'
+                f'Respond with ONLY a JSON array. Each item needs x, y (pixel coords) and confidence (0-1).\n'
+                f'Example: [{{"x": 1500, "y": 800, "confidence": 0.95}}]\n'
+                f'If no matches found: []'
+            )
 
-        # Step 1: OpenCV finds all candidates (fast, but can't read text inside symbols)
-        detections = detector.detect(
-            drawing_path=render_path,
-            template_path=template.crop_image_path,
-            crop_rect={'x': template.crop_x, 'y': template.crop_y, 'w': template.crop_w, 'h': template.crop_h},
-            exclude_area=exclude_area,
-            confidence_threshold=confidence_threshold,
-        )
-
-        # Step 2: Use Claude Vision to verify each candidate
-        # This filters out similar-looking symbols (e.g. S vs M vs H in circles)
-        if detections and len(detections) > 0:
-            try:
-                import anthropic
-                import cv2
-
-                api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
-                if api_key:
-                    client = anthropic.Anthropic(api_key=api_key)
-
-                    # Load the template image for reference
-                    template_b64 = None
-                    if template.crop_image_path and os.path.exists(template.crop_image_path):
-                        with open(template.crop_image_path, 'rb') as f:
-                            template_b64 = base64.b64encode(f.read()).decode()
-
-                    # Load the full drawing
-                    drawing = cv2.imread(render_path)
-
-                    # Extract each candidate region and send to Claude in a batch
-                    candidate_crops = []
-                    for i, det in enumerate(detections):
-                        bx = max(0, det['box_x'] - 5)
-                        by = max(0, det['box_y'] - 5)
-                        bw = min(drawing.shape[1] - bx, det['w'] + 10)
-                        bh = min(drawing.shape[0] - by, det['h'] + 10)
-                        crop = drawing[by:by+bh, bx:bx+bw]
-                        _, buf = cv2.imencode('.png', crop)
-                        crop_b64 = base64.b64encode(buf).decode()
-                        candidate_crops.append({'index': i, 'b64': crop_b64})
-
-                    # Send to Claude - ask it to verify which candidates match
-                    content = []
-                    content.append({
-                        "type": "text",
-                        "text": f"I'm looking for instances of a specific electrical symbol on a drawing. "
-                                f"The symbol is labeled '{template.label}'. Here is the reference symbol from the drawing key:"
+            content = [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": drawing_b64}},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": template_b64}},
+                {"type": "text", "text": prompt},
+            ]
+            
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": content}],
+            )
+            
+            response_text = response.content[0].text.strip()
+            current_app.logger.info(f"Claude Vision detection for '{template.label}': {response_text[:500]}")
+            
+            import re
+            json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+            if json_match:
+                raw_detections = json.loads(json_match.group())
+                detections = []
+                for d in raw_detections:
+                    detections.append({
+                        'x': int(d['x']),
+                        'y': int(d['y']),
+                        'w': template.crop_w or 30,
+                        'h': template.crop_h or 30,
+                        'confidence': float(d.get('confidence', 0.85)),
+                        'box_x': int(d['x'] - (template.crop_w or 30) / 2),
+                        'box_y': int(d['y'] - (template.crop_h or 30) / 2),
+                        'source': 'claude_vision',
                     })
-                    if template_b64:
-                        content.append({
-                            "type": "image",
-                            "source": {"type": "base64", "media_type": "image/png", "data": template_b64}
-                        })
-
-                    content.append({
-                        "type": "text",
-                        "text": f"Below are {len(candidate_crops)} candidate regions found by template matching. "
-                                f"For each one, tell me if it is the SAME symbol as the reference "
-                                f"(same shape AND same letter/text inside). "
-                                f"Similar symbols with different letters (e.g. S vs M vs H) are NOT matches.\n\n"
-                                f"Reply with ONLY a JSON array of the indices that are TRUE matches, e.g. [0, 2, 5]\n"
-                                f"If none match, reply with []"
-                    })
-
-                    for cc in candidate_crops:
-                        content.append({
-                            "type": "text",
-                            "text": f"Candidate #{cc['index']}:"
-                        })
-                        content.append({
-                            "type": "image",
-                            "source": {"type": "base64", "media_type": "image/png", "data": cc['b64']}
-                        })
-
-                    response = client.messages.create(
-                        model="claude-sonnet-4-20250514",
-                        max_tokens=500,
-                        messages=[{"role": "user", "content": content}],
-                    )
-
-                    response_text = response.content[0].text.strip()
-                    current_app.logger.info(f"Claude Vision verification: {response_text}")
-
-                    # Parse the matching indices
-                    import re
-                    json_match = re.search(r'\[.*?\]', response_text)
-                    if json_match:
-                        matching_indices = json.loads(json_match.group())
-                        original_count = len(detections)
-                        detections = [detections[i] for i in matching_indices if i < len(detections)]
-                        current_app.logger.info(
-                            f"Claude Vision filtered: {original_count} candidates → {len(detections)} verified matches"
-                        )
-
-            except Exception as vision_err:
-                current_app.logger.warning(f"Claude Vision verification failed (keeping OpenCV results): {vision_err}")
-
+                current_app.logger.info(f"Claude Vision found {len(detections)} x {template.label}")
+            else:
+                detections = []
+                current_app.logger.warning(f"No parseable JSON from Claude for {template.label}")
+        
+        else:
+            # ── FALLBACK: OpenCV ──────────────────────────────────
+            current_app.logger.info("No API key or template image - using OpenCV fallback")
+            detector = SymbolDetector()
+            detections = detector.detect(
+                drawing_path=render_path,
+                template_path=template.crop_image_path,
+                crop_rect={'x': template.crop_x, 'y': template.crop_y,
+                           'w': template.crop_w, 'h': template.crop_h},
+                exclude_area=exclude_area,
+                confidence_threshold=confidence_threshold,
+            )
+    
     except Exception as e:
-        current_app.logger.error(f"Symbol detection error: {e}")
+        current_app.logger.error(f"Symbol detection error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
     TakeoffSymbolDetection.query.filter_by(
