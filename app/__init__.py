@@ -76,7 +76,7 @@ def create_app(config_name='default'):
         return '<br>'.join(sorted(result)[:100]) or 'No files found'
     
     # Wrap with WhiteNoise for static files in production
-    app.wsgi_app = WhiteNoise(app.wsgi_app, root='app/static/', prefix='static/')
+    app.wsgi_app = WhiteNoise(app.wsgi_app, root='/app/app/static/', prefix='static/')
     
     return app
 
