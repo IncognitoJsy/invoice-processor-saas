@@ -34,7 +34,6 @@ class TakeoffRoom(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    detections = db.relationship('TakeoffSymbolDetection', backref='room', lazy='dynamic')
     cable_runs = db.relationship('TakeoffCableRun', backref='room', lazy='dynamic')
     
     def get_boundary_points(self):
@@ -98,7 +97,6 @@ class TakeoffSymbolTemplate(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    detections = db.relationship('TakeoffSymbolDetection', backref='template', lazy='dynamic')
     
     def to_dict(self):
         return {
