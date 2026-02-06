@@ -1783,46 +1783,106 @@ def create_area(project_id, doc_id):
 @bp.route('/api/products/search')
 @login_required
 def search_products():
-    """Search QuickBooks/Xero products by SKU or description."""
-    from app.models.quickbooks import QuickBooksConnection
-    from app.integrations.quickbooks_service import QuickBooksService
-
-    query = request.args.get('q', '').strip()
+    """Search QuickBooks/Xero products by SKU or description.
+    
+    Works with whichever platform the user has connected.
+    Fetches all items and filters locally since QB query API 
+    LIKE syntax can be unreliable.
+    """
+    query = request.args.get('q', '').strip().upper()
     if len(query) < 2:
         return jsonify({'success': True, 'products': []})
 
-    qb_connection = QuickBooksConnection.query.filter_by(
-        user_id=current_user.id,
-        is_active=True
-    ).first()
+    # ── Try QuickBooks ────────────────────────────────────────
+    try:
+        from app.models.quickbooks import QuickBooksConnection
+        from app.integrations.quickbooks_service import QuickBooksService
 
-    if qb_connection:
-        try:
+        qb_connection = QuickBooksConnection.query.filter_by(
+            user_id=current_user.id,
+            is_active=True
+        ).first()
+
+        if qb_connection:
             qb_service = QuickBooksService()
-            response = qb_service.query_items(
-                qb_connection,
-                f"SELECT * FROM Item WHERE Name LIKE '%{query}%' OR Sku LIKE '%{query}%' MAXRESULTS 20"
-            )
+            response = qb_service.get_items(qb_connection)
 
-            items = response.get('QueryResponse', {}).get('Item', [])
-            products = []
-            for item in items:
-                products.append({
-                    'id': item.get('Id'),
-                    'sku': item.get('Sku', ''),
-                    'name': item.get('Name', ''),
-                    'description': item.get('Description', ''),
-                    'purchase_cost': float(item.get('PurchaseCost', 0) or 0),
-                    'unit_price': float(item.get('UnitPrice', 0) or 0),
-                    'source': 'quickbooks',
-                })
+            if response and 'error' not in response:
+                items = response.get('QueryResponse', {}).get('Item', [])
+                products = []
+                for item in items:
+                    sku = (item.get('Sku') or '').upper()
+                    name = (item.get('Name') or '').upper()
+                    desc = (item.get('Description') or '').upper()
 
-            return jsonify({'success': True, 'products': products})
+                    if query in sku or query in name or query in desc:
+                        products.append({
+                            'id': item.get('Id'),
+                            'sku': item.get('Sku', ''),
+                            'name': item.get('Name', ''),
+                            'description': item.get('Description', ''),
+                            'purchase_cost': float(item.get('PurchaseCost', 0) or 0),
+                            'unit_price': float(item.get('UnitPrice', 0) or 0),
+                            'source': 'quickbooks',
+                        })
 
-        except Exception as e:
-            current_app.logger.warning(f"QB search error: {e}")
+                    if len(products) >= 20:
+                        break
 
-    return jsonify({'success': True, 'products': []})
+                return jsonify({'success': True, 'products': products, 'source': 'quickbooks'})
+
+    except Exception as e:
+        current_app.logger.warning(f"QB product search error: {e}")
+
+    # ── Try Xero ──────────────────────────────────────────────
+    try:
+        from app.models.xero import XeroConnection
+        from app.integrations.xero_service import XeroService
+
+        xero_connection = XeroConnection.query.filter_by(
+            user_id=current_user.id,
+            is_active=True
+        ).first()
+
+        if xero_connection:
+            xero_service = XeroService()
+            items = xero_service.get_items(xero_connection)
+
+            if items:
+                products = []
+                for item in items:
+                    code = (item.get('Code') or '').upper()
+                    name = (item.get('Name') or '').upper()
+                    desc = (item.get('Description') or '').upper()
+
+                    if query in code or query in name or query in desc:
+                        purchase_price = 0
+                        sale_price = 0
+                        
+                        if item.get('PurchaseDetails'):
+                            purchase_price = float(item['PurchaseDetails'].get('UnitPrice', 0) or 0)
+                        if item.get('SalesDetails'):
+                            sale_price = float(item['SalesDetails'].get('UnitPrice', 0) or 0)
+
+                        products.append({
+                            'id': item.get('ItemID'),
+                            'sku': item.get('Code', ''),
+                            'name': item.get('Name', ''),
+                            'description': item.get('Description', ''),
+                            'purchase_cost': purchase_price,
+                            'unit_price': sale_price,
+                            'source': 'xero',
+                        })
+
+                    if len(products) >= 20:
+                        break
+
+                return jsonify({'success': True, 'products': products, 'source': 'xero'})
+
+    except (ImportError, Exception) as e:
+        current_app.logger.warning(f"Xero product search error: {e}")
+
+    return jsonify({'success': True, 'products': [], 'source': 'none'})
 
 
 
