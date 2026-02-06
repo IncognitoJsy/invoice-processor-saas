@@ -421,7 +421,6 @@ function takeoffCanvas(projectId, documentId) {
                 }
             } catch(e) { this.notify('Auto-scale error: ' + e.message, 'error'); }
         },
-        },
 
         // ── Rooms ────────────────────────────────────────────────
         startDrawingRoom() { this.mode = 'room'; this.drawingRoom = true; this.roomPoints = []; },
