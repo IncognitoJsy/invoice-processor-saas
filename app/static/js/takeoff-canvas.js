@@ -101,12 +101,18 @@ function takeoffCanvas(projectId, documentId) {
                 e.preventDefault();
                 const rect = this.canvas.getBoundingClientRect();
                 const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-                const factor = e.deltaY < 0 ? 1.12 : 0.89;
-                const nz = Math.max(0.05, Math.min(15, this.zoom * factor));
+                // Trackpad-friendly: use actual deltaY magnitude, clamped and scaled down
+                // Trackpads send small deltas frequently; mice send large deltas rarely
+                const raw = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 50);
+                const factor = 1 - raw * 0.0015; // ~0.15% per pixel of scroll
+                const minZoom = this.getMinZoom();
+                const nz = Math.max(minZoom, Math.min(10, this.zoom * factor));
+                if (nz === this.zoom) return;
                 const s = nz / this.zoom;
                 this.panX = mx - (mx - this.panX) * s;
                 this.panY = my - (my - this.panY) * s;
                 this.zoom = nz;
+                this.constrainPan();
                 this.redraw();
             }, { passive: false });
 
@@ -120,19 +126,47 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         // ── Zoom ─────────────────────────────────────────────────
-        fitToScreen() {
-            if (!this.drawingImage || !this.canvas) return;
+        getMinZoom() {
+            if (!this.drawingImage || !this.canvas) return 0.1;
             const c = this.canvas.parentElement;
             const sx = c.clientWidth / this.drawingImage.width;
             const sy = c.clientHeight / this.drawingImage.height;
-            this.zoom = Math.min(sx, sy) * 0.95;
+            return Math.min(sx, sy) * 0.95;
+        },
+
+        constrainPan() {
+            // Drawing edges never go past canvas edges — image stays fully within the box
+            if (!this.drawingImage || !this.canvas) return;
+            const c = this.canvas.parentElement;
+            const cw = c.clientWidth, ch = c.clientHeight;
+            const dw = this.drawingImage.width * this.zoom;
+            const dh = this.drawingImage.height * this.zoom;
+
+            // If image fits inside canvas, centre it
+            if (dw <= cw) {
+                this.panX = (cw - dw) / 2;
+            } else {
+                // Don't let left edge go right of canvas left, or right edge go left of canvas right
+                this.panX = Math.max(cw - dw, Math.min(0, this.panX));
+            }
+            if (dh <= ch) {
+                this.panY = (ch - dh) / 2;
+            } else {
+                this.panY = Math.max(ch - dh, Math.min(0, this.panY));
+            }
+        },
+
+        fitToScreen() {
+            if (!this.drawingImage || !this.canvas) return;
+            const c = this.canvas.parentElement;
+            this.zoom = this.getMinZoom();
             this.panX = (c.clientWidth - this.drawingImage.width * this.zoom) / 2;
             this.panY = (c.clientHeight - this.drawingImage.height * this.zoom) / 2;
             this.redraw();
         },
 
-        zoomIn() { this.zoom = Math.min(15, this.zoom * 1.3); this.redraw(); },
-        zoomOut() { this.zoom = Math.max(0.05, this.zoom * 0.77); this.redraw(); },
+        zoomIn() { const min = this.getMinZoom(); this.zoom = Math.min(10, this.zoom * 1.3); this.constrainPan(); this.redraw(); },
+        zoomOut() { const min = this.getMinZoom(); this.zoom = Math.max(min, this.zoom * 0.77); this.constrainPan(); this.redraw(); },
 
         screenToImage(sx, sy) {
             return { x: (sx - this.panX) / this.zoom, y: (sy - this.panY) / this.zoom };
@@ -183,6 +217,7 @@ function takeoffCanvas(projectId, documentId) {
                 const dx = e.clientX - this.panAnchorX, dy = e.clientY - this.panAnchorY;
                 if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.didDrag = true;
                 this.panX = this.panStartX + dx; this.panY = this.panStartY + dy;
+                this.constrainPan();
                 this.redraw();
                 return;
             }
