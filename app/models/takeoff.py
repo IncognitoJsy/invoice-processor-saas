@@ -128,7 +128,7 @@ class TakeoffSymbolDetection(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     document_id = db.Column(db.Integer, db.ForeignKey('project_document.id'), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('takeoff_room.id'))
-    template_id = db.Column(db.Integer, db.ForeignKey('takeoff_symbol_template.id'))
+    
     
     symbol_type_id = db.Column(db.String(50))
     symbol_label = db.Column(db.String(200))
@@ -153,7 +153,6 @@ class TakeoffSymbolDetection(db.Model):
             'project_id': self.project_id,
             'document_id': self.document_id,
             'room_id': self.room_id,
-            'template_id': self.template_id,
             'symbol_type_id': self.symbol_type_id,
             'symbol_label': self.symbol_label,
             'x': self.x,
