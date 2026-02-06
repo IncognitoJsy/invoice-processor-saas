@@ -4,200 +4,147 @@
 
 {% block extra_css %}
 <style>
-    .takeoff-container {
-        position: fixed;
-        top: 60px;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        display: flex;
-        flex-direction: column;
-        background: #0f0f1a;
-    }
-    
-    .takeoff-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 16px;
-        background: linear-gradient(180deg, #1e1e32 0%, #16162a 100%);
-        border-bottom: 1px solid #2a2a4a;
-        flex-shrink: 0;
-        z-index: 100;
-    }
-    
-    .toolbar-section { display: flex; align-items: center; gap: 10px; }
-    
-    .back-btn {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: #888;
-        text-decoration: none;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        transition: all 0.2s;
-    }
-    .back-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
-    
-    .project-info { border-left: 1px solid #2a2a4a; padding-left: 12px; margin-left: 4px; }
-    .project-title { font-size: 14px; color: #fff; font-weight: 600; }
-    .doc-name { font-size: 11px; color: #666; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    
-    .tool-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 14px;
-        border-radius: 8px;
-        border: 1px solid #2a2a4a;
-        background: #1a1a2e;
-        color: #999;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        white-space: nowrap;
-    }
-    .tool-btn:hover { background: #252542; color: #fff; border-color: #3a3a5c; }
-    .tool-btn.active { background: #3a3a6a; color: #fff; border-color: #5865F2; }
+    .takeoff-container { position: fixed; top: 60px; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; background: #0c0c18; overflow: hidden; }
+
+    /* Toolbar */
+    .takeoff-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 52px; min-height: 52px; background: linear-gradient(180deg, #161628 0%, #121224 100%); border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; z-index: 100; gap: 12px; }
+    .toolbar-section { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .toolbar-section.center { flex: 1; justify-content: center; }
+    .back-btn { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.5); text-decoration: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
+    .back-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .project-info { border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px; margin-left: 4px; max-width: 260px; overflow: hidden; }
+    .project-title { font-size: 13px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-name { font-size: 11px; color: rgba(255,255,255,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .tool-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.6); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    .tool-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .tool-btn.active { background: rgba(88,101,242,0.2); color: #818cf8; border-color: rgba(88,101,242,0.4); }
     .tool-btn.primary { background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%); border-color: transparent; color: #fff; }
-    .tool-btn.primary:hover { background: linear-gradient(135deg, #6875F5 0%, #5865F2 100%); }
-    .tool-btn.success { background: linear-gradient(135deg, #059669 0%, #047857 100%); border-color: transparent; color: #fff; }
-    .tool-btn.warning { background: linear-gradient(135deg, #d97706 0%, #b45309 100%); border-color: transparent; color: #fff; }
-    .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .divider { width: 1px; height: 28px; background: #2a2a4a; margin: 0 6px; }
-    
+    .tool-btn.primary:hover { box-shadow: 0 2px 12px rgba(88,101,242,0.3); }
+    .tool-btn.success { background: rgba(74,222,128,0.15); color: #4ade80; border-color: rgba(74,222,128,0.3); }
+    .tool-btn.warning { background: rgba(245,158,11,0.15); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
+    .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .toolbar-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.06); margin: 0 4px; }
+
+    /* Canvas */
     .canvas-wrapper { flex: 1; position: relative; overflow: hidden; }
-    #takeoffCanvas { display: block; width: 100%; height: 100%; }
-    
-    .loading-overlay {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: rgba(15, 15, 26, 0.95);
-        z-index: 50;
-    }
-    .spinner { width: 40px; height: 40px; border: 3px solid #2a2a4a; border-top-color: #5865F2; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    #takeoffCanvas { display: block; cursor: grab; }
+
+    /* Loading */
+    .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(12,12,24,0.95); z-index: 50; }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.08); border-top-color: #5865F2; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text { margin-top: 16px; color: #666; font-size: 14px; }
-    
-    .error-banner { position: absolute; bottom: 20px; left: 20px; right: 20px; padding: 14px 18px; background: rgba(220, 38, 38, 0.95); color: #fff; border-radius: 10px; font-size: 14px; z-index: 60; }
-    
-    .zoom-controls { position: absolute; bottom: 20px; left: 20px; display: flex; flex-direction: column; gap: 4px; z-index: 40; }
-    .zoom-btn { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; background: rgba(30, 30, 50, 0.95); border: 1px solid #2a2a4a; border-radius: 8px; color: #999; font-size: 18px; cursor: pointer; }
-    .zoom-btn:hover { background: rgba(50, 50, 80, 0.95); color: #fff; }
-    
-    .scale-badge { position: absolute; top: 12px; right: 12px; padding: 8px 14px; background: rgba(30, 30, 50, 0.95); border: 1px solid #2a2a4a; border-radius: 8px; font-size: 12px; z-index: 40; }
-    .scale-badge.warning { color: #fbbf24; border-color: #854d0e; }
-    .scale-badge.success { color: #4ade80; border-color: #166534; }
-    
-    .instructions-bar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: rgba(30, 30, 50, 0.98); border: 1px solid #3a3a5c; border-radius: 12px; color: #ccc; font-size: 13px; z-index: 40; display: flex; align-items: center; gap: 16px; }
-    
-    .room-panel, .summary-panel {
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
-        background: #16162a;
-        border-left: 1px solid #2a2a4a;
-        display: flex;
-        flex-direction: column;
-        z-index: 45;
-        transform: translateX(100%);
-        transition: transform 0.25s ease;
-    }
-    .room-panel { width: 340px; }
-    .summary-panel { width: 400px; z-index: 46; }
+    .loading-text { margin-top: 14px; color: rgba(255,255,255,0.4); font-size: 13px; }
+
+    /* Error */
+    .error-banner { position: absolute; bottom: 20px; left: 20px; right: 20px; padding: 14px 18px; background: rgba(220,38,38,0.95); color: #fff; border-radius: 10px; font-size: 13px; z-index: 60; backdrop-filter: blur(8px); }
+
+    /* Zoom controls */
+    .zoom-controls { position: absolute; bottom: 60px; left: 16px; display: flex; flex-direction: column; gap: 2px; z-index: 40; }
+    .zoom-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: rgba(12,12,24,0.9); border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); font-size: 18px; cursor: pointer; transition: all 0.15s; backdrop-filter: blur(8px); }
+    .zoom-btn:hover { background: rgba(30,30,60,0.95); color: #fff; }
+    .zoom-btn:first-child { border-radius: 8px 8px 2px 2px; }
+    .zoom-btn:last-child { border-radius: 2px 2px 8px 8px; }
+
+    /* Scale badge */
+    .scale-badge { position: absolute; top: 12px; right: 12px; padding: 6px 12px; background: rgba(12,12,24,0.9); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 40; backdrop-filter: blur(8px); }
+    .scale-badge.warning { color: #fbbf24; border-color: rgba(245,158,11,0.2); }
+    .scale-badge.success { color: #4ade80; border-color: rgba(74,222,128,0.2); }
+
+    /* Instructions bar */
+    .instructions-bar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: rgba(12,12,24,0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500; z-index: 40; display: flex; align-items: center; gap: 14px; backdrop-filter: blur(8px); white-space: nowrap; }
+    .instructions-bar.room-active { bottom: 70px; background: rgba(5,150,105,0.95); border-color: rgba(74,222,128,0.3); color: #fff; }
+
+    /* Detection popup */
+    .detection-popup { position: absolute; bottom: 80px; right: 20px; width: 260px; background: rgba(18,18,36,0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; z-index: 42; backdrop-filter: blur(12px); }
+    .detection-popup h4 { font-size: 14px; color: #fff; margin: 0 0 12px 0; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .detection-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .detection-actions .tool-btn { flex: 1; justify-content: center; font-size: 12px; padding: 8px; }
+
+    /* Panels */
+    .room-panel, .summary-panel { position: absolute; top: 0; right: 0; height: 100%; background: rgba(18,18,36,0.98); border-left: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; z-index: 45; transform: translateX(100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); backdrop-filter: blur(12px); }
+    .room-panel { width: 320px; }
+    .summary-panel { width: 380px; z-index: 46; }
     .room-panel.open, .summary-panel.open { transform: translateX(0); }
-    
-    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #2a2a4a; background: #1a1a2e; }
+
+    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .panel-title { font-size: 15px; font-weight: 600; color: #fff; }
-    .panel-subtitle { font-size: 12px; color: #666; margin-top: 2px; }
-    .panel-close { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #666; font-size: 20px; cursor: pointer; border-radius: 6px; }
-    .panel-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .panel-subtitle { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+    .panel-close { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: rgba(255,255,255,0.4); font-size: 20px; cursor: pointer; border-radius: 6px; transition: all 0.15s; }
+    .panel-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
     .panel-content { flex: 1; overflow-y: auto; padding: 16px; }
     .panel-section { margin-bottom: 24px; }
-    .panel-section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 12px; }
-    
-    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e1e32; }
+    .panel-section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); margin-bottom: 12px; font-weight: 600; }
+
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
     .stat-row:last-child { border-bottom: none; }
-    .stat-label { color: #999; font-size: 13px; }
+    .stat-label { color: rgba(255,255,255,0.5); font-size: 13px; }
     .stat-value { color: #fff; font-weight: 600; font-size: 14px; }
-    
+
     .item-list { display: flex; flex-direction: column; gap: 8px; }
-    .item-card { padding: 12px; background: #1e1e32; border-radius: 8px; border: 1px solid #2a2a4a; }
-    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .item-card { padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
     .item-name { font-size: 13px; font-weight: 500; color: #fff; }
     .item-count { background: #5865F2; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-    .item-category { font-size: 11px; color: #666; }
-    
-    .room-tools { display: flex; gap: 8px; padding: 12px 16px; background: #1a1a2e; border-top: 1px solid #2a2a4a; }
+    .item-category { font-size: 11px; color: rgba(255,255,255,0.35); }
+
+    .room-tools { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.06); }
     .room-tools .tool-btn { flex: 1; justify-content: center; }
-    
-    .room-summary-card { margin-bottom: 16px; background: #1a1a2e; border-radius: 10px; border: 1px solid #2a2a4a; overflow: hidden; }
-    .room-summary-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: #1e1e36; border-bottom: 1px solid #2a2a4a; }
+
+    .room-summary-card { margin-bottom: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; }
+    .room-summary-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); }
     .room-summary-name { font-size: 14px; font-weight: 600; color: #fff; }
     .room-summary-area { font-size: 12px; color: #4ade80; }
-    .room-summary-items { padding: 12px 16px; }
-    .summary-item-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; }
-    .summary-item-name { color: #ccc; }
+    .room-summary-items { padding: 8px 16px; }
+    .summary-item-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .summary-item-name { color: rgba(255,255,255,0.7); }
     .summary-item-qty { color: #fff; font-weight: 500; }
-    
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
-    .modal-content { background: #1a1a2e; border-radius: 16px; border: 1px solid #2a2a4a; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
-    .modal-header { padding: 20px 24px; border-bottom: 1px solid #2a2a4a; }
+
+    /* Modals */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
+    .modal-content { background: #1a1a30; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .modal-title { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-    .modal-subtitle { font-size: 13px; color: #666; }
+    .modal-subtitle { font-size: 13px; color: rgba(255,255,255,0.4); }
     .modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
-    .modal-footer { padding: 16px 24px; border-top: 1px solid #2a2a4a; display: flex; justify-content: flex-end; gap: 10px; background: #16162a; }
-    
+    .modal-footer { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: flex-end; gap: 10px; }
+
     .form-group { margin-bottom: 20px; }
-    .form-label { display: block; font-size: 12px; font-weight: 500; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
-    .form-input { width: 100%; padding: 12px 14px; background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 8px; color: #fff; font-size: 14px; }
+    .form-label { display: block; font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.5); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .form-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 14px; font-family: inherit; transition: border-color 0.15s; }
     .form-input:focus { outline: none; border-color: #5865F2; }
-    .form-input::placeholder { color: #444; }
-    .form-hint { font-size: 11px; color: #555; margin-top: 6px; }
-    
+    .form-input::placeholder { color: rgba(255,255,255,0.2); }
+    .form-hint { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 6px; }
+
     .product-search-wrapper { position: relative; }
     .product-search-input { padding-left: 40px; }
-    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #555; }
-    .product-results { max-height: 250px; overflow-y: auto; border: 1px solid #2a2a4a; border-radius: 8px; margin-top: 8px; }
-    .product-result-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; transition: background 0.15s; border-bottom: 1px solid #1e1e32; }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.3); }
+    .product-results { max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-top: 8px; }
+    .product-result-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; transition: background 0.15s; border-bottom: 1px solid rgba(255,255,255,0.03); }
     .product-result-item:last-child { border-bottom: none; }
-    .product-result-item:hover { background: #1e1e36; }
-    .product-result-item.selected { background: #252550; border-color: #5865F2; }
+    .product-result-item:hover { background: rgba(255,255,255,0.04); }
+    .product-result-item.selected { background: rgba(88,101,242,0.15); border-color: rgba(88,101,242,0.3); }
     .product-info { flex: 1; }
     .product-name { font-size: 13px; color: #fff; font-weight: 500; }
-    .product-sku { font-size: 11px; color: #666; margin-top: 2px; }
+    .product-sku { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; }
     .product-price { font-size: 13px; color: #4ade80; font-weight: 500; }
     .load-more-btn { width: 100%; padding: 10px; background: transparent; border: none; color: #5865F2; font-size: 13px; cursor: pointer; }
-    
-    .selected-product-card { padding: 14px; background: #1e1e36; border: 2px solid #5865F2; border-radius: 10px; margin-top: 12px; }
-    .selected-label { font-size: 10px; text-transform: uppercase; color: #5865F2; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 6px; }
-    
+
+    .selected-product-card { padding: 14px; background: rgba(88,101,242,0.1); border: 1px solid rgba(88,101,242,0.3); border-radius: 10px; margin-top: 12px; }
+    .selected-label { font-size: 10px; text-transform: uppercase; color: #818cf8; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 6px; }
+
     .category-pills { display: flex; flex-wrap: wrap; gap: 8px; }
-    .category-pill { padding: 8px 14px; background: #1e1e32; border: 1px solid #2a2a4a; border-radius: 20px; font-size: 12px; color: #999; cursor: pointer; }
-    .category-pill:hover { border-color: #3a3a5c; color: #fff; }
-    .category-pill.selected { background: #5865F2; border-color: #5865F2; color: #fff; }
-    
+    .category-pill { padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; font-size: 12px; color: rgba(255,255,255,0.5); cursor: pointer; transition: all 0.15s; }
+    .category-pill:hover { border-color: rgba(255,255,255,0.15); color: #fff; }
+    .category-pill.selected { background: rgba(88,101,242,0.2); border-color: rgba(88,101,242,0.5); color: #818cf8; }
+
     .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
-    .toggle-label { font-size: 13px; color: #ccc; }
-    .toggle-hint { font-size: 11px; color: #555; }
-    .toggle-switch { width: 44px; height: 24px; background: #2a2a4a; border-radius: 12px; position: relative; cursor: pointer; transition: background 0.2s; }
+    .toggle-label { font-size: 13px; color: rgba(255,255,255,0.8); }
+    .toggle-hint { font-size: 11px; color: rgba(255,255,255,0.3); }
+    .toggle-switch { width: 44px; height: 24px; background: rgba(255,255,255,0.1); border-radius: 12px; position: relative; cursor: pointer; transition: background 0.2s; }
     .toggle-switch.active { background: #5865F2; }
     .toggle-switch::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; }
     .toggle-switch.active::after { transform: translateX(20px); }
-    
-    .detection-popup { position: absolute; bottom: 80px; right: 20px; width: 280px; background: rgba(26, 26, 46, 0.98); border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; z-index: 42; }
-    .detection-popup h4 { font-size: 14px; color: #fff; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #2a2a4a; }
-    .detection-actions { display: flex; gap: 8px; margin-top: 14px; }
-    .detection-actions .tool-btn { flex: 1; justify-content: center; font-size: 12px; padding: 8px; }
 </style>
 {% endblock %}
 
@@ -206,33 +153,36 @@
     <!-- Toolbar -->
     <div class="takeoff-toolbar">
         <div class="toolbar-section">
-            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}" class="back-btn">← Back</a>
+            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}" class="back-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                Back
+            </a>
             <div class="project-info">
                 <div class="project-title">{{ project.name }}</div>
-                <div class="doc-name">{{ document.filename }}</div>
+                <div class="doc-name">{{ document.original_filename or document.filename }}</div>
             </div>
         </div>
-        
-        <div class="toolbar-section">
+
+        <div class="toolbar-section center">
             <button class="tool-btn" :class="{ warning: !scaleCalibrated, success: scaleCalibrated }" @click="startCalibration()">
                 📏 <span x-text="scaleCalibrated ? 'Scale ✓' : 'Set Scale'"></span>
             </button>
-            <div class="divider"></div>
-            <button class="tool-btn" :class="{ active: mode === 'room' }" @click="setMode('room')">🏠 Draw Room</button>
-            <div class="divider"></div>
-            <button class="tool-btn" :class="{ active: mode === 'symbol' }" @click="setMode('symbol')">⬜ Mark Symbol</button>
+            <div class="toolbar-divider"></div>
+            <button class="tool-btn" :class="{ active: mode === 'room' }" @click="setMode('room')">🏠 Room</button>
+            <div class="toolbar-divider"></div>
+            <button class="tool-btn" :class="{ active: mode === 'symbol' }" @click="setMode('symbol')">⬜ Symbol</button>
             <button class="tool-btn primary" @click="detectSymbols()" :disabled="symbolTemplates.length === 0 || detecting">
-                <span x-text="detecting ? 'Detecting...' : '🔍 Find All'"></span>
+                <span x-text="detecting ? '⏳ Detecting...' : '🔍 Find All'"></span>
             </button>
-            <div class="divider"></div>
+            <div class="toolbar-divider"></div>
             <button class="tool-btn" :class="{ active: mode === 'cable' }" @click="setMode('cable')">⚡ Cable</button>
         </div>
-        
+
         <div class="toolbar-section">
-            <button class="tool-btn" @click="showSummary = !showSummary">📊 Summary</button>
+            <button class="tool-btn" :class="{ active: showSummary }" @click="showSummary = !showSummary">📊 Summary</button>
         </div>
     </div>
-    
+
     <!-- Canvas -->
     <div class="canvas-wrapper">
         <canvas id="takeoffCanvas" x-ref="canvas"
@@ -240,30 +190,30 @@
                 @mousemove="handleMouseMove($event)"
                 @mouseup="handleMouseUp($event)"
                 @mouseleave="handleMouseUp($event)"></canvas>
-        
+
         <div class="loading-overlay" x-show="loading">
             <div class="spinner"></div>
             <div class="loading-text">Loading drawing...</div>
         </div>
-        
+
         <div class="error-banner" x-show="error" x-text="error"></div>
-        
+
         <div class="zoom-controls">
             <button class="zoom-btn" @click="zoomIn()">+</button>
             <button class="zoom-btn" @click="zoomOut()">−</button>
             <button class="zoom-btn" @click="resetView()">⟲</button>
         </div>
-        
+
         <div class="scale-badge" :class="scaleCalibrated ? 'success' : 'warning'">
             <span x-text="scaleCalibrated ? '✓ Scale set' : '⚠ Scale not set'"></span>
         </div>
-        
+
+        <!-- Mode instructions -->
         <div class="instructions-bar" x-show="mode !== 'select' || currentRoomPoints.length > 0">
             <template x-if="mode === 'calibrate'"><span>📏 Click two points of a known distance</span></template>
             <template x-if="mode === 'room'"><span>🏠 Click corners to draw room boundary</span></template>
-            <template x-if="mode === 'symbol'"><span>⬜ Drag box around a symbol</span></template>
-            <template x-if="mode === 'cable'"><span>⚡ Click start, then end point</span></template>
-            
+            <template x-if="mode === 'symbol'"><span>⬜ Drag a box around a symbol</span></template>
+            <template x-if="mode === 'cable'"><span>⚡ Click start point, then end point</span></template>
             <template x-if="currentRoomPoints.length >= 3">
                 <div style="display: flex; gap: 8px;">
                     <button class="tool-btn primary" @click="finishRoom()">✓ Finish Room</button>
@@ -271,12 +221,14 @@
                 </div>
             </template>
         </div>
-        
-        <div class="instructions-bar" x-show="activeRoom" style="bottom: 70px; background: rgba(5, 150, 105, 0.95);">
+
+        <!-- Active room bar -->
+        <div class="instructions-bar room-active" x-show="activeRoom">
             <span>🏠 <strong x-text="activeRoom?.name"></strong></span>
-            <button class="tool-btn" @click="exitRoom()" style="background: rgba(255,255,255,0.2); border: none;">Exit Room</button>
+            <button class="tool-btn" @click="exitRoom()" style="background: rgba(255,255,255,0.15); border: none; color: #fff;">Exit Room</button>
         </div>
-        
+
+        <!-- Detection popup -->
         <div class="detection-popup" x-show="selectedDetection">
             <h4 x-text="selectedDetection?.template_name || 'Detection'"></h4>
             <div class="stat-row">
@@ -287,7 +239,7 @@
                 <button class="tool-btn" @click="deleteDetection(selectedDetection)" style="color: #f87171;">🗑️ Delete</button>
             </div>
         </div>
-        
+
         <!-- Room Panel -->
         <div class="room-panel" :class="{ open: showRoomPanel && activeRoom }">
             <div class="panel-header">
@@ -302,28 +254,13 @@
             <div class="panel-content">
                 <div class="panel-section">
                     <h4>Room Summary</h4>
-                    <div class="stat-row">
-                        <span class="stat-label">Symbols</span>
-                        <span class="stat-value" x-text="getRoomDetections(activeRoom || {}).length"></span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Cable runs</span>
-                        <span class="stat-value" x-text="getRoomCables(activeRoom || {}).length"></span>
-                    </div>
+                    <div class="stat-row"><span class="stat-label">Symbols</span><span class="stat-value" x-text="getRoomDetections(activeRoom || {}).length"></span></div>
+                    <div class="stat-row"><span class="stat-label">Cable runs</span><span class="stat-value" x-text="getRoomCables(activeRoom || {}).length"></span></div>
                 </div>
                 <div class="panel-section">
                     <h4>Items</h4>
                     <div class="item-list">
-                        <template x-for="item in (() => {
-                            const dets = getRoomDetections(activeRoom || {});
-                            const g = {};
-                            dets.forEach(d => {
-                                const k = d.template_name || 'Unknown';
-                                if (!g[k]) g[k] = { name: k, count: 0, category: d.category };
-                                g[k].count++;
-                            });
-                            return Object.values(g);
-                        })()" :key="item.name">
+                        <template x-for="item in (() => { const dets = getRoomDetections(activeRoom || {}); const g = {}; dets.forEach(d => { const k = d.template_name || 'Unknown'; if (!g[k]) g[k] = { name: k, count: 0, category: d.category }; g[k].count++; }); return Object.values(g); })()" :key="item.name">
                             <div class="item-card">
                                 <div class="item-header">
                                     <span class="item-name" x-text="item.name"></span>
@@ -340,7 +277,7 @@
                 <button class="tool-btn" :class="{ active: mode === 'cable' }" @click="setMode('cable')">⚡ Cable</button>
             </div>
         </div>
-        
+
         <!-- Summary Panel -->
         <div class="summary-panel" :class="{ open: showSummary }">
             <div class="panel-header">
@@ -355,7 +292,7 @@
                     <h4>Totals</h4>
                     <div class="stat-row"><span class="stat-label">Rooms</span><span class="stat-value" x-text="rooms.length"></span></div>
                     <div class="stat-row"><span class="stat-label">Symbols</span><span class="stat-value" x-text="detections.length"></span></div>
-                    <div class="stat-row" x-show="scaleCalibrated"><span class="stat-label">Cable</span><span class="stat-value" x-text="cableRuns.reduce((s,c)=>s+(c.length_metres||0),0).toFixed(2)+'m'"></span></div>
+                    <div class="stat-row" x-show="scaleCalibrated"><span class="stat-label">Cable</span><span class="stat-value" x-text="(Array.isArray(cableRuns) ? cableRuns.reduce((s,c)=>s+(c.length_metres||0),0) : 0).toFixed(2)+'m'"></span></div>
                 </div>
                 <div class="panel-section">
                     <h4>By Room</h4>
@@ -379,7 +316,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Calibration Modal -->
     <div class="modal-overlay" x-show="showCalibrationModal" @click.self="showCalibrationModal=false;calibrationPoints=[];">
         <div class="modal-content" style="width: 400px;">
@@ -391,7 +328,7 @@
                 <div class="form-group">
                     <label class="form-label">Distance (metres)</label>
                     <input type="number" step="0.01" min="0.01" class="form-input" x-model.number="calibrationDistance" placeholder="e.g. 0.9" @keyup.enter="saveCalibration()">
-                    <div class="form-hint">Standard door: 0.9m, internal: 0.76m</div>
+                    <div class="form-hint">Standard door: 0.9m · Internal: 0.76m</div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -400,7 +337,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Room Name Modal -->
     <div class="modal-overlay" x-show="showRoomModal" @click.self="showRoomModal=false;">
         <div class="modal-content" style="width: 400px;">
@@ -420,7 +357,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Symbol Template Modal -->
     <div class="modal-overlay" x-show="showSymbolModal" @click.self="closeSymbolModal()">
         <div class="modal-content" style="width: 500px;">
@@ -447,11 +384,11 @@
                                 <div class="product-price" x-text="'£'+(p.unit_price||p.price||0).toFixed(2)"></div>
                             </div>
                         </template>
-                        <div x-show="productSearchLoading" style="padding:16px;text-align:center;color:#666;">Searching...</div>
+                        <div x-show="productSearchLoading" style="padding:16px;text-align:center;color:rgba(255,255,255,0.4);">Searching...</div>
                         <button class="load-more-btn" x-show="productSearchHasMore&&!productSearchLoading" @click="loadMoreProducts()">Load more...</button>
                     </div>
                 </div>
-                
+
                 <div class="selected-product-card" x-show="selectedProduct">
                     <div class="selected-label">Selected Product</div>
                     <div class="product-name" x-text="selectedProduct?.name"></div>
@@ -460,7 +397,7 @@
                         <span class="product-price" x-text="'£'+(selectedProduct?.unit_price||0).toFixed(2)"></span>
                     </div>
                 </div>
-                
+
                 <div class="form-group">
                     <label class="form-label">Category</label>
                     <div class="category-pills">
@@ -469,8 +406,8 @@
                         </template>
                     </div>
                 </div>
-                
-                <div class="form-group" style="border-top:1px solid #2a2a4a;padding-top:16px;">
+
+                <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;">
                     <div class="toggle-row">
                         <div>
                             <div class="toggle-label">Use OCR (text detection)</div>
