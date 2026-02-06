@@ -67,6 +67,17 @@ def create_app(config_name='default'):
     def favicon():
         return app.send_static_file('images/favicon.ico')
     
+    @app.route('/serve-takeoff-js')
+    def serve_takeoff_js():
+        import os
+        js_path = '/app/app/static/js/takeoff-canvas.js'
+        if os.path.exists(js_path):
+            with open(js_path, 'r') as f:
+                js_content = f.read()
+            from flask import Response
+            return Response(js_content, mimetype='application/javascript')
+        return 'File not found', 404
+
     @app.route('/debug-files')
     def debug_files():
         import os
