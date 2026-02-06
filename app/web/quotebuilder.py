@@ -1337,144 +1337,190 @@ def detect_symbols(project_id, doc_id):
         return jsonify({'success': False, 'error': 'Drawing not rendered yet. Open the takeoff view first.'}), 400
 
     try:
+        detector = SymbolDetector()
+
+        # Step 1: OpenCV finds ALL candidates at any rotation (accurate positions)
+        detections = detector.detect(
+            drawing_path=render_path,
+            template_path=template.crop_image_path,
+            crop_rect={'x': template.crop_x, 'y': template.crop_y,
+                       'w': template.crop_w, 'h': template.crop_h},
+            exclude_area=exclude_area,
+            confidence_threshold=confidence_threshold,
+        )
+
+        current_app.logger.info(f"OpenCV found {len(detections)} candidates for '{template.label}'")
+
+        # Step 2: Use Claude Vision to verify each candidate
+        # Filters out similar-looking symbols (e.g. S vs M vs H in circles)
         api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
         
-        if api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
-            import anthropic
-            from PIL import Image as PILImage
-            
-            client = anthropic.Anthropic(api_key=api_key)
-            
-            # Get actual image dimensions BEFORE sending
-            pil_img = PILImage.open(render_path)
-            img_width, img_height = pil_img.size
-            pil_img.close()
-            current_app.logger.info(f"Drawing image size: {img_width}x{img_height}")
-            
-            with open(render_path, 'rb') as f:
-                drawing_b64 = base64.b64encode(f.read()).decode()
-            with open(template.crop_image_path, 'rb') as f:
-                template_b64 = base64.b64encode(f.read()).decode()
-            
-            exclude_prompt = ""
-            if exclude_area:
-                exclude_prompt = (f"\n\nEXCLUDE the key/legend area at approximately "
-                                  f"x={exclude_area['x']}, y={exclude_area['y']}, "
-                                  f"width={exclude_area['w']}, height={exclude_area['h']}. "
-                                  f"Do not count any symbols within this region.")
-            
-            prompt = (
-                f'Look at this architectural/electrical drawing (first image) and the reference symbol (second image).\n\n'
-                f'The drawing image is {img_width} pixels wide and {img_height} pixels tall.\n\n'
-                f'Find ALL instances on the drawing that VISUALLY match the reference symbol.\n\n'
-                f'IMPORTANT RULES:\n'
-                f'1. Match by VISUAL APPEARANCE only - find symbols that look the same as the reference image\n'
-                f'2. Symbols may be ROTATED at any angle (0, 90, 180, 270 or anything in between) '
-                f'since they are placed on walls facing different directions\n'
-                f'3. Only match symbols that are IDENTICAL in shape AND any text/letter visible inside them\n'
-                f'4. Similar symbols with DIFFERENT letters inside (e.g. a circle with S vs M vs H) are NOT matches\n'
-                f'5. Do NOT include the symbol shown in the key/legend area'
-                f'{exclude_prompt}\n\n'
-                f'Return the pixel coordinates (in the ORIGINAL {img_width}x{img_height} image space) '
-                f'of the CENTER of each found symbol.\n\n'
-                f'Respond with ONLY a JSON array. Each item needs x, y (pixel coords in the original image) and confidence (0-1).\n'
-                f'Example: [{{"x": 1500, "y": 800, "confidence": 0.95}}]\n'
-                f'If no matches found: []'
-            )
+        if detections and len(detections) > 0 and api_key:
+            try:
+                import anthropic
+                import cv2
 
-            content = [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": drawing_b64}},
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": template_b64}},
-                {"type": "text", "text": prompt},
-            ]
-            
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": content}],
-            )
-            
-            response_text = response.content[0].text.strip()
-            current_app.logger.info(f"Claude Vision detection for '{template.label}': {response_text[:500]}")
-            
-            import re
-            json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-            if json_match:
-                raw_detections = json.loads(json_match.group())
-                detections = []
-                for d in raw_detections:
-                    raw_x = int(d['x'])
-                    raw_y = int(d['y'])
-                    
-                    # Validate coordinates are within image bounds
-                    if raw_x < 0 or raw_x > img_width or raw_y < 0 or raw_y > img_height:
-                        # Claude may have returned coordinates in a different scale
-                        # Try to detect and correct: if all coords are < 1600 but image is 4768,
-                        # Claude likely saw a ~1600px wide version
-                        current_app.logger.warning(
-                            f"Detection at ({raw_x},{raw_y}) - may need scaling for {img_width}x{img_height} image"
-                        )
-                    
-                    det_w = template.crop_w or 30
-                    det_h = template.crop_h or 30
-                    detections.append({
-                        'x': raw_x,
-                        'y': raw_y,
-                        'w': det_w,
-                        'h': det_h,
-                        'confidence': float(d.get('confidence', 0.85)),
-                        'box_x': int(raw_x - det_w / 2),
-                        'box_y': int(raw_y - det_h / 2),
-                        'source': 'claude_vision',
+                client = anthropic.Anthropic(api_key=api_key)
+
+                # Load template image
+                template_b64 = None
+                if template.crop_image_path and os.path.exists(template.crop_image_path):
+                    with open(template.crop_image_path, 'rb') as f:
+                        template_b64 = base64.b64encode(f.read()).decode()
+
+                # Load drawing for cropping candidates
+                drawing = cv2.imread(render_path)
+
+                # Crop each candidate region
+                candidate_crops = []
+                for i, det in enumerate(detections):
+                    # Use a slightly larger crop for better context
+                    pad = 10
+                    bx = max(0, det.get('box_x', det['x'] - det['w']//2) - pad)
+                    by = max(0, det.get('box_y', det['y'] - det['h']//2) - pad)
+                    bw = min(drawing.shape[1] - bx, det['w'] + pad * 2)
+                    bh = min(drawing.shape[0] - by, det['h'] + pad * 2)
+                    crop = drawing[by:by+bh, bx:bx+bw]
+                    if crop.size == 0:
+                        continue
+                    _, buf = cv2.imencode('.png', crop)
+                    crop_b64 = base64.b64encode(buf).decode()
+                    candidate_crops.append({'index': i, 'b64': crop_b64})
+
+                if candidate_crops and template_b64:
+                    # Send all candidates to Claude in one call
+                    content = []
+                    content.append({
+                        "type": "text",
+                        "text": (f"I have a reference electrical symbol from a drawing key. "
+                                 f"Below it are {len(candidate_crops)} candidate regions found on the drawing. "
+                                 f"Tell me which candidates VISUALLY match the reference symbol — "
+                                 f"same shape AND same letter/text inside. "
+                                 f"Candidates may be ROTATED at any angle. "
+                                 f"Similar symbols with DIFFERENT letters (e.g. S vs M vs H inside circles) are NOT matches.\n\n"
+                                 f"Reply with ONLY a JSON array of matching candidate indices, e.g. [0, 2, 5]\n"
+                                 f"If none match: []")
                     })
-                
-                # Check if coordinates need scaling
-                # Claude's API resizes images to max ~1568px on longest side
-                # If ALL detections have coords much smaller than image dims, scale up
-                if detections and img_width > 2000:
-                    max_det_x = max(d['x'] for d in detections)
-                    max_det_y = max(d['y'] for d in detections)
-                    
-                    # Claude API typically resizes to ~1568px longest side
+                    content.append({
+                        "type": "text",
+                        "text": "Reference symbol:"
+                    })
+                    content.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": template_b64}
+                    })
+
+                    for cc in candidate_crops:
+                        content.append({
+                            "type": "text",
+                            "text": f"Candidate #{cc['index']}:"
+                        })
+                        content.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": cc['b64']}
+                        })
+
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=500,
+                        messages=[{"role": "user", "content": content}],
+                    )
+
+                    response_text = response.content[0].text.strip()
+                    current_app.logger.info(f"Claude Vision verification: {response_text}")
+
+                    import re
+                    json_match = re.search(r'\[.*?\]', response_text)
+                    if json_match:
+                        matching_indices = json.loads(json_match.group())
+                        original_count = len(detections)
+                        detections = [detections[i] for i in matching_indices if i < len(detections)]
+                        current_app.logger.info(
+                            f"Claude Vision: {original_count} candidates → {len(detections)} verified"
+                        )
+
+            except Exception as vision_err:
+                current_app.logger.warning(
+                    f"Claude Vision verification failed (keeping OpenCV results): {vision_err}"
+                )
+
+        # If OpenCV found nothing, try Claude Vision as a last resort to find symbols directly
+        elif len(detections) == 0 and api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
+            try:
+                import anthropic
+                from PIL import Image as PILImage
+
+                client = anthropic.Anthropic(api_key=api_key)
+
+                pil_img = PILImage.open(render_path)
+                img_width, img_height = pil_img.size
+                pil_img.close()
+
+                with open(render_path, 'rb') as f:
+                    drawing_b64 = base64.b64encode(f.read()).decode()
+                with open(template.crop_image_path, 'rb') as f:
+                    template_b64 = base64.b64encode(f.read()).decode()
+
+                exclude_prompt = ""
+                if exclude_area:
+                    exclude_prompt = (f"\nEXCLUDE the key/legend area at x={exclude_area['x']}, "
+                                      f"y={exclude_area['y']}, w={exclude_area['w']}, h={exclude_area['h']}.")
+
+                prompt = (
+                    f'The drawing is {img_width}x{img_height} pixels. '
+                    f'Find ALL instances of the reference symbol (second image). '
+                    f'Symbols may be rotated. Match by visual appearance only. '
+                    f'Return pixel coords in original image space.{exclude_prompt}\n'
+                    f'JSON array: [{{"x":..,"y":..,"confidence":..}}] or []'
+                )
+
+                content = [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": drawing_b64}},
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": template_b64}},
+                    {"type": "text", "text": prompt},
+                ]
+
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=2000,
+                    messages=[{"role": "user", "content": content}],
+                )
+
+                response_text = response.content[0].text.strip()
+                current_app.logger.info(f"Claude Vision fallback for '{template.label}': {response_text[:300]}")
+
+                import re
+                json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+                if json_match:
+                    raw = json.loads(json_match.group())
+                    # Scale coordinates if needed (Claude resizes to ~1568px)
                     claude_max = 1568
                     if img_width > img_height:
-                        claude_w = claude_max
-                        claude_h = int(img_height * claude_max / img_width)
+                        scale = img_width / claude_max
                     else:
-                        claude_h = claude_max
-                        claude_w = int(img_width * claude_max / img_height)
-                    
-                    # If max detection coords fit in Claude's resized version but not the original
-                    if max_det_x < claude_w * 1.1 and max_det_x < img_width * 0.5:
-                        scale_x = img_width / claude_w
-                        scale_y = img_height / claude_h
-                        current_app.logger.info(
-                            f"Scaling Claude coords: claude={claude_w}x{claude_h}, "
-                            f"actual={img_width}x{img_height}, scale={scale_x:.2f}x{scale_y:.2f}"
-                        )
-                        for d in detections:
-                            d['x'] = int(d['x'] * scale_x)
-                            d['y'] = int(d['y'] * scale_y)
-                            d['box_x'] = int(d['x'] - (d['w']) / 2)
-                            d['box_y'] = int(d['y'] - (d['h']) / 2)
-                
-                current_app.logger.info(f"Claude Vision found {len(detections)} x {template.label}")
-            else:
-                detections = []
-                current_app.logger.warning(f"No parseable JSON from Claude for {template.label}")
-        
-        else:
-            current_app.logger.info("No API key or template image - using OpenCV fallback")
-            detector = SymbolDetector()
-            detections = detector.detect(
-                drawing_path=render_path,
-                template_path=template.crop_image_path,
-                crop_rect={'x': template.crop_x, 'y': template.crop_y,
-                           'w': template.crop_w, 'h': template.crop_h},
-                exclude_area=exclude_area,
-                confidence_threshold=confidence_threshold,
-            )
-    
+                        scale = img_height / claude_max
+
+                    for d in raw:
+                        rx, ry = int(d['x']), int(d['y'])
+                        # If coords seem to be in Claude's resized space, scale up
+                        if max(rx, ry) < claude_max * 1.1 and max(img_width, img_height) > 2000:
+                            rx = int(rx * scale)
+                            ry = int(ry * scale)
+                        det_w = template.crop_w or 30
+                        det_h = template.crop_h or 30
+                        detections.append({
+                            'x': rx, 'y': ry,
+                            'w': det_w, 'h': det_h,
+                            'confidence': float(d.get('confidence', 0.8)),
+                            'box_x': int(rx - det_w/2),
+                            'box_y': int(ry - det_h/2),
+                            'source': 'claude_vision',
+                        })
+                    current_app.logger.info(f"Claude Vision fallback found {len(detections)} x {template.label}")
+
+            except Exception as fallback_err:
+                current_app.logger.warning(f"Claude Vision fallback failed: {fallback_err}")
+
     except Exception as e:
         current_app.logger.error(f"Symbol detection error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
