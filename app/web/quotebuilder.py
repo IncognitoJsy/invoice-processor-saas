@@ -962,6 +962,7 @@ def render_document(project_id, doc_id):
                     mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for quality
                     pix = pg.get_pixmap(matrix=mat)
                     pix.save(render_path)
+                    current_app.logger.info(f"PNG saved to {render_path}, size={os.path.getsize(render_path)}")
                 else:
                     return jsonify({'success': False, 'error': 'Page not found'}), 404
             except ImportError:
@@ -976,7 +977,16 @@ def render_document(project_id, doc_id):
         else:
             return jsonify({'success': False, 'error': f'Unsupported file type: {mime}'}), 400
 
-    return send_file(render_path, mimetype='image/png')
+    # Check file before sending
+    if os.path.exists(render_path):
+        file_size = os.path.getsize(render_path)
+        current_app.logger.info(f"Sending render_path={render_path}, size={file_size}")
+        if file_size == 0:
+            return jsonify({'success': False, 'error': 'Rendered file is empty'}), 500
+        return send_file(render_path, mimetype='image/png')
+    else:
+        current_app.logger.error(f"Render path not found: {render_path}")
+        return jsonify({'success': False, 'error': 'Rendered file not found'}), 404
 
 
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/info')
