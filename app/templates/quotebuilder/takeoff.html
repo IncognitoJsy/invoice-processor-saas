@@ -1,438 +1,323 @@
 {% extends "base/layout.html" %}
-
-{% block title %}{{ project.name }} - Drawing Takeoff{% endblock %}
+{% block title %}{{ project.name }} - Takeoff{% endblock %}
 
 {% block extra_css %}
 <style>
-    .takeoff-container { position: fixed; top: 60px; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; background: #0c0c18; overflow: hidden; }
+    .takeoff-page { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+    /* Header */
+    .takeoff-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .takeoff-header h2 { font-size: 20px; font-weight: 600; color: #fff; margin: 0; }
+    .takeoff-header .doc-name { font-size: 13px; color: #888; margin-top: 2px; }
+    .header-actions { display: flex; gap: 8px; }
 
     /* Toolbar */
-    .takeoff-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 52px; min-height: 52px; background: linear-gradient(180deg, #161628 0%, #121224 100%); border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; z-index: 100; gap: 12px; }
-    .toolbar-section { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-    .toolbar-section.center { flex: 1; justify-content: center; }
-    .back-btn { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.5); text-decoration: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
-    .back-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .project-info { border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px; margin-left: 4px; max-width: 260px; overflow: hidden; }
-    .project-title { font-size: 13px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .doc-name { font-size: 11px; color: rgba(255,255,255,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .takeoff-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px 10px 0 0; flex-wrap: wrap; }
+    .tool-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; border: 1px solid #2a2a4a; background: #1e1e32; color: #aaa; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; font-family: inherit; white-space: nowrap; }
+    .tool-btn:hover { background: #252545; color: #fff; border-color: #3a3a5c; }
+    .tool-btn.active { background: #5865F2; border-color: #5865F2; color: #fff; }
+    .tool-btn.primary { background: #5865F2; border-color: #5865F2; color: #fff; }
+    .tool-btn.primary:hover { background: #6875F5; }
+    .tool-btn.success { background: #059669; border-color: #059669; color: #fff; }
+    .tool-btn.warning { background: #92400e; border-color: #b45309; color: #fbbf24; }
+    .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .toolbar-divider { width: 1px; height: 24px; background: #2a2a4a; margin: 0 4px; }
+    .toolbar-spacer { flex: 1; }
 
-    .tool-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.6); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    .tool-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
-    .tool-btn.active { background: rgba(88,101,242,0.2); color: #818cf8; border-color: rgba(88,101,242,0.4); }
-    .tool-btn.primary { background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%); border-color: transparent; color: #fff; }
-    .tool-btn.primary:hover { box-shadow: 0 2px 12px rgba(88,101,242,0.3); }
-    .tool-btn.success { background: rgba(74,222,128,0.15); color: #4ade80; border-color: rgba(74,222,128,0.3); }
-    .tool-btn.warning { background: rgba(245,158,11,0.15); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
-    .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-    .toolbar-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.06); margin: 0 4px; }
-
-    /* Canvas */
-    .canvas-wrapper { flex: 1; position: relative; overflow: hidden; }
-    #takeoffCanvas { display: block; cursor: grab; }
+    /* Canvas container */
+    .canvas-container { position: relative; width: 100%; height: 600px; background: #111; border: 1px solid #2a2a4a; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
+    .canvas-container canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 
     /* Loading */
-    .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(12,12,24,0.95); z-index: 50; }
-    .spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.08); border-top-color: #5865F2; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .loading-box { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; }
+    .spinner { width: 32px; height: 32px; border: 3px solid #333; border-top-color: #5865F2; border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text { margin-top: 14px; color: rgba(255,255,255,0.4); font-size: 13px; }
+    .loading-text { color: #888; font-size: 13px; margin-top: 12px; }
 
-    /* Error */
-    .error-banner { position: absolute; bottom: 20px; left: 20px; right: 20px; padding: 14px 18px; background: rgba(220,38,38,0.95); color: #fff; border-radius: 10px; font-size: 13px; z-index: 60; backdrop-filter: blur(8px); }
+    /* Notification */
+    .notif { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 20; backdrop-filter: blur(8px); }
+    .notif.info { background: rgba(88,101,242,0.9); color: #fff; }
+    .notif.success { background: rgba(5,150,105,0.9); color: #fff; }
+    .notif.error { background: rgba(220,38,38,0.9); color: #fff; }
 
-    /* Zoom controls */
-    .zoom-controls { position: absolute; bottom: 60px; left: 16px; display: flex; flex-direction: column; gap: 2px; z-index: 40; }
-    .zoom-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: rgba(12,12,24,0.9); border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); font-size: 18px; cursor: pointer; transition: all 0.15s; backdrop-filter: blur(8px); }
-    .zoom-btn:hover { background: rgba(30,30,60,0.95); color: #fff; }
-    .zoom-btn:first-child { border-radius: 8px 8px 2px 2px; }
-    .zoom-btn:last-child { border-radius: 2px 2px 8px 8px; }
-
-    /* Scale badge */
-    .scale-badge { position: absolute; top: 12px; right: 12px; padding: 6px 12px; background: rgba(12,12,24,0.9); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 40; backdrop-filter: blur(8px); }
-    .scale-badge.warning { color: #fbbf24; border-color: rgba(245,158,11,0.2); }
-    .scale-badge.success { color: #4ade80; border-color: rgba(74,222,128,0.2); }
-
-    /* Instructions bar */
-    .instructions-bar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: rgba(12,12,24,0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500; z-index: 40; display: flex; align-items: center; gap: 14px; backdrop-filter: blur(8px); white-space: nowrap; }
-    .instructions-bar.room-active { bottom: 70px; background: rgba(5,150,105,0.95); border-color: rgba(74,222,128,0.3); color: #fff; }
+    /* Mode instructions */
+    .mode-bar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: rgba(0,0,0,0.85); border: 1px solid #333; border-radius: 8px; color: #ccc; font-size: 13px; z-index: 15; display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 
     /* Detection popup */
-    .detection-popup { position: absolute; bottom: 80px; right: 20px; width: 260px; background: rgba(18,18,36,0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; z-index: 42; backdrop-filter: blur(12px); }
-    .detection-popup h4 { font-size: 14px; color: #fff; margin: 0 0 12px 0; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .detection-actions { display: flex; gap: 8px; margin-top: 14px; }
-    .detection-actions .tool-btn { flex: 1; justify-content: center; font-size: 12px; padding: 8px; }
+    .det-popup { position: absolute; top: 12px; right: 12px; width: 240px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px; z-index: 15; }
+    .det-popup h4 { font-size: 14px; color: #fff; margin: 0 0 10px 0; }
+    .det-info { font-size: 12px; color: #888; margin-bottom: 4px; }
 
-    /* Panels */
-    .room-panel, .summary-panel { position: absolute; top: 0; right: 0; height: 100%; background: rgba(18,18,36,0.98); border-left: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; z-index: 45; transform: translateX(100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); backdrop-filter: blur(12px); }
-    .room-panel { width: 320px; }
-    .summary-panel { width: 380px; z-index: 46; }
-    .room-panel.open, .summary-panel.open { transform: translateX(0); }
+    /* Active room badge */
+    .room-badge { position: absolute; top: 12px; left: 12px; padding: 8px 16px; background: rgba(99,102,241,0.9); border-radius: 8px; color: #fff; font-size: 13px; font-weight: 600; z-index: 15; display: flex; align-items: center; gap: 10px; }
 
-    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .panel-title { font-size: 15px; font-weight: 600; color: #fff; }
-    .panel-subtitle { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 2px; }
-    .panel-close { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: rgba(255,255,255,0.4); font-size: 20px; cursor: pointer; border-radius: 6px; transition: all 0.15s; }
-    .panel-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
-    .panel-content { flex: 1; overflow-y: auto; padding: 16px; }
-    .panel-section { margin-bottom: 24px; }
-    .panel-section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); margin-bottom: 12px; font-weight: 600; }
+    /* Below canvas panels */
+    .panels-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .panel { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; }
+    .panel h3 { font-size: 15px; color: #fff; margin: 0 0 12px 0; font-weight: 600; }
+    .panel-empty { color: #555; font-size: 13px; text-align: center; padding: 20px; }
 
-    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .stat-row:last-child { border-bottom: none; }
-    .stat-label { color: rgba(255,255,255,0.5); font-size: 13px; }
-    .stat-value { color: #fff; font-weight: 600; font-size: 14px; }
+    .template-list { display: flex; flex-direction: column; gap: 8px; }
+    .template-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: #15152a; border-radius: 8px; border: 1px solid #222244; }
+    .template-name { color: #fff; font-size: 13px; font-weight: 500; }
+    .template-count { color: #4ade80; font-size: 13px; font-weight: 600; }
+    .template-sku { color: #666; font-size: 11px; }
 
-    .item-list { display: flex; flex-direction: column; gap: 8px; }
-    .item-card { padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
-    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
-    .item-name { font-size: 13px; font-weight: 500; color: #fff; }
-    .item-count { background: #5865F2; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-    .item-category { font-size: 11px; color: rgba(255,255,255,0.35); }
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; }
+    .modal-box { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { padding: 18px 22px; border-bottom: 1px solid #222244; }
+    .modal-title { font-size: 17px; font-weight: 600; color: #fff; }
+    .modal-subtitle { font-size: 12px; color: #666; margin-top: 4px; }
+    .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 14px 22px; border-top: 1px solid #222244; display: flex; justify-content: flex-end; gap: 10px; }
 
-    .room-tools { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.06); }
-    .room-tools .tool-btn { flex: 1; justify-content: center; }
-
-    .room-summary-card { margin-bottom: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; }
-    .room-summary-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .room-summary-name { font-size: 14px; font-weight: 600; color: #fff; }
-    .room-summary-area { font-size: 12px; color: #4ade80; }
-    .room-summary-items { padding: 8px 16px; }
-    .summary-item-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-    .summary-item-name { color: rgba(255,255,255,0.7); }
-    .summary-item-qty { color: #fff; font-weight: 500; }
-
-    /* Modals */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
-    .modal-content { background: #1a1a30; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
-    .modal-header { padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .modal-title { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-    .modal-subtitle { font-size: 13px; color: rgba(255,255,255,0.4); }
-    .modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
-    .modal-footer { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: flex-end; gap: 10px; }
-
-    .form-group { margin-bottom: 20px; }
-    .form-label { display: block; font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.5); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
-    .form-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 14px; font-family: inherit; transition: border-color 0.15s; }
+    .form-input { width: 100%; padding: 10px 14px; background: #15152a; border: 1px solid #2a2a4a; border-radius: 8px; color: #fff; font-size: 14px; font-family: inherit; }
     .form-input:focus { outline: none; border-color: #5865F2; }
-    .form-input::placeholder { color: rgba(255,255,255,0.2); }
-    .form-hint { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 6px; }
+    .form-input::placeholder { color: #444; }
+    .form-label { display: block; font-size: 11px; font-weight: 600; color: #666; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .form-hint { font-size: 11px; color: #555; margin-top: 4px; }
 
-    .product-search-wrapper { position: relative; }
-    .product-search-input { padding-left: 40px; }
-    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.3); }
-    .product-results { max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-top: 8px; }
-    .product-result-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; transition: background 0.15s; border-bottom: 1px solid rgba(255,255,255,0.03); }
-    .product-result-item:last-child { border-bottom: none; }
-    .product-result-item:hover { background: rgba(255,255,255,0.04); }
-    .product-result-item.selected { background: rgba(88,101,242,0.15); border-color: rgba(88,101,242,0.3); }
-    .product-info { flex: 1; }
+    /* Product results */
+    .product-list { max-height: 280px; overflow-y: auto; border: 1px solid #222244; border-radius: 8px; margin-top: 10px; }
+    .product-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid #1a1a30; transition: background 0.1s; }
+    .product-item:last-child { border-bottom: none; }
+    .product-item:hover { background: #1e1e38; }
+    .product-item.selected { background: rgba(88,101,242,0.15); border-left: 3px solid #5865F2; }
     .product-name { font-size: 13px; color: #fff; font-weight: 500; }
-    .product-sku { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; }
-    .product-price { font-size: 13px; color: #4ade80; font-weight: 500; }
-    .load-more-btn { width: 100%; padding: 10px; background: transparent; border: none; color: #5865F2; font-size: 13px; cursor: pointer; }
+    .product-sku { font-size: 11px; color: #666; margin-top: 2px; }
+    .product-price { font-size: 13px; color: #4ade80; font-weight: 600; white-space: nowrap; }
+    .product-cost { font-size: 11px; color: #888; }
 
-    .selected-product-card { padding: 14px; background: rgba(88,101,242,0.1); border: 1px solid rgba(88,101,242,0.3); border-radius: 10px; margin-top: 12px; }
-    .selected-label { font-size: 10px; text-transform: uppercase; color: #818cf8; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 6px; }
-
-    .category-pills { display: flex; flex-wrap: wrap; gap: 8px; }
-    .category-pill { padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; font-size: 12px; color: rgba(255,255,255,0.5); cursor: pointer; transition: all 0.15s; }
-    .category-pill:hover { border-color: rgba(255,255,255,0.15); color: #fff; }
-    .category-pill.selected { background: rgba(88,101,242,0.2); border-color: rgba(88,101,242,0.5); color: #818cf8; }
-
-    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
-    .toggle-label { font-size: 13px; color: rgba(255,255,255,0.8); }
-    .toggle-hint { font-size: 11px; color: rgba(255,255,255,0.3); }
-    .toggle-switch { width: 44px; height: 24px; background: rgba(255,255,255,0.1); border-radius: 12px; position: relative; cursor: pointer; transition: background 0.2s; }
-    .toggle-switch.active { background: #5865F2; }
-    .toggle-switch::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; }
-    .toggle-switch.active::after { transform: translateX(20px); }
+    .selected-product-box { padding: 12px; background: rgba(88,101,242,0.1); border: 1px solid rgba(88,101,242,0.3); border-radius: 8px; margin-top: 12px; }
+    .selected-label { font-size: 10px; text-transform: uppercase; color: #818cf8; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="takeoff-container" x-data="takeoffCanvas()">
+<div class="takeoff-page" x-data="takeoffCanvas({{ project.id }}, {{ document.id }})">
+    <!-- Header -->
+    <div class="takeoff-header">
+        <div>
+            <h2>{{ project.name }}</h2>
+            <div class="doc-name">{{ document.original_filename or document.filename }}</div>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}" class="tool-btn">← Back to Project</a>
+        </div>
+    </div>
+
     <!-- Toolbar -->
     <div class="takeoff-toolbar">
-        <div class="toolbar-section">
-            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}" class="back-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-                Back
-            </a>
-            <div class="project-info">
-                <div class="project-title">{{ project.name }}</div>
-                <div class="doc-name">{{ document.original_filename or document.filename }}</div>
-            </div>
-        </div>
-
-        <div class="toolbar-section center">
-            <button class="tool-btn" :class="{ warning: !scaleCalibrated, success: scaleCalibrated }" @click="startCalibration()">
-                📏 <span x-text="scaleCalibrated ? 'Scale ✓' : 'Set Scale'"></span>
-            </button>
-            <div class="toolbar-divider"></div>
-            <button class="tool-btn" :class="{ active: mode === 'room' }" @click="setMode('room')">🏠 Room</button>
-            <div class="toolbar-divider"></div>
-            <button class="tool-btn" :class="{ active: mode === 'symbol' }" @click="setMode('symbol')">⬜ Symbol</button>
-            <button class="tool-btn primary" @click="detectSymbols()" :disabled="symbolTemplates.length === 0 || detecting">
-                <span x-text="detecting ? '⏳ Detecting...' : '🔍 Find All'"></span>
-            </button>
-            <div class="toolbar-divider"></div>
-            <button class="tool-btn" :class="{ active: mode === 'cable' }" @click="setMode('cable')">⚡ Cable</button>
-        </div>
-
-        <div class="toolbar-section">
-            <button class="tool-btn" :class="{ active: showSummary }" @click="showSummary = !showSummary">📊 Summary</button>
-        </div>
+        <button class="tool-btn" :class="scaleCalibrated ? 'success' : 'warning'" @click="startScale()">
+            📏 <span x-text="scaleCalibrated ? 'Scale ✓' : 'Set Scale'"></span>
+        </button>
+        <div class="toolbar-divider"></div>
+        <button class="tool-btn" :class="{ active: mode === 'symbol' }" @click="setMode('symbol')">⬜ Mark Symbol</button>
+        <button class="tool-btn" :class="{ active: mode === 'room' }" @click="setMode('room')">🏠 Draw Room</button>
+        <button class="tool-btn" :class="{ active: mode === 'cable' }" @click="setMode('cable')">⚡ Cable Run</button>
+        <div class="toolbar-divider"></div>
+        <select class="tool-btn" x-model="cableType" x-show="mode === 'cable'" style="background: #1e1e32;">
+            <template x-for="ct in cableTypes" :key="ct.value">
+                <option :value="ct.value" x-text="ct.label"></option>
+            </template>
+        </select>
+        <div class="toolbar-spacer"></div>
+        <button class="tool-btn" @click="fitToScreen()">⟲ Fit</button>
+        <button class="tool-btn" :class="{ active: showSummary }" @click="showSummary = !showSummary">📊 Summary</button>
     </div>
 
     <!-- Canvas -->
-    <div class="canvas-wrapper">
-        <canvas id="takeoffCanvas" x-ref="canvas"
-                @mousedown="handleMouseDown($event)"
-                @mousemove="handleMouseMove($event)"
-                @mouseup="handleMouseUp($event)"
-                @mouseleave="handleMouseUp($event)"></canvas>
+    <div class="canvas-container">
+        <canvas x-ref="takeoffCanvas"
+                @mousedown="onMouseDown($event)"
+                @mousemove="onMouseMove($event)"
+                @mouseup="onMouseUp($event)"
+                @mouseleave="onMouseUp($event)"></canvas>
 
-        <div class="loading-overlay" x-show="loading">
+        <!-- Loading -->
+        <div class="loading-box" x-show="loading">
             <div class="spinner"></div>
-            <div class="loading-text">Loading drawing...</div>
+            <div class="loading-text" x-text="detecting ? 'Scanning for symbols...' : 'Loading drawing...'"></div>
         </div>
 
-        <div class="error-banner" x-show="error" x-text="error"></div>
-
-        <div class="zoom-controls">
-            <button class="zoom-btn" @click="zoomIn()">+</button>
-            <button class="zoom-btn" @click="zoomOut()">−</button>
-            <button class="zoom-btn" @click="resetView()">⟲</button>
-        </div>
-
-        <div class="scale-badge" :class="scaleCalibrated ? 'success' : 'warning'">
-            <span x-text="scaleCalibrated ? '✓ Scale set' : '⚠ Scale not set'"></span>
-        </div>
+        <!-- Notification -->
+        <div class="notif" :class="notification?.type" x-show="notification" x-text="notification?.msg" x-transition></div>
 
         <!-- Mode instructions -->
-        <div class="instructions-bar" x-show="mode !== 'select' || currentRoomPoints.length > 0">
-            <template x-if="mode === 'calibrate'"><span>📏 Click two points of a known distance</span></template>
-            <template x-if="mode === 'room'"><span>🏠 Click corners to draw room boundary</span></template>
-            <template x-if="mode === 'symbol'"><span>⬜ Drag a box around a symbol</span></template>
-            <template x-if="mode === 'cable'"><span>⚡ Click start point, then end point</span></template>
-            <template x-if="currentRoomPoints.length >= 3">
-                <div style="display: flex; gap: 8px;">
-                    <button class="tool-btn primary" @click="finishRoom()">✓ Finish Room</button>
-                    <button class="tool-btn" @click="cancelCurrentAction()">Cancel</button>
-                </div>
-            </template>
+        <template x-if="mode === 'symbol'">
+            <div class="mode-bar">⬜ Drag a box around a symbol on the drawing key</div>
+        </template>
+        <template x-if="mode === 'scale'">
+            <div class="mode-bar">📏 Click two points of a known distance (<span x-text="scalePoints.length"></span>/2)</div>
+        </template>
+        <template x-if="mode === 'room'">
+            <div class="mode-bar">
+                🏠 Click corners to draw room (<span x-text="roomPoints.length"></span> points)
+                <template x-if="roomPoints.length >= 3">
+                    <button class="tool-btn primary" @click="finishRoom()" style="padding: 5px 12px; font-size: 11px;">✓ Finish</button>
+                </template>
+                <button class="tool-btn" @click="cancelAction()" style="padding: 5px 10px; font-size: 11px;">Cancel</button>
+            </div>
+        </template>
+        <template x-if="mode === 'cable'">
+            <div class="mode-bar">
+                ⚡ Click to add cable route points (<span x-text="cablePoints.length"></span>)
+                <template x-if="cablePoints.length >= 2">
+                    <button class="tool-btn primary" @click="finishCable()" style="padding: 5px 12px; font-size: 11px;">✓ Finish</button>
+                </template>
+                <button class="tool-btn" @click="cancelAction()" style="padding: 5px 10px; font-size: 11px;">Cancel</button>
+            </div>
+        </template>
+
+        <!-- Active room badge -->
+        <div class="room-badge" x-show="activeRoom">
+            🏠 <span x-text="activeRoom?.name"></span>
+            <button class="tool-btn" @click="exitRoom()" style="padding: 4px 10px; font-size: 11px; background: rgba(255,255,255,0.15); border: none;">Exit</button>
         </div>
 
-        <!-- Active room bar -->
-        <div class="instructions-bar room-active" x-show="activeRoom">
-            <span>🏠 <strong x-text="activeRoom?.name"></strong></span>
-            <button class="tool-btn" @click="exitRoom()" style="background: rgba(255,255,255,0.15); border: none; color: #fff;">Exit Room</button>
-        </div>
-
-        <!-- Detection popup -->
-        <div class="detection-popup" x-show="selectedDetection">
-            <h4 x-text="selectedDetection?.template_name || 'Detection'"></h4>
-            <div class="stat-row">
-                <span class="stat-label">Confidence</span>
-                <span class="stat-value" x-text="((selectedDetection?.confidence || 0) * 100).toFixed(0) + '%'"></span>
-            </div>
-            <div class="detection-actions">
-                <button class="tool-btn" @click="deleteDetection(selectedDetection)" style="color: #f87171;">🗑️ Delete</button>
-            </div>
-        </div>
-
-        <!-- Room Panel -->
-        <div class="room-panel" :class="{ open: showRoomPanel && activeRoom }">
-            <div class="panel-header">
-                <div>
-                    <div class="panel-title" x-text="activeRoom?.name"></div>
-                    <div class="panel-subtitle" x-show="scaleCalibrated">
-                        <span x-text="calculateRoomArea(activeRoom)?.toFixed(2)"></span> m²
-                    </div>
-                </div>
-                <button class="panel-close" @click="exitRoom()">×</button>
-            </div>
-            <div class="panel-content">
-                <div class="panel-section">
-                    <h4>Room Summary</h4>
-                    <div class="stat-row"><span class="stat-label">Symbols</span><span class="stat-value" x-text="getRoomDetections(activeRoom || {}).length"></span></div>
-                    <div class="stat-row"><span class="stat-label">Cable runs</span><span class="stat-value" x-text="getRoomCables(activeRoom || {}).length"></span></div>
-                </div>
-                <div class="panel-section">
-                    <h4>Items</h4>
-                    <div class="item-list">
-                        <template x-for="item in (() => { const dets = getRoomDetections(activeRoom || {}); const g = {}; dets.forEach(d => { const k = d.template_name || 'Unknown'; if (!g[k]) g[k] = { name: k, count: 0, category: d.category }; g[k].count++; }); return Object.values(g); })()" :key="item.name">
-                            <div class="item-card">
-                                <div class="item-header">
-                                    <span class="item-name" x-text="item.name"></span>
-                                    <span class="item-count" x-text="'×' + item.count"></span>
-                                </div>
-                                <div class="item-category" x-text="item.category"></div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-            <div class="room-tools">
-                <button class="tool-btn" :class="{ active: mode === 'symbol' }" @click="setMode('symbol')">⬜ Symbol</button>
-                <button class="tool-btn" :class="{ active: mode === 'cable' }" @click="setMode('cable')">⚡ Cable</button>
-            </div>
-        </div>
-
-        <!-- Summary Panel -->
-        <div class="summary-panel" :class="{ open: showSummary }">
-            <div class="panel-header">
-                <div>
-                    <div class="panel-title">Takeoff Summary</div>
-                    <div class="panel-subtitle">Room-by-room breakdown</div>
-                </div>
-                <button class="panel-close" @click="showSummary = false">×</button>
-            </div>
-            <div class="panel-content">
-                <div class="panel-section">
-                    <h4>Totals</h4>
-                    <div class="stat-row"><span class="stat-label">Rooms</span><span class="stat-value" x-text="rooms.length"></span></div>
-                    <div class="stat-row"><span class="stat-label">Symbols</span><span class="stat-value" x-text="detections.length"></span></div>
-                    <div class="stat-row" x-show="scaleCalibrated"><span class="stat-label">Cable</span><span class="stat-value" x-text="(Array.isArray(cableRuns) ? cableRuns.reduce((s,c)=>s+(c.length_metres||0),0) : 0).toFixed(2)+'m'"></span></div>
-                </div>
-                <div class="panel-section">
-                    <h4>By Room</h4>
-                    <template x-for="rd in getSummaryByRoom()" :key="rd.room.id||'u'">
-                        <div class="room-summary-card">
-                            <div class="room-summary-header">
-                                <span class="room-summary-name" x-text="rd.room.name"></span>
-                                <span class="room-summary-area" x-show="rd.area" x-text="rd.area?.toFixed(2)+' m²'"></span>
-                            </div>
-                            <div class="room-summary-items">
-                                <template x-for="item in rd.items" :key="item.name">
-                                    <div class="summary-item-row">
-                                        <span class="summary-item-name" x-text="item.name"></span>
-                                        <span class="summary-item-qty" x-text="'× '+item.count"></span>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </template>
-                </div>
+        <!-- Selected detection popup -->
+        <div class="det-popup" x-show="selectedDetection">
+            <h4 x-text="selectedDetection?.symbol_label || selectedDetection?.template_name || 'Detection'"></h4>
+            <div class="det-info">Confidence: <span x-text="((selectedDetection?.confidence || 0) * 100).toFixed(0) + '%'"></span></div>
+            <div class="det-info" x-show="selectedDetection?.part_number">SKU: <span x-text="selectedDetection?.part_number"></span></div>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="tool-btn" @click="deleteDetection(selectedDetection)" style="color: #f87171; font-size: 11px;">🗑️ Delete</button>
+                <button class="tool-btn" @click="selectedDetection = null; redraw();" style="font-size: 11px;">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Calibration Modal -->
-    <div class="modal-overlay" x-show="showCalibrationModal" @click.self="showCalibrationModal=false;calibrationPoints=[];">
-        <div class="modal-content" style="width: 400px;">
+    <!-- Below-canvas panels -->
+    <div class="panels-row">
+        <!-- Symbol Templates -->
+        <div class="panel">
+            <h3>🔌 Symbol Templates (<span x-text="symbolTemplates.length"></span>)</h3>
+            <div class="template-list" x-show="symbolTemplates.length > 0">
+                <template x-for="t in symbolTemplates" :key="t.id">
+                    <div class="template-item">
+                        <div>
+                            <div class="template-name" x-text="t.label"></div>
+                            <div class="template-sku" x-text="t.default_part_number || ''"></div>
+                        </div>
+                        <div class="template-count" x-text="'×' + (t.total_found || 0)"></div>
+                    </div>
+                </template>
+            </div>
+            <div class="panel-empty" x-show="symbolTemplates.length === 0">
+                No symbols yet. Click "Mark Symbol" then drag a box around a symbol on the drawing key.
+            </div>
+        </div>
+
+        <!-- Summary / Rooms -->
+        <div class="panel" x-show="showSummary || rooms.length > 0">
+            <h3>📊 Summary</h3>
+            <div style="margin-bottom: 12px;">
+                <div class="det-info">Total detections: <strong style="color: #fff;" x-text="detections.length"></strong></div>
+                <div class="det-info">Rooms: <strong style="color: #fff;" x-text="rooms.length"></strong></div>
+                <div class="det-info" x-show="cableRuns.length > 0">Cable runs: <strong style="color: #fff;" x-text="cableRuns.length"></strong> (<span x-text="getTotalCableLength().toFixed(1)"></span>m)</div>
+            </div>
+            <template x-for="item in getSummary()" :key="item.name">
+                <div class="template-item">
+                    <div>
+                        <div class="template-name" x-text="item.name"></div>
+                        <div class="template-sku" x-text="item.part || ''"></div>
+                    </div>
+                    <div class="template-count" x-text="'×' + item.count"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Scale Modal -->
+    <div class="modal-overlay" x-show="showScaleModal" @click.self="showScaleModal = false; scalePoints = [];">
+        <div class="modal-box" style="width: 380px;">
             <div class="modal-header">
                 <div class="modal-title">📏 Set Drawing Scale</div>
-                <div class="modal-subtitle">Enter the real-world distance between the marked points</div>
+                <div class="modal-subtitle">Enter the real distance between the two marked points</div>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Distance (metres)</label>
-                    <input type="number" step="0.01" min="0.01" class="form-input" x-model.number="calibrationDistance" placeholder="e.g. 0.9" @keyup.enter="saveCalibration()">
-                    <div class="form-hint">Standard door: 0.9m · Internal: 0.76m</div>
-                </div>
+                <label class="form-label">Distance (metres)</label>
+                <input type="number" step="0.01" min="0.01" class="form-input" x-model="scaleRealDistance" placeholder="e.g. 0.9" @keyup.enter="saveScale()">
+                <div class="form-hint">Standard door = 0.9m · Internal = 0.76m</div>
             </div>
             <div class="modal-footer">
-                <button class="tool-btn" @click="showCalibrationModal=false;calibrationPoints=[];">Cancel</button>
-                <button class="tool-btn primary" @click="saveCalibration()" :disabled="!calibrationDistance">Save Scale</button>
+                <button class="tool-btn" @click="showScaleModal = false; scalePoints = [];">Cancel</button>
+                <button class="tool-btn primary" @click="saveScale()" :disabled="!scaleRealDistance">Save</button>
             </div>
         </div>
     </div>
 
     <!-- Room Name Modal -->
-    <div class="modal-overlay" x-show="showRoomModal" @click.self="showRoomModal=false;">
-        <div class="modal-content" style="width: 400px;">
+    <div class="modal-overlay" x-show="showRoomNameModal" @click.self="showRoomNameModal = false;">
+        <div class="modal-box" style="width: 380px;">
             <div class="modal-header">
                 <div class="modal-title">🏠 Name This Room</div>
-                <div class="modal-subtitle" x-show="scaleCalibrated">Area: <strong x-text="calculateRoomArea({points:currentRoomPoints})?.toFixed(2)"></strong> m²</div>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Room Name</label>
-                    <input type="text" class="form-input" x-model="newRoomName" placeholder="e.g. Kitchen, Bedroom 1" @keyup.enter="saveRoom()">
-                </div>
+                <label class="form-label">Room Name</label>
+                <input type="text" class="form-input" x-model="roomName" placeholder="e.g. Kitchen, Bedroom 1" @keyup.enter="saveRoom()">
             </div>
             <div class="modal-footer">
-                <button class="tool-btn" @click="showRoomModal=false;currentRoomPoints=[];">Cancel</button>
-                <button class="tool-btn primary" @click="saveRoom()" :disabled="!newRoomName">Save & Enter</button>
+                <button class="tool-btn" @click="showRoomNameModal = false; roomPoints = [];">Cancel</button>
+                <button class="tool-btn primary" @click="saveRoom()" :disabled="!roomName">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Symbol Template Modal -->
-    <div class="modal-overlay" x-show="showSymbolModal" @click.self="closeSymbolModal()">
-        <div class="modal-content" style="width: 500px;">
+    <!-- Product Search Modal -->
+    <div class="modal-overlay" x-show="showProductModal" @click.self="cancelProductModal()">
+        <div class="modal-box" style="width: 480px;">
             <div class="modal-header">
-                <div class="modal-title">⬜ Create Symbol Template</div>
-                <div class="modal-subtitle">Link to a QuickBooks/Xero product</div>
+                <div class="modal-title">🔌 Link Symbol to Product</div>
+                <div class="modal-subtitle">Search your QuickBooks / Xero products by name or part number</div>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Search Products</label>
-                    <div class="product-search-wrapper">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" class="form-input product-search-input" x-model="productSearchQuery"
-                               @input.debounce.300ms="productSearchPage=1;searchProducts()"
-                               placeholder="Type product name, SKU, or part number...">
-                    </div>
-                    <div class="product-results" x-show="productSearchResults.length>0||productSearchLoading">
-                        <template x-for="p in productSearchResults" :key="p.id">
-                            <div class="product-result-item" :class="{selected:selectedProduct?.id===p.id}" @click="selectProduct(p)">
-                                <div class="product-info">
-                                    <div class="product-name" x-text="p.name"></div>
-                                    <div class="product-sku" x-text="p.sku||p.code||''"></div>
-                                </div>
-                                <div class="product-price" x-text="'£'+(p.unit_price||p.price||0).toFixed(2)"></div>
+                <label class="form-label">Search Products</label>
+                <input type="text" id="productSearchInput" class="form-input" x-model="productQuery"
+                       @input.debounce.300ms="searchProducts()"
+                       placeholder="Type part number, SKU, or description...">
+
+                <div class="product-list" x-show="productResults.length > 0 || productSearching">
+                    <template x-for="p in productResults" :key="p.id">
+                        <div class="product-item" :class="{ selected: selectedProduct?.id === p.id }" @click="selectProduct(p)">
+                            <div>
+                                <div class="product-name" x-text="p.name"></div>
+                                <div class="product-sku" x-text="p.sku || ''"></div>
                             </div>
-                        </template>
-                        <div x-show="productSearchLoading" style="padding:16px;text-align:center;color:rgba(255,255,255,0.4);">Searching...</div>
-                        <button class="load-more-btn" x-show="productSearchHasMore&&!productSearchLoading" @click="loadMoreProducts()">Load more...</button>
-                    </div>
-                </div>
-
-                <div class="selected-product-card" x-show="selectedProduct">
-                    <div class="selected-label">Selected Product</div>
-                    <div class="product-name" x-text="selectedProduct?.name"></div>
-                    <div style="display:flex;justify-content:space-between;margin-top:6px;">
-                        <span class="product-sku" x-text="selectedProduct?.sku||''"></span>
-                        <span class="product-price" x-text="'£'+(selectedProduct?.unit_price||0).toFixed(2)"></span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Category</label>
-                    <div class="category-pills">
-                        <template x-for="cat in symbolCategories" :key="cat.id">
-                            <button class="category-pill" :class="{selected:selectedCategory===cat.id}" @click="selectedCategory=cat.id" x-text="cat.icon+' '+cat.name"></button>
-                        </template>
-                    </div>
-                </div>
-
-                <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;">
-                    <div class="toggle-row">
-                        <div>
-                            <div class="toggle-label">Use OCR (text detection)</div>
-                            <div class="toggle-hint">For symbols with letters inside (S, M, H)</div>
+                            <div style="text-align: right;">
+                                <div class="product-price" x-text="'£' + (p.unit_price || 0).toFixed(2)"></div>
+                                <div class="product-cost" x-text="'Cost: £' + (p.purchase_cost || 0).toFixed(2)"></div>
+                            </div>
                         </div>
-                        <div class="toggle-switch" :class="{active:useOcr}" @click="useOcr=!useOcr"></div>
-                    </div>
-                    <div x-show="useOcr" style="margin-top:12px;">
-                        <label class="form-label">Expected Text</label>
-                        <input type="text" class="form-input" x-model="expectedText" placeholder="e.g. S, M, H">
-                        <div class="form-hint">Helps distinguish smoke (S), multi (M), heat (H) detectors</div>
+                    </template>
+                    <div x-show="productSearching" style="padding: 16px; text-align: center; color: #666;">Searching...</div>
+                </div>
+
+                <div x-show="productQuery.length >= 2 && !productSearching && productResults.length === 0"
+                     style="padding: 20px; text-align: center; color: #555; font-size: 13px;">
+                    No products found. Check your QuickBooks/Xero connection.
+                </div>
+
+                <!-- Selected product -->
+                <div class="selected-product-box" x-show="selectedProduct">
+                    <div class="selected-label">Selected</div>
+                    <div class="product-name" x-text="selectedProduct?.name"></div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+                        <span class="product-sku" x-text="selectedProduct?.sku || ''"></span>
+                        <span class="product-price" x-text="'£' + (selectedProduct?.unit_price || 0).toFixed(2)"></span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="tool-btn" @click="closeSymbolModal()">Cancel</button>
-                <button class="tool-btn primary" @click="createSymbolTemplate()" :disabled="!selectedProduct">Create Template</button>
+                <button class="tool-btn" @click="cancelProductModal()">Cancel</button>
+                <button class="tool-btn primary" @click="confirmSymbolTemplate()" :disabled="!selectedProduct">
+                    Link & Detect
+                </button>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-    const projectId = {{ project.id }};
-    const documentId = {{ document.id }};
-</script>
 <script src="{{ url_for('serve_takeoff_js') }}"></script>
 {% endblock %}
