@@ -311,10 +311,15 @@ function takeoffCanvas(projectId, documentId) {
                     this.symbolTemplates.push(tmpl);
 
                     // Link product
-                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
+                    const linkResp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
                         method: 'POST', headers: {'Content-Type':'application/json'},
                         body: JSON.stringify({ template_id: tmpl.id, product })
                     });
+                    const linkData = await linkResp.json();
+                    if (!linkData.success) {
+                        console.error('Link product failed:', linkData);
+                        this.notify('Product link failed: ' + (linkData.error || ''), 'error');
+                    }
 
                     // Auto-detect
                     this.notify(`Scanning for "${product.name}"...`);
@@ -373,15 +378,26 @@ function takeoffCanvas(projectId, documentId) {
 
         async linkProduct(tpl, product) {
             try {
-                await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
+                const resp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
                     method: 'POST', headers: {'Content-Type':'application/json'},
                     body: JSON.stringify({ template_id: tpl.id, product })
                 });
-                this.notify(`Linked ${product.sku || product.name} to ${tpl.label}`);
+                const data = await resp.json();
+                if (data.success) {
+                    this.notify(`Linked ${product.sku || product.name} to ${tpl.label}`);
+                } else {
+                    this.notify('Link failed: ' + (data.error || 'Unknown error'), 'error');
+                    console.error('Link product failed:', data);
+                }
                 this.linkingTemplate = null;
+                this.productSearch = '';
+                this.productResults = [];
                 await this.loadState();
                 this.redraw();
-            } catch (e) { this.notify('Link error: ' + e.message, 'error'); }
+            } catch (e) {
+                this.notify('Link error: ' + e.message, 'error');
+                console.error('Link product exception:', e);
+            }
         },
 
         // ── Scale ────────────────────────────────────────────────
