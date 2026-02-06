@@ -8,5 +8,9 @@ from app.models.supplier_account import SupplierAccount
 from app.models.xero import XeroConnection
 from app.models.part_number_correction import PartNumberCorrection
 from app.models.project import Project, ProjectDocument, ProjectMaterial, ProjectLabour, SupplierQuoteRequest
+from app.models.takeoff import (
+    TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,
+    TakeoffCableRun, TakeoffArea
+)
 
 __all__ = ['User', 'Invoice', 'Product', 'QuickBooksConnection', 'PasswordResetToken', 'SupplierAccount']

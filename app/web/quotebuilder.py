@@ -1,10 +1,16 @@
-"""Quote Builder routes - electrical takeoff and estimation from drawings"""
+"""Quote Builder routes - electrical takeoff and estimation from drawings
+
+This module now includes the interactive takeoff canvas functionality,
+replacing the old automated AI parsing approach with a hybrid user-controlled workflow.
+"""
 from flask import Blueprint, render_template, jsonify, request, send_file, current_app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 import uuid
+import json
+import base64
 
 bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
 
@@ -35,6 +41,18 @@ def project_detail(project_id):
 def new_project():
     """Create new project page"""
     return render_template('quotebuilder/new_project.html')
+
+
+@bp.route('/project/<int:project_id>/takeoff/<int:doc_id>')
+@login_required
+def takeoff_view(project_id, doc_id):
+    """Open interactive takeoff canvas for a document"""
+    from app.models.project import Project, ProjectDocument
+    
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first_or_404()
+    
+    return render_template('quotebuilder/takeoff.html', project=project, document=document)
 
 
 # =============================================================================
@@ -255,7 +273,7 @@ def upload_document(project_id):
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/parse', methods=['POST'])
 @login_required
 def parse_document(project_id, doc_id):
-    """Parse a drawing using AI to extract materials"""
+    """Parse a drawing using AI to extract materials (legacy - now use takeoff canvas instead)"""
     from app.models.project import Project, ProjectDocument, ProjectMaterial
     from app.extensions import db
     from app.parsers.drawing_parser import DrawingParser
@@ -879,4 +897,894 @@ def generate_quote_pdf(project_id):
         'success': True,
         'message': 'Quote generated',
         'project': project.to_dict()
+    })
+
+
+# =============================================================================
+# TAKEOFF - DRAWING RENDERING
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/render')
+@login_required
+def render_document(project_id, doc_id):
+    """Render a project document (PDF page) as an image for the takeoff canvas.
+    
+    For PDFs: converts to PNG using PyMuPDF
+    For images: serves directly
+    """
+    from app.models.project import Project, ProjectDocument
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    page = request.args.get('page', 1, type=int)
+
+    # Check if we already have a rendered version
+    render_dir = os.path.join(current_app.root_path, 'uploads', 'projects', str(project_id), 'renders')
+    os.makedirs(render_dir, exist_ok=True)
+    render_path = os.path.join(render_dir, f'doc_{doc_id}_page_{page}.png')
+
+    if not os.path.exists(render_path):
+        mime = (document.mime_type or '').lower()
+
+        if 'pdf' in mime or document.original_filename.lower().endswith('.pdf'):
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(document.file_path)
+                if page <= len(doc):
+                    pg = doc[page - 1]
+                    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for quality
+                    pix = pg.get_pixmap(matrix=mat)
+                    pix.save(render_path)
+                else:
+                    return jsonify({'success': False, 'error': 'Page not found'}), 404
+            except ImportError:
+                return jsonify({'success': False, 'error': 'PyMuPDF not installed. Run: pip install PyMuPDF'}), 500
+            except Exception as e:
+                return jsonify({'success': False, 'error': f'PDF render error: {str(e)}'}), 500
+
+        elif any(ext in mime for ext in ['png', 'jpeg', 'jpg']):
+            # Already an image, just copy
+            import shutil
+            shutil.copy2(document.file_path, render_path)
+        else:
+            return jsonify({'success': False, 'error': f'Unsupported file type: {mime}'}), 400
+
+    return send_file(render_path, mimetype='image/png')
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/info')
+@login_required
+def document_info(project_id, doc_id):
+    """Get document info including page count for PDFs"""
+    from app.models.project import Project, ProjectDocument
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    page_count = 1
+    if document.original_filename.lower().endswith('.pdf'):
+        try:
+            import fitz
+            doc = fitz.open(document.file_path)
+            page_count = len(doc)
+        except Exception:
+            pass
+
+    return jsonify({
+        'success': True,
+        'document': document.to_dict(),
+        'page_count': page_count,
+    })
+
+
+# =============================================================================
+# TAKEOFF - SCALE CALIBRATION
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/scale', methods=['POST'])
+@login_required
+def set_drawing_scale(project_id, doc_id):
+    """Set the drawing scale from a known measurement."""
+    from app.models.project import Project, ProjectDocument
+    from app.extensions import db
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    data = request.get_json()
+    pixel_distance = data.get('pixel_distance')
+    real_distance = data.get('real_distance')
+    scale_label = data.get('scale_label')
+
+    if not pixel_distance or not real_distance or real_distance <= 0:
+        return jsonify({'success': False, 'error': 'Invalid measurements'}), 400
+
+    px_per_metre = pixel_distance / real_distance
+    document.scale = json.dumps({
+        'px_per_metre': round(px_per_metre, 2),
+        'label': scale_label,
+        'calibration_px': pixel_distance,
+        'calibration_m': real_distance,
+    })
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'scale': {
+            'px_per_metre': round(px_per_metre, 2),
+            'label': scale_label,
+        }
+    })
+
+
+def _get_scale(document):
+    """Get the px_per_metre scale from a document"""
+    if document.scale:
+        try:
+            data = json.loads(document.scale)
+            return data.get('px_per_metre', 50)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return 50
+
+
+# =============================================================================
+# TAKEOFF - SYMBOL TEMPLATES
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/symbol-templates', methods=['GET'])
+@login_required
+def get_symbol_templates(project_id, doc_id):
+    """Get all symbol templates for a document"""
+    from app.models.takeoff import TakeoffSymbolTemplate
+
+    templates = TakeoffSymbolTemplate.query.filter_by(
+        project_id=project_id, document_id=doc_id
+    ).all()
+
+    return jsonify({
+        'success': True,
+        'templates': [t.to_dict() for t in templates],
+    })
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/symbol-templates', methods=['POST'])
+@login_required
+def create_symbol_template(project_id, doc_id):
+    """Create a symbol template from a user-drawn bounding box on the key area."""
+    from app.models.project import Project, ProjectDocument
+    from app.models.takeoff import TakeoffSymbolTemplate
+    from app.extensions import db
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    data = request.get_json()
+    label = data.get('label', 'Unknown Symbol')
+    crop_x = data.get('crop_x')
+    crop_y = data.get('crop_y')
+    crop_w = data.get('crop_w')
+    crop_h = data.get('crop_h')
+    crop_image_b64 = data.get('crop_image')
+
+    if not all([crop_x is not None, crop_y is not None, crop_w, crop_h]):
+        return jsonify({'success': False, 'error': 'Crop coordinates required'}), 400
+
+    symbol_type_id = f"sym_{uuid.uuid4().hex[:8]}"
+
+    crop_image_path = None
+    if crop_image_b64:
+        crop_dir = os.path.join(current_app.root_path, 'uploads', 'projects', str(project_id), 'symbols')
+        os.makedirs(crop_dir, exist_ok=True)
+        crop_image_path = os.path.join(crop_dir, f'{symbol_type_id}.png')
+
+        try:
+            if ',' in crop_image_b64:
+                crop_image_b64 = crop_image_b64.split(',')[1]
+            img_data = base64.b64decode(crop_image_b64)
+            with open(crop_image_path, 'wb') as f:
+                f.write(img_data)
+        except Exception as e:
+            current_app.logger.warning(f"Could not save crop image: {e}")
+            crop_image_path = None
+
+    template = TakeoffSymbolTemplate(
+        project_id=project.id,
+        document_id=document.id,
+        symbol_type_id=symbol_type_id,
+        label=label,
+        crop_x=crop_x,
+        crop_y=crop_y,
+        crop_w=crop_w,
+        crop_h=crop_h,
+        crop_image_path=crop_image_path,
+        color=data.get('color', '#3b82f6'),
+        icon=data.get('icon'),
+    )
+
+    db.session.add(template)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'template': template.to_dict(),
+    })
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/symbol-templates/<int:template_id>', methods=['DELETE'])
+@login_required
+def delete_symbol_template(project_id, doc_id, template_id):
+    """Delete a symbol template and all its detections"""
+    from app.models.takeoff import TakeoffSymbolTemplate, TakeoffSymbolDetection
+    from app.extensions import db
+
+    template = TakeoffSymbolTemplate.query.filter_by(
+        id=template_id, project_id=project_id, document_id=doc_id
+    ).first()
+    if not template:
+        return jsonify({'success': False, 'error': 'Template not found'}), 404
+
+    TakeoffSymbolDetection.query.filter_by(
+        project_id=project_id, symbol_type_id=template.symbol_type_id
+    ).delete()
+
+    db.session.delete(template)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# TAKEOFF - SYMBOL DETECTION
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/detect-symbols', methods=['POST'])
+@login_required
+def detect_symbols(project_id, doc_id):
+    """Run symbol detection on a drawing for a given symbol template."""
+    from app.models.project import Project, ProjectDocument
+    from app.models.takeoff import TakeoffSymbolTemplate, TakeoffSymbolDetection, TakeoffRoom
+    from app.extensions import db
+    from app.services.symbol_detector import SymbolDetector
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    data = request.get_json()
+    template_id = data.get('template_id')
+    exclude_area = data.get('exclude_area')
+    confidence_threshold = data.get('confidence_threshold', 0.7)
+    page = data.get('page', 1)
+
+    template = TakeoffSymbolTemplate.query.filter_by(
+        id=template_id, project_id=project_id
+    ).first()
+    if not template:
+        return jsonify({'success': False, 'error': 'Symbol template not found'}), 404
+
+    render_dir = os.path.join(current_app.root_path, 'uploads', 'projects', str(project_id), 'renders')
+    render_path = os.path.join(render_dir, f'doc_{doc_id}_page_{page}.png')
+
+    if not os.path.exists(render_path):
+        return jsonify({'success': False, 'error': 'Drawing not rendered yet. Open the takeoff view first.'}), 400
+
+    try:
+        detector = SymbolDetector()
+        detections = detector.detect(
+            drawing_path=render_path,
+            template_path=template.crop_image_path,
+            crop_rect={'x': template.crop_x, 'y': template.crop_y, 'w': template.crop_w, 'h': template.crop_h},
+            exclude_area=exclude_area,
+            confidence_threshold=confidence_threshold,
+        )
+    except Exception as e:
+        current_app.logger.error(f"Symbol detection error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    TakeoffSymbolDetection.query.filter_by(
+        project_id=project_id,
+        document_id=doc_id,
+        symbol_type_id=template.symbol_type_id,
+    ).delete()
+
+    rooms = TakeoffRoom.query.filter_by(project_id=project_id, document_id=doc_id).all()
+
+    new_detections = []
+    for det in detections:
+        room_id = None
+        for room in rooms:
+            points = room.get_boundary_points()
+            if points and _point_in_polygon(det['x'], det['y'], points):
+                room_id = room.id
+                break
+            if room.bbox_x and room.bbox_y:
+                if (room.bbox_x <= det['x'] <= room.bbox_x + room.bbox_w and
+                    room.bbox_y <= det['y'] <= room.bbox_y + room.bbox_h):
+                    room_id = room.id
+                    break
+
+        detection = TakeoffSymbolDetection(
+            project_id=project_id,
+            document_id=doc_id,
+            room_id=room_id,
+            symbol_type_id=template.symbol_type_id,
+            symbol_label=template.label,
+            x=det['x'],
+            y=det['y'],
+            confidence=det.get('confidence', 0.8),
+            confirmed=False,
+            source='opencv',
+            part_number=template.default_part_number,
+            product_description=template.default_product_description,
+        )
+        db.session.add(detection)
+        new_detections.append(detection)
+
+    template.total_found = len(new_detections)
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'count': len(new_detections),
+        'detections': [d.to_dict() for d in new_detections],
+    })
+
+
+def _point_in_polygon(x, y, polygon):
+    """Ray casting algorithm to check if point is inside polygon"""
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]['x'], polygon[i]['y']
+        xj, yj = polygon[j]['x'], polygon[j]['y']
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+# =============================================================================
+# TAKEOFF - MANUAL SYMBOL PLACEMENT
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/detections', methods=['POST'])
+@login_required
+def add_manual_detection(project_id, doc_id):
+    """Manually place a symbol detection on the drawing"""
+    from app.models.takeoff import TakeoffSymbolDetection
+    from app.extensions import db
+
+    data = request.get_json()
+
+    detection = TakeoffSymbolDetection(
+        project_id=project_id,
+        document_id=doc_id,
+        room_id=data.get('room_id'),
+        symbol_type_id=data.get('symbol_type_id'),
+        symbol_label=data.get('symbol_label'),
+        x=data['x'],
+        y=data['y'],
+        confidence=1.0,
+        confirmed=True,
+        source='manual',
+    )
+
+    db.session.add(detection)
+    db.session.commit()
+
+    return jsonify({'success': True, 'detection': detection.to_dict()})
+
+
+@bp.route('/api/projects/<int:project_id>/detections/<int:detection_id>', methods=['PUT'])
+@login_required
+def update_detection(project_id, detection_id):
+    """Update a detection (confirm, reject, change room, link product)"""
+    from app.models.takeoff import TakeoffSymbolDetection
+    from app.extensions import db
+
+    detection = TakeoffSymbolDetection.query.filter_by(
+        id=detection_id, project_id=project_id
+    ).first()
+    if not detection:
+        return jsonify({'success': False, 'error': 'Detection not found'}), 404
+
+    data = request.get_json()
+    for field in ['confirmed', 'rejected', 'room_id', 'part_number', 'product_description', 'material_id']:
+        if field in data:
+            setattr(detection, field, data[field])
+
+    db.session.commit()
+    return jsonify({'success': True, 'detection': detection.to_dict()})
+
+
+@bp.route('/api/projects/<int:project_id>/detections/<int:detection_id>', methods=['DELETE'])
+@login_required
+def delete_detection(project_id, detection_id):
+    """Delete a single detection"""
+    from app.models.takeoff import TakeoffSymbolDetection
+    from app.extensions import db
+
+    detection = TakeoffSymbolDetection.query.filter_by(
+        id=detection_id, project_id=project_id
+    ).first()
+    if not detection:
+        return jsonify({'success': False, 'error': 'Detection not found'}), 404
+
+    db.session.delete(detection)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# TAKEOFF - ROOMS
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/rooms', methods=['GET'])
+@login_required
+def get_rooms(project_id, doc_id):
+    """Get all rooms for a document"""
+    from app.models.takeoff import TakeoffRoom
+
+    rooms = TakeoffRoom.query.filter_by(
+        project_id=project_id, document_id=doc_id
+    ).order_by(TakeoffRoom.sort_order).all()
+
+    return jsonify({
+        'success': True,
+        'rooms': [r.to_dict() for r in rooms],
+    })
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/rooms', methods=['POST'])
+@login_required
+def create_room(project_id, doc_id):
+    """Create a room zone on the drawing"""
+    from app.models.takeoff import TakeoffRoom
+    from app.extensions import db
+
+    data = request.get_json()
+
+    room = TakeoffRoom(
+        project_id=project_id,
+        document_id=doc_id,
+        name=data.get('name', 'New Room'),
+        floor_level=data.get('floor_level'),
+        room_type=data.get('room_type'),
+        color=data.get('color', '#6366f1'),
+    )
+
+    points = data.get('boundary_points', [])
+    room.set_boundary_points(points)
+
+    if points:
+        xs = [p['x'] for p in points]
+        ys = [p['y'] for p in points]
+        room.bbox_x = min(xs)
+        room.bbox_y = min(ys)
+        room.bbox_w = max(xs) - min(xs)
+        room.bbox_h = max(ys) - min(ys)
+
+    db.session.add(room)
+    db.session.commit()
+
+    _reassign_detections_to_rooms(project_id, doc_id)
+
+    return jsonify({'success': True, 'room': room.to_dict()})
+
+
+@bp.route('/api/projects/<int:project_id>/rooms/<int:room_id>', methods=['PUT'])
+@login_required
+def update_room(project_id, room_id):
+    """Update a room"""
+    from app.models.takeoff import TakeoffRoom
+    from app.extensions import db
+
+    room = TakeoffRoom.query.filter_by(id=room_id, project_id=project_id).first()
+    if not room:
+        return jsonify({'success': False, 'error': 'Room not found'}), 404
+
+    data = request.get_json()
+    for field in ['name', 'floor_level', 'room_type', 'color', 'sort_order']:
+        if field in data:
+            setattr(room, field, data[field])
+
+    if 'boundary_points' in data:
+        room.set_boundary_points(data['boundary_points'])
+        points = data['boundary_points']
+        if points:
+            xs = [p['x'] for p in points]
+            ys = [p['y'] for p in points]
+            room.bbox_x = min(xs)
+            room.bbox_y = min(ys)
+            room.bbox_w = max(xs) - min(xs)
+            room.bbox_h = max(ys) - min(ys)
+
+    db.session.commit()
+    _reassign_detections_to_rooms(project_id, room.document_id)
+
+    return jsonify({'success': True, 'room': room.to_dict()})
+
+
+@bp.route('/api/projects/<int:project_id>/rooms/<int:room_id>', methods=['DELETE'])
+@login_required
+def delete_room(project_id, room_id):
+    """Delete a room and unassign its detections"""
+    from app.models.takeoff import TakeoffRoom, TakeoffSymbolDetection
+    from app.extensions import db
+
+    room = TakeoffRoom.query.filter_by(id=room_id, project_id=project_id).first()
+    if not room:
+        return jsonify({'success': False, 'error': 'Room not found'}), 404
+
+    TakeoffSymbolDetection.query.filter_by(room_id=room.id).update({'room_id': None})
+
+    db.session.delete(room)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+def _reassign_detections_to_rooms(project_id, doc_id):
+    """Re-assign all detections to rooms based on their position"""
+    from app.models.takeoff import TakeoffRoom, TakeoffSymbolDetection
+    from app.extensions import db
+
+    rooms = TakeoffRoom.query.filter_by(project_id=project_id, document_id=doc_id).all()
+    detections = TakeoffSymbolDetection.query.filter_by(project_id=project_id, document_id=doc_id).all()
+
+    for det in detections:
+        det.room_id = None
+        for room in rooms:
+            points = room.get_boundary_points()
+            if points and _point_in_polygon(det.x, det.y, points):
+                det.room_id = room.id
+                break
+            if room.bbox_x and room.bbox_y:
+                if (room.bbox_x <= det.x <= room.bbox_x + room.bbox_w and
+                    room.bbox_y <= det.y <= room.bbox_y + room.bbox_h):
+                    det.room_id = room.id
+                    break
+
+    db.session.commit()
+
+
+# =============================================================================
+# TAKEOFF - CABLE RUNS
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/cable-runs', methods=['GET'])
+@login_required
+def get_cable_runs(project_id, doc_id):
+    """Get all cable runs for a document"""
+    from app.models.takeoff import TakeoffCableRun
+
+    runs = TakeoffCableRun.query.filter_by(
+        project_id=project_id, document_id=doc_id
+    ).all()
+
+    return jsonify({
+        'success': True,
+        'cable_runs': [r.to_dict() for r in runs],
+    })
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/cable-runs', methods=['POST'])
+@login_required
+def create_cable_run(project_id, doc_id):
+    """Create a new cable run from click-to-click points"""
+    from app.models.project import ProjectDocument
+    from app.models.takeoff import TakeoffCableRun
+    from app.extensions import db
+
+    data = request.get_json()
+    points = data.get('route_points', [])
+
+    if len(points) < 2:
+        return jsonify({'success': False, 'error': 'Need at least 2 points'}), 400
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    scale = _get_scale(document) if document else 50
+
+    run = TakeoffCableRun(
+        project_id=project_id,
+        document_id=doc_id,
+        room_id=data.get('room_id'),
+        cable_type=data.get('cable_type', 'socket'),
+        cable_label=data.get('cable_label'),
+        waste_percent=data.get('waste_percent', 10),
+        notes=data.get('notes'),
+        circuit_ref=data.get('circuit_ref'),
+        part_number=data.get('part_number'),
+    )
+    run.set_route_points(points)
+    run.calculate_length(scale)
+
+    db.session.add(run)
+    db.session.commit()
+
+    return jsonify({'success': True, 'cable_run': run.to_dict()})
+
+
+@bp.route('/api/projects/<int:project_id>/cable-runs/<int:run_id>', methods=['DELETE'])
+@login_required
+def delete_cable_run(project_id, run_id):
+    """Delete a cable run"""
+    from app.models.takeoff import TakeoffCableRun
+    from app.extensions import db
+
+    run = TakeoffCableRun.query.filter_by(id=run_id, project_id=project_id).first()
+    if not run:
+        return jsonify({'success': False, 'error': 'Cable run not found'}), 404
+
+    db.session.delete(run)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# TAKEOFF - FLOOR AREAS
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/areas', methods=['POST'])
+@login_required
+def create_area(project_id, doc_id):
+    """Create a floor area measurement"""
+    from app.models.project import ProjectDocument
+    from app.models.takeoff import TakeoffArea
+    from app.extensions import db
+
+    data = request.get_json()
+    points = data.get('points', [])
+
+    if len(points) < 3:
+        return jsonify({'success': False, 'error': 'Need at least 3 points'}), 400
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    scale = _get_scale(document) if document else 50
+
+    area = TakeoffArea(
+        project_id=project_id,
+        document_id=doc_id,
+        room_id=data.get('room_id'),
+        label=data.get('label', 'Area'),
+    )
+    area.set_points(points)
+    area.calculate_area(scale)
+
+    db.session.add(area)
+    db.session.commit()
+
+    return jsonify({'success': True, 'area': area.to_dict()})
+
+
+# =============================================================================
+# TAKEOFF - PRODUCT SEARCH
+# =============================================================================
+
+@bp.route('/api/products/search')
+@login_required
+def search_products():
+    """Search QuickBooks/Xero products by SKU or description."""
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+
+    query = request.args.get('q', '').strip()
+    if len(query) < 2:
+        return jsonify({'success': True, 'products': []})
+
+    qb_connection = QuickBooksConnection.query.filter_by(
+        user_id=current_user.id,
+        is_active=True
+    ).first()
+
+    if qb_connection:
+        try:
+            qb_service = QuickBooksService()
+            response = qb_service.query_items(
+                qb_connection,
+                f"SELECT * FROM Item WHERE Name LIKE '%{query}%' OR Sku LIKE '%{query}%' MAXRESULTS 20"
+            )
+
+            items = response.get('QueryResponse', {}).get('Item', [])
+            products = []
+            for item in items:
+                products.append({
+                    'id': item.get('Id'),
+                    'sku': item.get('Sku', ''),
+                    'name': item.get('Name', ''),
+                    'description': item.get('Description', ''),
+                    'purchase_cost': float(item.get('PurchaseCost', 0) or 0),
+                    'unit_price': float(item.get('UnitPrice', 0) or 0),
+                    'source': 'quickbooks',
+                })
+
+            return jsonify({'success': True, 'products': products})
+
+        except Exception as e:
+            current_app.logger.warning(f"QB search error: {e}")
+
+    return jsonify({'success': True, 'products': []})
+
+
+# =============================================================================
+# TAKEOFF - LINK PRODUCT TO SYMBOL TYPE
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/link-product', methods=['POST'])
+@login_required
+def link_product_to_symbol(project_id):
+    """Link a QB/Xero product to a symbol type template."""
+    from app.models.project import Project, ProjectMaterial
+    from app.models.takeoff import TakeoffSymbolTemplate, TakeoffSymbolDetection, TakeoffRoom
+    from app.extensions import db
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    data = request.get_json()
+    template_id = data.get('template_id')
+    product = data.get('product')
+
+    if not template_id or not product:
+        return jsonify({'success': False, 'error': 'Template and product required'}), 400
+
+    template = TakeoffSymbolTemplate.query.filter_by(
+        id=template_id, project_id=project_id
+    ).first()
+    if not template:
+        return jsonify({'success': False, 'error': 'Template not found'}), 404
+
+    template.default_part_number = product.get('sku')
+    template.default_product_description = product.get('description') or product.get('name')
+    template.default_unit_cost = product.get('purchase_cost')
+    template.default_unit_sell = product.get('unit_price')
+    template.qb_item_id = product.get('id')
+
+    detections = TakeoffSymbolDetection.query.filter_by(
+        project_id=project_id,
+        symbol_type_id=template.symbol_type_id,
+        rejected=False,
+    ).all()
+
+    for det in detections:
+        det.part_number = product.get('sku')
+        det.product_description = product.get('description') or product.get('name')
+
+    room_counts = {}
+    for det in detections:
+        room_key = det.room_id or 'unassigned'
+        room_counts[room_key] = room_counts.get(room_key, 0) + 1
+
+    materials_created = 0
+    for room_key, count in room_counts.items():
+        room_id = room_key if room_key != 'unassigned' else None
+
+        if room_id:
+            room = TakeoffRoom.query.get(room_id)
+            room_cat = f"{room.name} - {template.label}" if room else template.label
+        else:
+            room_cat = template.label
+
+        existing = ProjectMaterial.query.filter_by(
+            project_id=project_id,
+            part_number=product.get('sku'),
+            category=room_cat,
+        ).first()
+
+        if existing:
+            existing.quantity = count
+            existing.unit_cost = product.get('purchase_cost')
+            existing.calculate_totals(markup_percent=float(project.materials_markup_percent))
+            qb_sell = product.get('unit_price', 0)
+            if qb_sell and qb_sell > float(existing.unit_sell or 0):
+                existing.unit_sell = qb_sell
+                existing.total_sell = round(count * qb_sell, 2)
+        else:
+            material = ProjectMaterial(
+                project_id=project_id,
+                category=room_cat,
+                part_number=product.get('sku'),
+                description=product.get('description') or product.get('name'),
+                quantity=count,
+                unit='each',
+                unit_cost=product.get('purchase_cost'),
+                price_source='quickbooks' if product.get('id') else 'manual',
+                price_verified=True if product.get('id') else False,
+                qb_item_id=product.get('id'),
+                qb_item_name=product.get('name'),
+            )
+            material.calculate_totals(markup_percent=float(project.materials_markup_percent))
+            qb_sell = product.get('unit_price', 0)
+            if qb_sell and qb_sell > float(material.unit_sell or 0):
+                material.unit_sell = qb_sell
+                material.total_sell = round(count * qb_sell, 2)
+            db.session.add(material)
+            materials_created += 1
+
+    project.recalculate_totals()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'template': template.to_dict(),
+        'materials_created': materials_created,
+        'room_counts': {str(k): v for k, v in room_counts.items()},
+    })
+
+
+# =============================================================================
+# TAKEOFF - FULL STATE
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/takeoff-state')
+@login_required
+def get_takeoff_state(project_id, doc_id):
+    """Get the complete takeoff state for a document."""
+    from app.models.project import Project, ProjectDocument
+    from app.models.takeoff import (
+        TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,
+        TakeoffCableRun, TakeoffArea
+    )
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    document = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not document:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    rooms = TakeoffRoom.query.filter_by(project_id=project_id, document_id=doc_id).order_by(TakeoffRoom.sort_order).all()
+    templates = TakeoffSymbolTemplate.query.filter_by(project_id=project_id, document_id=doc_id).all()
+    detections = TakeoffSymbolDetection.query.filter_by(project_id=project_id, document_id=doc_id, rejected=False).all()
+    cable_runs = TakeoffCableRun.query.filter_by(project_id=project_id, document_id=doc_id).all()
+    areas = TakeoffArea.query.filter_by(project_id=project_id, document_id=doc_id).all()
+
+    scale = _get_scale(document)
+
+    return jsonify({
+        'success': True,
+        'document': document.to_dict(),
+        'scale': scale,
+        'rooms': [r.to_dict() for r in rooms],
+        'symbol_templates': [t.to_dict() for t in templates],
+        'detections': [d.to_dict() for d in detections],
+        'cable_runs': [r.to_dict() for r in cable_runs],
+        'areas': [a.to_dict() for a in areas],
+        'summary': {
+            'total_rooms': len(rooms),
+            'total_detections': len(detections),
+            'total_cable_runs': len(cable_runs),
+            'total_areas': len(areas),
+        }
     })

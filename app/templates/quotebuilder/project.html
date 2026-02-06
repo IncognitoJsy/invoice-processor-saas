@@ -112,10 +112,6 @@
             <div x-show="documents.length > 0" class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="font-semibold text-gray-900 dark:text-white">Uploaded Documents</h3>
-                    <button @click="parseAllDocuments()" 
-                            class="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                        🤖 Parse All with AI
-                    </button>
                 </div>
                 <div class="divide-y divide-gray-200 dark:divide-gray-700">
                     <template x-for="doc in documents" :key="doc.id">
@@ -135,14 +131,11 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3">
-                                <span x-show="doc.parsed" class="text-green-600 text-sm">✓ Parsed</span>
-                                <span x-show="doc.parse_error" class="text-red-600 text-sm">⚠ Error</span>
-                                <button x-show="!doc.parsed && !doc.parsing" 
-                                        @click="parseDocument(doc.id)"
-                                        class="px-3 py-1 text-sm bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-lg hover:bg-primary-200 transition">
-                                    Parse
-                                </button>
-                                <span x-show="doc.parsing" class="text-sm text-gray-500">Parsing...</span>
+                                <!-- Open Takeoff Button - Main action now -->
+                                <a :href="'/quotebuilder/project/' + projectId + '/takeoff/' + doc.id"
+                                   class="px-4 py-2 text-sm bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition">
+                                    📐 Open Takeoff
+                                </a>
                             </div>
                         </div>
                     </template>
@@ -155,65 +148,57 @@
             <!-- Actions Bar -->
             <div class="flex flex-wrap gap-3">
                 <button @click="matchPrices()" 
-                        class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    Match Prices from QuickBooks
-                </button>
-                <button @click="showAddMaterial = true" 
-                        class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    + Add Material
+                        class="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition">
+                    💰 Match Prices from QuickBooks
                 </button>
                 <button @click="generateSupplierRequest()" 
-                        class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    📤 Generate Supplier Request
+                        class="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition">
+                    📋 Export Supplier Request
+                </button>
+                <button @click="showAddMaterial = true" 
+                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    + Add Material
                 </button>
             </div>
             
             <!-- Materials by Category -->
             <template x-for="(items, category) in materialsByCategory" :key="category">
                 <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                         <h3 class="font-semibold text-gray-900 dark:text-white" x-text="category"></h3>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="bg-gray-50 dark:bg-gray-700/30">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-800">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No.</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Cost</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Cost</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sell</th>
-                                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Source</th>
-                                    <th class="px-4 py-2"></th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Item</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qty</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit Cost</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total Cost</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit Sell</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total Sell</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</th>
+                                    <th class="px-6 py-3"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                                <template x-for="item in items" :key="item.id">
-                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                        <td class="px-4 py-2 font-mono text-gray-900 dark:text-white" x-text="item.part_number || '-'"></td>
-                                        <td class="px-4 py-2 text-gray-700 dark:text-gray-300 max-w-xs truncate" x-text="item.description"></td>
-                                        <td class="px-4 py-2 text-right text-gray-900 dark:text-white" x-text="item.quantity"></td>
-                                        <td class="px-4 py-2 text-right text-gray-900 dark:text-white">
-                                            £<span x-text="item.unit_cost?.toFixed(2) || '-'"></span>
+                                <template x-for="material in items" :key="material.id">
+                                    <tr>
+                                        <td class="px-6 py-4">
+                                            <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="material.description || material.part_number"></p>
+                                            <p class="text-xs text-gray-500" x-text="material.part_number"></p>
                                         </td>
-                                        <td class="px-4 py-2 text-right font-medium text-gray-900 dark:text-white">
-                                            £<span x-text="item.total_cost?.toFixed(2) || '-'"></span>
+                                        <td class="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300" x-text="material.quantity + ' ' + material.unit"></td>
+                                        <td class="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300">£<span x-text="formatNumber(material.unit_cost)"></span></td>
+                                        <td class="px-6 py-4 text-right text-sm font-medium text-red-600">£<span x-text="formatNumber(material.total_cost)"></span></td>
+                                        <td class="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300">£<span x-text="formatNumber(material.unit_sell)"></span></td>
+                                        <td class="px-6 py-4 text-right text-sm font-medium text-green-600">£<span x-text="formatNumber(material.total_sell)"></span></td>
+                                        <td class="px-6 py-4 text-right">
+                                            <span x-show="material.price_verified" class="text-xs text-green-600">✓ QB</span>
+                                            <span x-show="!material.price_verified" class="text-xs text-gray-400" x-text="material.price_source"></span>
                                         </td>
-                                        <td class="px-4 py-2 text-right font-medium text-green-600 dark:text-green-400">
-                                            £<span x-text="item.total_sell?.toFixed(2) || '-'"></span>
-                                        </td>
-                                        <td class="px-4 py-2 text-center">
-                                            <span x-show="item.price_source === 'quickbooks'" class="text-green-600">✓ QB</span>
-                                            <span x-show="item.price_source === 'estimated'" class="text-yellow-600">Est</span>
-                                            <span x-show="item.price_source === 'manual'" class="text-blue-600">Man</span>
-                                            <span x-show="!item.price_source" class="text-gray-400">-</span>
-                                        </td>
-                                        <td class="px-4 py-2">
-                                            <button @click="deleteMaterial(item.id)" class="text-gray-400 hover:text-red-500">
+                                        <td class="px-6 py-4 text-right">
+                                            <button @click="deleteMaterial(material.id)" class="text-red-500 hover:text-red-700">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                                 </svg>
@@ -227,59 +212,49 @@
                 </div>
             </template>
             
-            <!-- Empty State -->
-            <div x-show="materials.length === 0" class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center">
-                <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white">No materials yet</h3>
-                <p class="mt-1 text-gray-500 dark:text-gray-400">Upload and parse drawings to extract materials, or add them manually</p>
+            <div x-show="materials.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
+                <p>No materials yet. Open a drawing takeoff to start counting symbols and adding materials.</p>
             </div>
         </div>
         
         <!-- Labour Tab -->
         <div x-show="activeTab === 'labour'" class="space-y-6">
-            <div class="flex gap-3">
+            <div class="flex flex-wrap gap-3">
                 <button @click="calculateLabour()" 
-                        class="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 transition">
-                    🤖 Auto-Calculate Labour
+                        class="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition">
+                    🔄 Auto-Calculate Labour
                 </button>
             </div>
             
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <table class="w-full text-sm">
-                    <thead class="bg-gray-50 dark:bg-gray-700/50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Task</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hours</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Basis</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                        <template x-for="item in labour" :key="item.id">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800">
                             <tr>
-                                <td class="px-6 py-4 font-medium text-gray-900 dark:text-white" x-text="item.task"></td>
-                                <td class="px-6 py-4 text-right text-gray-900 dark:text-white" x-text="item.hours"></td>
-                                <td class="px-6 py-4 text-right text-gray-700 dark:text-gray-300">£<span x-text="(item.rate || project.labour_rate_per_hour)?.toFixed(2)"></span></td>
-                                <td class="px-6 py-4 text-right font-medium text-gray-900 dark:text-white">£<span x-text="item.total?.toFixed(2)"></span></td>
-                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" x-text="item.calculation_basis || '-'"></td>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Task</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Hours</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rate</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Basis</th>
                             </tr>
-                        </template>
-                    </tbody>
-                    <tfoot class="bg-gray-50 dark:bg-gray-700/50">
-                        <tr>
-                            <td class="px-6 py-4 font-bold text-gray-900 dark:text-white">Total</td>
-                            <td class="px-6 py-4 text-right font-bold text-gray-900 dark:text-white" x-text="project.total_labour_hours"></td>
-                            <td class="px-6 py-4"></td>
-                            <td class="px-6 py-4 text-right font-bold text-gray-900 dark:text-white">£<span x-text="formatNumber(project.total_labour_cost)"></span></td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                            <template x-for="item in labour" :key="item.id">
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white" x-text="item.task"></td>
+                                    <td class="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300" x-text="item.hours + ' hrs'"></td>
+                                    <td class="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300">£<span x-text="formatNumber(item.rate || project.labour_rate_per_hour)"></span>/hr</td>
+                                    <td class="px-6 py-4 text-right text-sm font-medium text-green-600">£<span x-text="formatNumber(item.total)"></span></td>
+                                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" x-text="item.calculation_basis || '-'"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div x-show="labour.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
+                <p>No labour items yet. Add materials first, then click "Auto-Calculate Labour".</p>
             </div>
         </div>
         
@@ -292,37 +267,55 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name</label>
                         <input type="text" x-model="project.name" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
-                    
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client Name</label>
                         <input type="text" x-model="project.client_name" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Materials Markup %</label>
-                        <input type="number" x-model="project.materials_markup_percent" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client Email</label>
+                        <input type="email" x-model="project.client_email" @change="updateProject()"
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
-                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site Address</label>
+                        <input type="text" x-model="project.site_address" @change="updateProject()"
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Building Type</label>
+                        <select x-model="project.building_type" @change="updateProject()"
+                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="new_build">New Build</option>
+                            <option value="renovation">Renovation</option>
+                            <option value="retrofit">Retrofit</option>
+                            <option value="listed">Listed Building</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supply Type</label>
+                        <select x-model="project.supply_type" @change="updateProject()"
+                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="single_phase">Single Phase</option>
+                            <option value="three_phase">Three Phase</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Materials Markup (%)</label>
+                        <input type="number" x-model="project.materials_markup_percent" @change="updateProject()"
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Labour Rate (£/hr)</label>
                         <input type="number" x-model="project.labour_rate_per_hour" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contingency %</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contingency (%)</label>
                         <input type="number" x-model="project.contingency_percent" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quote Valid (days)</label>
-                        <input type="number" x-model="project.quote_valid_days" @change="updateProject()"
-                               class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
                 </div>
             </div>
@@ -404,35 +397,6 @@ function projectDetail(projectId) {
                 }
             } catch (error) {
                 console.error('Error uploading file:', error);
-            }
-        },
-        
-        async parseDocument(docId) {
-            const doc = this.documents.find(d => d.id === docId);
-            if (doc) doc.parsing = true;
-            
-            try {
-                const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${docId}/parse`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (data.success) {
-                    await this.loadProject();
-                } else {
-                    alert(data.error || 'Failed to parse document');
-                }
-            } catch (error) {
-                console.error('Error parsing document:', error);
-            }
-            
-            if (doc) doc.parsing = false;
-        },
-        
-        async parseAllDocuments() {
-            for (const doc of this.documents) {
-                if (!doc.parsed) {
-                    await this.parseDocument(doc.id);
-                }
             }
         },
         

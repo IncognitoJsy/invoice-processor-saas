@@ -1,0 +1,358 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Takeoff - {{ project.name }} - GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-full mx-auto px-4 py-4" 
+     x-data="takeoffCanvas({{ project.id }}, {{ document.id }})"
+     x-init="init()">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}" 
+               class="text-gray-400 hover:text-gray-200 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <div>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">{{ project.name }}</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ document.original_filename }} — Drawing Takeoff</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span x-show="scaleCalibrated" class="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded">
+                ✓ Scale calibrated
+            </span>
+            <span x-show="!scaleCalibrated" class="text-xs text-amber-400 bg-amber-400/10 px-2 py-1 rounded cursor-pointer"
+                  @click="setMode('scale')">
+                ⚠ Calibrate scale
+            </span>
+            <button @click="showSummary = !showSummary"
+                    class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+                    :class="showSummary ? 'bg-primary-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'">
+                Summary
+            </button>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div x-show="notification" x-transition
+         class="fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium"
+         :class="notification?.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'">
+        <span x-text="notification?.msg"></span>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="flex items-center justify-center h-96">
+        <div class="text-center">
+            <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+            <p class="text-gray-400">Loading drawing...</p>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" class="bg-red-900/20 border border-red-600/30 rounded-lg p-4 text-red-400" x-text="error"></div>
+
+    <!-- Main Content -->
+    <div x-show="!loading && !error" class="flex gap-4" style="min-height: calc(100vh - 140px);">
+
+        <!-- Left: Canvas Area -->
+        <div class="flex-1 min-w-0">
+
+            <!-- Toolbar -->
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <span class="text-xs text-gray-500 font-semibold mr-1">MODE:</span>
+
+                <template x-for="m in [
+                    {id: 'select', label: 'Select', icon: '👆'},
+                    {id: 'symbol', label: 'Detect Symbol', icon: '🔍'},
+                    {id: 'room', label: 'Draw Room', icon: '🏠'},
+                    {id: 'cable', label: 'Cable Run', icon: '📏'},
+                    {id: 'area', label: 'Floor Area', icon: '📐'},
+                    {id: 'scale', label: 'Calibrate', icon: '📐'},
+                ]">
+                    <button @click="setMode(m.id)"
+                            class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition"
+                            :class="mode === m.id 
+                                ? 'border-primary-500 bg-primary-500/10 text-primary-400' 
+                                : 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700'">
+                        <span x-text="m.icon"></span> <span x-text="m.label"></span>
+                    </button>
+                </template>
+
+                <!-- Mark Key Area button -->
+                <button @click="settingKeyArea = true; mode = 'select'"
+                        class="ml-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition"
+                        :class="keyArea ? 'border-red-600 bg-red-600/10 text-red-400' : 'border-gray-700 bg-gray-800 text-gray-400'">
+                    🗝️ <span x-text="keyArea ? 'Key Area Set' : 'Mark Key Area'"></span>
+                </button>
+            </div>
+
+            <!-- Mode-specific instructions -->
+            <div x-show="mode === 'symbol'" class="mb-2 p-3 rounded-lg bg-primary-900/20 border border-primary-600/20 text-xs text-primary-300">
+                🔍 <strong>Draw a box</strong> around a symbol in the key/legend area. The AI will scan the drawing and count all matching symbols.
+            </div>
+            <div x-show="mode === 'room' && !drawingRoom" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
+                🏠 Click <strong>"Start Drawing"</strong> then click around the room perimeter. <strong>Double-click</strong> to finish.
+                <button @click="startDrawingRoom()" class="ml-2 px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-semibold">Start Drawing</button>
+            </div>
+            <div x-show="mode === 'room' && drawingRoom" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300 flex items-center gap-2">
+                🏠 Click points around the room. <strong>Double-click</strong> to finish (<span x-text="roomPoints.length"></span> points).
+                <button @click="finishRoom()" :disabled="roomPoints.length < 3"
+                        class="px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Finish ✓</button>
+                <button @click="cancelRoom()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
+            </div>
+            <div x-show="mode === 'cable'" class="mb-2 p-3 rounded-lg bg-orange-900/20 border border-orange-600/20 text-xs text-orange-300 flex items-center gap-2 flex-wrap">
+                📏 Click points along the cable route.
+                <select x-model="cableType" class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1">
+                    <template x-for="ct in cableTypes">
+                        <option :value="ct.value" x-text="ct.label"></option>
+                    </template>
+                </select>
+                <button @click="finishCableRun()" :disabled="cablePoints.length < 2"
+                        class="ml-auto px-2 py-0.5 bg-orange-600 text-white rounded text-xs font-semibold disabled:opacity-50">Finish Run ✓</button>
+                <button @click="undoLastCablePoint()" :disabled="cablePoints.length === 0"
+                        class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs disabled:opacity-50">Undo</button>
+                <button @click="cablePoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
+            </div>
+            <div x-show="mode === 'area'" class="mb-2 p-3 rounded-lg bg-purple-900/20 border border-purple-600/20 text-xs text-purple-300 flex items-center gap-2">
+                📐 Click around the perimeter to measure floor area.
+                <button @click="finishArea()" :disabled="areaPoints.length < 3"
+                        class="ml-auto px-2 py-0.5 bg-purple-600 text-white rounded text-xs font-semibold disabled:opacity-50">Calculate ✓</button>
+                <button @click="areaPoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
+            </div>
+            <div x-show="mode === 'scale'" class="mb-2 p-3 rounded-lg bg-green-900/20 border border-green-600/20 text-xs text-green-300">
+                📐 Click <strong>two points</strong> of a known distance (e.g. a wall dimension on the drawing). You'll then enter the real distance.
+                <span x-text="scalePoints.length + '/2 points'"></span>
+            </div>
+            <div x-show="settingKeyArea" class="mb-2 p-3 rounded-lg bg-red-900/20 border border-red-600/20 text-xs text-red-300">
+                🗝️ <strong>Draw a box</strong> around the key/legend area. This area will be excluded from symbol detection.
+            </div>
+
+            <!-- Canvas container (scrollable) -->
+            <div class="border border-gray-700 rounded-lg overflow-auto bg-gray-900" style="max-height: calc(100vh - 280px);">
+                <canvas x-ref="takeoffCanvas"
+                        :style="'cursor: ' + getCursor()"
+                        class="block"></canvas>
+            </div>
+        </div>
+
+        <!-- Right: Side Panel -->
+        <div class="w-80 flex-shrink-0 space-y-4 overflow-y-auto" style="max-height: calc(100vh - 140px);">
+
+            <!-- Symbol Templates -->
+            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
+                    🔍 Detected Symbols
+                    <span class="text-xs text-gray-500 font-normal" x-text="symbolTemplates.length + ' types'"></span>
+                </h3>
+
+                <template x-if="symbolTemplates.length === 0">
+                    <p class="text-xs text-gray-500">No symbols detected yet. Switch to "Detect Symbol" mode and draw a box over a symbol in the key.</p>
+                </template>
+
+                <template x-for="tpl in symbolTemplates" :key="tpl.id">
+                    <div class="mb-3 p-3 rounded-lg bg-gray-900/50 border border-gray-700">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-gray-200" x-text="tpl.label"></span>
+                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-primary-600/20 text-primary-400"
+                                  x-text="'×' + (tpl.total_found || 0)"></span>
+                        </div>
+
+                        <!-- Linked product or link button -->
+                        <template x-if="tpl.default_part_number">
+                            <div class="text-xs">
+                                <span class="text-green-400 font-semibold" x-text="tpl.default_part_number"></span>
+                                <span class="text-gray-500 ml-1" x-text="tpl.default_product_description"></span>
+                                <div class="mt-1 text-gray-400">
+                                    Cost: <span class="text-red-400" x-text="'£' + (tpl.default_unit_cost || 0).toFixed(2)"></span>
+                                    → Sale: <span class="text-green-400" x-text="'£' + (tpl.default_unit_sell || 0).toFixed(2)"></span>
+                                </div>
+                                <button @click="linkingTemplate = tpl; productSearch = ''; productResults = []"
+                                        class="mt-1 text-xs text-primary-400 hover:text-primary-300">Change product</button>
+                            </div>
+                        </template>
+
+                        <template x-if="!tpl.default_part_number">
+                            <button @click="linkingTemplate = tpl; productSearch = ''; productResults = []"
+                                    class="w-full mt-1 px-3 py-1.5 border border-dashed border-primary-600/40 rounded text-xs text-primary-400 hover:bg-primary-600/10 transition">
+                                + Link Product
+                            </button>
+                        </template>
+
+                        <!-- Re-run detection -->
+                        <button @click="runDetection(tpl)" :disabled="detecting"
+                                class="w-full mt-2 px-3 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition disabled:opacity-50">
+                            <span x-show="!detecting">🔄 Re-scan</span>
+                            <span x-show="detecting">Scanning...</span>
+                        </button>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Product Search Modal (inline) -->
+            <div x-show="linkingTemplate" x-transition
+                 class="bg-gray-800 border border-primary-600/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-gray-200">
+                        Link Product to "<span x-text="linkingTemplate?.label"></span>"
+                    </h3>
+                    <button @click="linkingTemplate = null" class="text-gray-500 hover:text-gray-300">✕</button>
+                </div>
+                <input type="text" x-model="productSearch" 
+                       @input="searchProducts(productSearch)"
+                       placeholder="Search SKU or description..."
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-primary-500 outline-none">
+                
+                <div class="mt-2 max-h-48 overflow-y-auto">
+                    <template x-for="product in productResults" :key="product.id">
+                        <div @click="linkProduct(linkingTemplate, product)"
+                             class="p-2 rounded cursor-pointer hover:bg-primary-600/10 border-b border-gray-700/50">
+                            <div class="flex justify-between">
+                                <span class="text-xs font-bold text-primary-400" x-text="product.sku"></span>
+                                <span class="text-xs text-amber-400" 
+                                      x-text="'£' + product.purchase_cost.toFixed(2) + ' → £' + product.unit_price.toFixed(2)"></span>
+                            </div>
+                            <div class="text-xs text-gray-400" x-text="product.name || product.description"></div>
+                        </div>
+                    </template>
+                    <p x-show="productSearch.length >= 2 && productResults.length === 0" class="text-xs text-gray-500 py-2">
+                        No products found
+                    </p>
+                </div>
+            </div>
+
+            <!-- Rooms -->
+            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
+                    🏠 Rooms
+                    <span class="text-xs text-gray-500 font-normal" x-text="rooms.length + ' rooms'"></span>
+                </h3>
+                <template x-for="room in rooms" :key="room.id">
+                    <div class="flex items-center justify-between py-1.5 border-b border-gray-700/50"
+                         @mouseenter="highlightedRoom = room.id; redraw()"
+                         @mouseleave="highlightedRoom = null; redraw()">
+                        <span class="text-xs text-gray-300 font-medium" x-text="room.name"></span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-primary-400" x-text="room.detections_count + ' items'"></span>
+                            <button @click="deleteRoom(room.id)" class="text-xs text-red-400 hover:text-red-300">✕</button>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="rooms.length === 0" class="text-xs text-gray-500">No rooms drawn yet.</p>
+            </div>
+
+            <!-- Cable Runs -->
+            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h3 class="text-sm font-bold text-gray-200 mb-3">📏 Cable Runs</h3>
+                <template x-for="(summary, type) in getCableRunSummary()" :key="type">
+                    <div class="flex items-center justify-between py-1.5 border-b border-gray-700/50">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full" :style="'background:' + summary.color"></div>
+                            <span class="text-xs text-gray-300" x-text="summary.label"></span>
+                        </div>
+                        <span class="text-xs font-bold" :style="'color:' + summary.color"
+                              x-text="summary.totalMetres.toFixed(1) + 'm'"></span>
+                    </div>
+                </template>
+                <p x-show="cableRuns.length === 0" class="text-xs text-gray-500">No cable runs measured yet.</p>
+            </div>
+
+            <!-- Areas -->
+            <div x-show="areas.length > 0" class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h3 class="text-sm font-bold text-gray-200 mb-3">📐 Measured Areas</h3>
+                <template x-for="area in areas" :key="area.id">
+                    <div class="flex items-center justify-between py-1.5">
+                        <span class="text-xs text-gray-300" x-text="area.label"></span>
+                        <span class="text-xs font-bold text-purple-400" x-text="area.area_sqm + ' m²'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Overlay -->
+    <div x-show="showSummary" x-transition class="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-8"
+         @click.self="showSummary = false">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-bold text-white">Takeoff Summary — {{ project.name }}</h2>
+                <button @click="showSummary = false" class="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <!-- Room breakdown -->
+            <template x-for="(data, key) in getDetectionsByRoom()" :key="key">
+                <div class="mb-4 border border-gray-700 rounded-lg overflow-hidden">
+                    <div class="px-4 py-2 bg-gray-800 flex items-center justify-between">
+                        <span class="font-semibold text-sm text-gray-200" x-text="data.room.name"></span>
+                        <span class="text-xs text-gray-500" x-text="data.detections.length + ' items'"></span>
+                    </div>
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="border-b border-gray-700 text-gray-500">
+                                <th class="text-left px-4 py-2">Symbol</th>
+                                <th class="text-left px-4 py-2">Product</th>
+                                <th class="text-right px-4 py-2">Qty</th>
+                                <th class="text-right px-4 py-2">Cost</th>
+                                <th class="text-right px-4 py-2">Sale</th>
+                                <th class="text-right px-4 py-2">Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Group detections by symbol type within this room -->
+                            <template x-for="symbolData in (() => {
+                                const grouped = {};
+                                data.detections.forEach(d => {
+                                    if (!grouped[d.symbol_type_id]) {
+                                        const tpl = symbolTemplates.find(t => t.symbol_type_id === d.symbol_type_id);
+                                        grouped[d.symbol_type_id] = {
+                                            label: d.symbol_label,
+                                            part_number: tpl?.default_part_number || '-',
+                                            description: tpl?.default_product_description || '-',
+                                            unit_cost: tpl?.default_unit_cost || 0,
+                                            unit_sell: tpl?.default_unit_sell || 0,
+                                            count: 0,
+                                        };
+                                    }
+                                    grouped[d.symbol_type_id].count++;
+                                });
+                                return Object.values(grouped);
+                            })()">
+                                <tr class="border-b border-gray-800">
+                                    <td class="px-4 py-2 text-gray-300" x-text="symbolData.label"></td>
+                                    <td class="px-4 py-2">
+                                        <span class="text-primary-400 font-semibold" x-text="symbolData.part_number"></span>
+                                    </td>
+                                    <td class="px-4 py-2 text-right text-primary-400 font-bold" x-text="symbolData.count"></td>
+                                    <td class="px-4 py-2 text-right text-red-400"
+                                        x-text="'£' + (symbolData.unit_cost * symbolData.count).toFixed(2)"></td>
+                                    <td class="px-4 py-2 text-right text-green-400"
+                                        x-text="'£' + (symbolData.unit_sell * symbolData.count).toFixed(2)"></td>
+                                    <td class="px-4 py-2 text-right text-amber-400 font-bold"
+                                        x-text="'£' + ((symbolData.unit_sell - symbolData.unit_cost) * symbolData.count).toFixed(2)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <!-- Cable runs -->
+            <div x-show="cableRuns.length > 0" class="mt-4 border border-gray-700 rounded-lg p-4">
+                <h3 class="text-sm font-bold text-orange-300 mb-2">📏 Cable Requirements</h3>
+                <template x-for="(summary, type) in getCableRunSummary()" :key="type">
+                    <div class="flex items-center justify-between py-1 border-b border-gray-800">
+                        <span class="text-xs text-gray-300" x-text="summary.label"></span>
+                        <span class="text-xs font-bold" :style="'color:' + summary.color"
+                              x-text="summary.totalMetres.toFixed(1) + 'm (' + summary.runs + ' runs)'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/takeoff-canvas.js') }}"></script>
+{% endblock %}
