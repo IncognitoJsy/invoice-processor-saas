@@ -8,7 +8,9 @@ from whitenoise import WhiteNoise
 
 def create_app(config_name='default'):
     """Application factory pattern"""
-    app = Flask(__name__)
+    import os
+    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    app = Flask(__name__, static_folder=static_folder)
     app.config.from_object(config[config_name])
     
     # Initialize extensions
