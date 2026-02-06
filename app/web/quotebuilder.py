@@ -983,7 +983,14 @@ def render_document(project_id, doc_id):
         current_app.logger.info(f"Sending render_path={render_path}, size={file_size}")
         if file_size == 0:
             return jsonify({'success': False, 'error': 'Rendered file is empty'}), 500
-        return send_file(render_path, mimetype='image/png')
+        # Use Response with file data directly
+        with open(render_path, 'rb') as f:
+            image_data = f.read()
+        from flask import Response
+        return Response(image_data, mimetype='image/png', headers={
+            'Content-Length': str(len(image_data)),
+            'Cache-Control': 'public, max-age=3600'
+        })
     else:
         current_app.logger.error(f"Render path not found: {render_path}")
         return jsonify({'success': False, 'error': 'Rendered file not found'}), 404
