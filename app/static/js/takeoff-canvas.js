@@ -183,8 +183,8 @@ document.addEventListener('alpine:init', () => {
             async loadExistingData() {
                 try {
                     const [templatesRes, roomsRes, detectionsRes, cablesRes, stateRes] = await Promise.all([
-                        fetch(`/quotebuilder/api/projects/${projectId}/symbol-templates`),
-                        fetch(`/quotebuilder/api/projects/${projectId}/rooms`),
+                        fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/symbol-templates`),
+                        fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/rooms`),
                         fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/detections`),
                         fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/cable-runs`),
                         fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/takeoff-state`)
@@ -414,7 +414,7 @@ document.addEventListener('alpine:init', () => {
                 }
                 
                 try {
-                    const response = await fetch(`/quotebuilder/api/projects/${projectId}/symbol-templates`, {
+                    const response = await fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/symbol-templates`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -524,7 +524,7 @@ document.addEventListener('alpine:init', () => {
                         this.showLegendModal = true;
                         
                         // Reload templates
-                        const templatesRes = await fetch(`/quotebuilder/api/projects/${projectId}/symbol-templates`);
+                        const templatesRes = await fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/symbol-templates`);
                         if (templatesRes.ok) {
                             this.symbolTemplates = await templatesRes.json();
                         }
@@ -598,7 +598,7 @@ document.addEventListener('alpine:init', () => {
                 if (!this.newRoomName || this.currentRoomPoints.length < 3) return;
                 
                 try {
-                    const response = await fetch(`/quotebuilder/api/projects/${projectId}/rooms`, {
+                    const response = await fetch(`/quotebuilder/api/projects/${projectId}/documents/${documentId}/rooms`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: this.newRoomName, points: this.currentRoomPoints })
