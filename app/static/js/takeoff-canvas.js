@@ -399,7 +399,6 @@ function takeoffCanvas(projectId, documentId) {
         async confirmSymbolWithProduct() {
             if (!this.selectedProduct || !this.pendingBox) return;
             const box = this.pendingBox, product = this.selectedProduct;
-            const accs = [...this.accessories];
 
             // Crop image
             const cc = document.createElement('canvas');
@@ -440,18 +439,6 @@ function takeoffCanvas(projectId, documentId) {
                         method: 'POST', headers: {'Content-Type':'application/json'},
                         body: JSON.stringify({ template_id: tmpl.id, product })
                     });
-
-                    // Link accessories (each gets same quantity as detected symbols)
-                    for (const acc of accs) {
-                        await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
-                            method: 'POST', headers: {'Content-Type':'application/json'},
-                            body: JSON.stringify({
-                                template_id: tmpl.id,
-                                product: acc,
-                                is_accessory: true,
-                            })
-                        });
-                    }
 
                     // Reload to get updated template with linked product info
                     await this.loadState();

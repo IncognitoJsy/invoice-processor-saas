@@ -602,5 +602,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('serve_takeoff_js') }}"></script>
+<script src="{{ url_for('serve_takeoff_js') }}?v={{ range(10000, 99999) | random }}"></script>
 {% endblock %}
