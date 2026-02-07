@@ -197,6 +197,9 @@ function takeoffCanvas(projectId, documentId) {
             const img = this.screenToImage(sx, sy);
             this.didDrag = false;
 
+            // Manual placement mode — don't pan, let click handler deal with it
+            if (this.manualPlacingTemplate) return;
+
             // Pan in select mode (no other action active)
             if (this.mode === 'select' && !this.settingKeyArea) {
                 this.isPanning = true;
@@ -258,26 +261,14 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         onClick(e) {
-            // Only fire for click modes (not handled by mousedown/up)
             if (this.isPanning || this.isDrawingBox) return;
             const rect = this.canvas.getBoundingClientRect();
             const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
 
-            // Manual placement mode — click to place a detection
+            // Manual placement mode
             if (this.manualPlacingTemplate) {
                 this.placeManualDetection(img);
                 return;
-            }
-
-            // Select mode — check if clicking X on a detection box
-            if (this.mode === 'select' && !this.didDrag) {
-                const hit = this.findDetectionAt(img.x, img.y);
-                if (hit) {
-                    if (confirm(`Remove this ${hit.symbol_label || 'detection'}?`)) {
-                        this.deleteDetection(hit);
-                    }
-                    return;
-                }
             }
 
             if (this.mode === 'room' && this.drawingRoom) { this.roomPoints.push(img); this.redraw(); }
@@ -291,9 +282,20 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         // Attach click via canvas mouseup when not dragging
-        // We need separate click handling for point-based tools
         handleCanvasClick(e) {
             if (this.didDrag) return;
+            // In select mode after a non-drag click, check detection hits
+            if (this.mode === 'select' && !this.manualPlacingTemplate) {
+                const rect = this.canvas.getBoundingClientRect();
+                const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
+                const hit = this.findDetectionAt(img.x, img.y);
+                if (hit) {
+                    if (confirm(`Remove this ${hit.symbol_label || 'detection'}?`)) {
+                        this.deleteDetection(hit);
+                    }
+                    return;
+                }
+            }
             this.onClick(e);
         },
 
@@ -332,7 +334,7 @@ function takeoffCanvas(projectId, documentId) {
                     const tmpl = data.template;
                     this.symbolTemplates.push(tmpl);
 
-                    // Link product
+                    // Link product (saves product info on template, but no materials yet since 0 detections)
                     const linkResp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
                         method: 'POST', headers: {'Content-Type':'application/json'},
                         body: JSON.stringify({ template_id: tmpl.id, product })
@@ -343,9 +345,15 @@ function takeoffCanvas(projectId, documentId) {
                         this.notify('Product link failed: ' + (linkData.error || ''), 'error');
                     }
 
-                    // Auto-detect
+                    // Auto-detect symbols on drawing
                     this.notify(`Scanning for "${product.name}"...`);
                     await this.runDetection(tmpl);
+
+                    // Re-link product AFTER detection to create materials with correct counts
+                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({ template_id: tmpl.id, product })
+                    });
 
                     // Reload to get updated template with linked product info
                     await this.loadState();
