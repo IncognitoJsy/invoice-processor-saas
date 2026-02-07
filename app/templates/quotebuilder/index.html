@@ -120,6 +120,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Client</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profit</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Updated</th>
                         <th class="px-6 py-3"></th>
                     </tr>
@@ -149,6 +150,10 @@
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="font-medium text-gray-900 dark:text-white">£<span x-text="formatNumber(project.grand_total)"></span></div>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="font-medium text-green-500" x-text="'£' + formatNumber((project.total_materials_sell || 0) - (project.total_materials_cost || 0))"></div>
+                                <div class="text-xs text-gray-400" x-text="project.total_materials_cost > 0 ? '(' + (((project.total_materials_sell - project.total_materials_cost) / project.total_materials_cost) * 100).toFixed(1) + '%)' : ''"></div>
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" x-text="formatDate(project.updated_at)"></td>
                             <td class="px-6 py-4 text-right">

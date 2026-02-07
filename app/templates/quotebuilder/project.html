@@ -33,7 +33,7 @@
     
     <!-- Totals Summary Bar -->
     <div class="bg-gradient-to-r from-primary-600 to-purple-600 rounded-2xl p-6 mb-6 text-white">
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div>
                 <p class="text-sm opacity-80">Materials (Cost)</p>
                 <p class="text-xl font-bold">£<span x-text="formatNumber(project.total_materials_cost)">0.00</span></p>
@@ -50,7 +50,12 @@
                 <p class="text-sm opacity-80">Contingency (<span x-text="project.contingency_percent"></span>%)</p>
                 <p class="text-xl font-bold">£<span x-text="formatNumber(project.contingency_amount)">0.00</span></p>
             </div>
-            <div class="col-span-2 md:col-span-1">
+            <div>
+                <p class="text-sm opacity-80">Profit</p>
+                <p class="text-xl font-bold text-green-300">£<span x-text="formatNumber((project.total_materials_sell || 0) - (project.total_materials_cost || 0))">0.00</span></p>
+                <p class="text-xs opacity-70" x-text="project.total_materials_cost > 0 ? '(' + (((project.total_materials_sell - project.total_materials_cost) / project.total_materials_cost) * 100).toFixed(1) + '%)' : ''"></p>
+            </div>
+            <div>
                 <p class="text-sm opacity-80">Grand Total</p>
                 <p class="text-3xl font-bold">£<span x-text="formatNumber(project.grand_total)">0.00</span></p>
             </div>
@@ -301,11 +306,6 @@
                             <option value="single_phase">Single Phase</option>
                             <option value="three_phase">Three Phase</option>
                         </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Materials Markup (%)</label>
-                        <input type="number" x-model="project.materials_markup_percent" @change="updateProject()"
-                               class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Labour Rate (£/hr)</label>
