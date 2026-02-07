@@ -3,6 +3,9 @@
 {% block title %}{{ project.name }} - Quote Builder - GoZappify{% endblock %}
 
 {% block content %}
+<!-- Toast Notification -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="projectDetail({{ project.id }})">
     
     <!-- Header -->
@@ -25,12 +28,16 @@
                   }"
                   x-text="project.status?.toUpperCase()">DRAFT</span>
             <button @click="generateQuote()" 
-                    class="px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition">
-                Generate Quote
+                    :disabled="generatingQuote"
+                    class="px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="!generatingQuote">Generate Quote</span>
+                <span x-show="generatingQuote">⏳ Generating...</span>
             </button>
             <button @click="generateMaterialsList()" 
-                    class="px-4 py-2 bg-gray-700 text-white text-sm font-semibold rounded-xl hover:bg-gray-600 transition">
-                📋 Materials List
+                    :disabled="generatingMaterials"
+                    class="px-4 py-2 bg-gray-700 text-white text-sm font-semibold rounded-xl hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="!generatingMaterials">📋 Materials List</span>
+                <span x-show="generatingMaterials">⏳ Generating...</span>
             </button>
         </div>
     </div>
@@ -153,8 +160,10 @@
         <div x-show="activeTab === 'materials'" class="space-y-6">
             <div class="flex flex-wrap gap-3">
                 <button @click="matchPrices()" 
-                        class="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition">
-                    💰 Match Prices from QuickBooks
+                        :disabled="matchingPrices"
+                        class="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!matchingPrices">💰 Match Prices from QuickBooks</span>
+                    <span x-show="matchingPrices">⏳ Matching...</span>
                 </button>
                 <button @click="generateSupplierRequest()" 
                         class="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition">
@@ -225,8 +234,10 @@
         <div x-show="activeTab === 'labour'" class="space-y-6">
             <div class="flex flex-wrap gap-3">
                 <button @click="calculateLabour()" 
-                        class="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition">
-                    🔄 Auto-Calculate Labour
+                        :disabled="calculatingLabour"
+                        class="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!calculatingLabour">🔄 Auto-Calculate Labour</span>
+                    <span x-show="calculatingLabour">⏳ Calculating...</span>
                 </button>
             </div>
             
@@ -323,6 +334,24 @@
 </div>
 
 <script>
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-600',
+        error: 'bg-red-600',
+        info: 'bg-primary-600',
+        warning: 'bg-yellow-600',
+    };
+    toast.className = `${colors[type] || colors.info} text-white px-6 py-3 rounded-xl shadow-lg text-sm font-medium transition-all duration-300 transform translate-x-0 opacity-100`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-x-4');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 function projectDetail(projectId) {
     return {
         projectId: projectId,
@@ -332,6 +361,10 @@ function projectDetail(projectId) {
         materialsByCategory: {},
         labour: [],
         showAddMaterial: false,
+        generatingQuote: false,
+        generatingMaterials: false,
+        matchingPrices: false,
+        calculatingLabour: false,
         
         async init() {
             await this.loadProject();
@@ -400,23 +433,27 @@ function projectDetail(projectId) {
         },
         
         async matchPrices() {
+            this.matchingPrices = true;
             try {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/match-prices`, {
                     method: 'POST'
                 });
                 const data = await response.json();
                 if (data.success) {
-                    alert(`Matched ${data.matched} items. ${data.unmatched_count} items need supplier quotes.`);
+                    showToast(`Matched ${data.matched} items. ${data.unmatched_count} items need supplier quotes.`, 'success');
                     await this.loadProject();
                 } else {
-                    alert(data.error || 'Failed to match prices');
+                    showToast(data.error || 'Failed to match prices', 'error');
                 }
             } catch (error) {
                 console.error('Error matching prices:', error);
+            } finally {
+                this.matchingPrices = false;
             }
         },
         
         async calculateLabour() {
+            this.calculatingLabour = true;
             try {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/calculate-labour`, {
                     method: 'POST'
@@ -427,6 +464,8 @@ function projectDetail(projectId) {
                 }
             } catch (error) {
                 console.error('Error calculating labour:', error);
+            } finally {
+                this.calculatingLabour = false;
             }
         },
         
@@ -435,6 +474,7 @@ function projectDetail(projectId) {
         },
         
         async generateQuote() {
+            this.generatingQuote = true;
             try {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/generate-quote`, {
                     method: 'POST'
@@ -457,15 +497,18 @@ function projectDetail(projectId) {
                     await this.loadProject();
                 } else {
                     const data = await response.json();
-                    alert('Error: ' + (data.error || 'Failed to generate quote'));
+                    showToast('Error: ' + (data.error || 'Failed to generate quote'), 'error');
                 }
             } catch (error) {
                 console.error('Error generating quote:', error);
-                alert('Error generating quote');
+                showToast('Error generating quote', 'error');
+            } finally {
+                this.generatingQuote = false;
             }
         },
 
         async generateMaterialsList() {
+            this.generatingMaterials = true;
             try {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/generate-materials-list`, {
                     method: 'POST'
@@ -487,11 +530,13 @@ function projectDetail(projectId) {
                     window.URL.revokeObjectURL(url);
                 } else {
                     const data = await response.json();
-                    alert('Error: ' + (data.error || 'Failed to generate materials list'));
+                    showToast('Error: ' + (data.error || 'Failed to generate materials list'), 'error');
                 }
             } catch (error) {
                 console.error('Error generating materials list:', error);
-                alert('Error generating materials list');
+                showToast('Error generating materials list', 'error');
+            } finally {
+                this.generatingMaterials = false;
             }
         },
         
