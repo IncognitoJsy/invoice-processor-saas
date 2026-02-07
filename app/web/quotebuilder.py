@@ -111,19 +111,58 @@ def create_project():
     from app.extensions import db
     
     data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    # Validate and sanitise inputs
+    name = str(data.get('name', 'New Project'))[:200].strip()
+    if not name:
+        name = 'New Project'
+    
+    client_name = str(data.get('client_name', '') or '')[:200].strip() or None
+    client_email = str(data.get('client_email', '') or '')[:200].strip() or None
+    client_phone = str(data.get('client_phone', '') or '')[:50].strip() or None
+    site_address = str(data.get('site_address', '') or '')[:500].strip() or None
+    
+    # Validate numeric fields
+    try:
+        markup = min(max(float(data.get('materials_markup_percent', 25)), 0), 500)
+    except (TypeError, ValueError):
+        markup = 25
+    try:
+        labour_rate = min(max(float(data.get('labour_rate_per_hour', 45)), 0), 1000)
+    except (TypeError, ValueError):
+        labour_rate = 45
+    try:
+        contingency = min(max(float(data.get('contingency_percent', 10)), 0), 100)
+    except (TypeError, ValueError):
+        contingency = 10
+    
+    # Validate enum fields
+    supply_type = data.get('supply_type', 'single_phase')
+    if supply_type not in ('single_phase', 'three_phase'):
+        supply_type = 'single_phase'
+    building_type = data.get('building_type', 'renovation')
+    if building_type not in ('new_build', 'renovation', 'retrofit', 'listed'):
+        building_type = 'renovation'
+    
+    # Limit projects per user (max 100)
+    project_count = Project.query.filter_by(user_id=current_user.id).count()
+    if project_count >= 100:
+        return jsonify({'success': False, 'error': 'Maximum 100 projects. Please delete old projects.'}), 400
     
     project = Project(
         user_id=current_user.id,
-        name=data.get('name', 'New Project'),
-        client_name=data.get('client_name'),
-        client_email=data.get('client_email'),
-        client_phone=data.get('client_phone'),
-        site_address=data.get('site_address'),
-        supply_type=data.get('supply_type', 'single_phase'),
-        building_type=data.get('building_type', 'renovation'),
-        materials_markup_percent=data.get('materials_markup_percent', 25),
-        labour_rate_per_hour=data.get('labour_rate_per_hour', 45),
-        contingency_percent=data.get('contingency_percent', 10),
+        name=name,
+        client_name=client_name,
+        client_email=client_email,
+        client_phone=client_phone,
+        site_address=site_address,
+        supply_type=supply_type,
+        building_type=building_type,
+        materials_markup_percent=markup,
+        labour_rate_per_hour=labour_rate,
+        contingency_percent=contingency,
     )
     
     db.session.add(project)
@@ -181,13 +220,51 @@ def update_project(project_id):
         return jsonify({'success': False, 'error': 'Project not found'}), 404
     
     data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
     
-    # Update allowed fields
-    for field in ['name', 'client_name', 'client_email', 'client_phone', 'site_address',
-                  'supply_type', 'building_type', 'materials_markup_percent',
-                  'labour_rate_per_hour', 'contingency_percent', 'status', 'quote_valid_days']:
+    # Validate and sanitise string fields with length limits
+    string_limits = {
+        'name': 200, 'client_name': 200, 'client_email': 200,
+        'client_phone': 50, 'site_address': 500,
+    }
+    for field, max_len in string_limits.items():
         if field in data:
-            setattr(project, field, data[field])
+            val = str(data[field] or '')[:max_len].strip()
+            setattr(project, field, val if val else None)
+    
+    # Validate enum fields
+    if 'supply_type' in data:
+        if data['supply_type'] in ('single_phase', 'three_phase'):
+            project.supply_type = data['supply_type']
+    if 'building_type' in data:
+        if data['building_type'] in ('new_build', 'renovation', 'retrofit', 'listed'):
+            project.building_type = data['building_type']
+    if 'status' in data:
+        if data['status'] in ('draft', 'quoted', 'sent', 'won', 'lost'):
+            project.status = data['status']
+    
+    # Validate numeric fields with bounds
+    if 'materials_markup_percent' in data:
+        try:
+            project.materials_markup_percent = min(max(float(data['materials_markup_percent']), 0), 500)
+        except (TypeError, ValueError):
+            pass
+    if 'labour_rate_per_hour' in data:
+        try:
+            project.labour_rate_per_hour = min(max(float(data['labour_rate_per_hour']), 0), 1000)
+        except (TypeError, ValueError):
+            pass
+    if 'contingency_percent' in data:
+        try:
+            project.contingency_percent = min(max(float(data['contingency_percent']), 0), 100)
+        except (TypeError, ValueError):
+            pass
+    if 'quote_valid_days' in data:
+        try:
+            project.quote_valid_days = min(max(int(data['quote_valid_days']), 1), 365)
+        except (TypeError, ValueError):
+            pass
     
     # Recalculate if markup or contingency changed
     if 'materials_markup_percent' in data or 'contingency_percent' in data:
@@ -238,7 +315,8 @@ def delete_project(project_id):
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        current_app.logger.error(f"Error deleting project {project_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Failed to delete project. Please try again.'}), 500
 
 
 # =============================================================================
@@ -266,11 +344,34 @@ def upload_document(project_id):
         return jsonify({'success': False, 'error': 'No file selected'}), 400
     
     # Validate file type
-    allowed_extensions = {'pdf', 'png', 'jpg', 'jpeg', 'dwg'}
+    allowed_extensions = {'pdf', 'png', 'jpg', 'jpeg'}
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
     
     if ext not in allowed_extensions:
-        return jsonify({'success': False, 'error': f'File type .{ext} not allowed'}), 400
+        return jsonify({'success': False, 'error': f'File type .{ext} not allowed. Accepted: PDF, PNG, JPG'}), 400
+    
+    # Validate file size (max 50MB)
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    max_size = 50 * 1024 * 1024  # 50MB
+    if file_size > max_size:
+        return jsonify({'success': False, 'error': f'File too large ({file_size // (1024*1024)}MB). Maximum is 50MB.'}), 400
+    
+    # Validate MIME type matches extension
+    allowed_mimes = {
+        'pdf': ['application/pdf'],
+        'png': ['image/png'],
+        'jpg': ['image/jpeg'],
+        'jpeg': ['image/jpeg'],
+    }
+    if file.content_type not in allowed_mimes.get(ext, []):
+        current_app.logger.warning(f"MIME mismatch: {file.content_type} for .{ext} from user {current_user.id}")
+    
+    # Limit documents per project (max 20)
+    existing_count = ProjectDocument.query.filter_by(project_id=project_id).count()
+    if existing_count >= 20:
+        return jsonify({'success': False, 'error': 'Maximum 20 documents per project'}), 400
     
     # Save file
     filename = f"{uuid.uuid4().hex}_{secure_filename(file.filename)}"
@@ -387,7 +488,7 @@ def parse_document(project_id, doc_id):
         current_app.logger.error(f"Drawing parse error: {str(e)}")
         document.parse_error = str(e)
         db.session.commit()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to parse document. Please check the file and try again.'}), 500
 
 
 # =============================================================================
@@ -406,19 +507,33 @@ def add_material(project_id):
         return jsonify({'success': False, 'error': 'Project not found'}), 404
     
     data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    # Validate quantity
+    try:
+        quantity = max(float(data.get('quantity', 1)), 0.01)
+    except (TypeError, ValueError):
+        quantity = 1
+    
+    # Validate unit cost
+    try:
+        unit_cost = max(float(data.get('unit_cost', 0)), 0)
+    except (TypeError, ValueError):
+        unit_cost = 0
     
     material = ProjectMaterial(
         project_id=project.id,
         manually_added=True,
-        category=data.get('category', 'Uncategorised'),
-        part_number=data.get('part_number'),
-        description=data.get('description'),
-        manufacturer=data.get('manufacturer'),
-        quantity=data.get('quantity', 1),
-        unit=data.get('unit', 'each'),
-        unit_cost=data.get('unit_cost'),
+        category=str(data.get('category', 'Uncategorised') or 'Uncategorised')[:100].strip(),
+        part_number=str(data.get('part_number', '') or '')[:100].strip() or None,
+        description=str(data.get('description', '') or '')[:500].strip() or None,
+        manufacturer=str(data.get('manufacturer', '') or '')[:200].strip() or None,
+        quantity=quantity,
+        unit=str(data.get('unit', 'each') or 'each')[:20].strip(),
+        unit_cost=unit_cost,
         price_source='manual',
-        notes=data.get('notes'),
+        notes=str(data.get('notes', '') or '')[:1000].strip() or None,
     )
     
     material.calculate_totals(markup_percent=float(project.materials_markup_percent))
@@ -1251,7 +1366,7 @@ def generate_quote_pdf(project_id):
 
     except Exception as e:
         current_app.logger.error(f"Quote PDF generation error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to generate quote PDF. Please try again.'}), 500
 
 
 @bp.route('/api/projects/<int:project_id>/generate-materials-list', methods=['POST'])
@@ -1528,7 +1643,7 @@ def generate_materials_list(project_id):
 
     except Exception as e:
         current_app.logger.error(f"Materials list PDF error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500        
+        return jsonify({'success': False, 'error': 'Failed to generate materials list. Please try again.'}), 500        
 
 
 # =============================================================================
@@ -1570,7 +1685,7 @@ def render_document(project_id, doc_id):
                 import fitz  # PyMuPDF
                 if not os.path.exists(document.file_path):
                     current_app.logger.error(f"PDF file not found: {document.file_path}")
-                    return jsonify({'success': False, 'error': f'PDF file not found: {document.file_path}'}), 404
+                    return jsonify({'success': False, 'error': 'PDF file not found. Please re-upload the document.'}), 404
                 doc = fitz.open(document.file_path)
                 if page <= len(doc):
                     pg = doc[page - 1]
@@ -1583,7 +1698,7 @@ def render_document(project_id, doc_id):
             except ImportError:
                 return jsonify({'success': False, 'error': 'PyMuPDF not installed. Run: pip install PyMuPDF'}), 500
             except Exception as e:
-                current_app.logger.error(f"PDF render error for {document.file_path}: {e}"); return jsonify({'success': False, 'error': f'PDF render error: {str(e)}'}), 500
+                current_app.logger.error(f"PDF render error for {document.file_path}: {e}"); return jsonify({'success': False, 'error': 'Failed to render PDF. The file may be corrupted.'}), 500
 
         elif any(ext in mime for ext in ['png', 'jpeg', 'jpg']):
             # Already an image, just copy
@@ -1833,7 +1948,10 @@ def create_symbol_template(project_id, doc_id):
         return jsonify({'success': False, 'error': 'Document not found'}), 404
 
     data = request.get_json()
-    label = data.get('label', 'Unknown Symbol')
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    label = str(data.get('label', 'Unknown Symbol'))[:100].strip()
     crop_x = data.get('crop_x')
     crop_y = data.get('crop_y')
     crop_w = data.get('crop_w')
@@ -1842,6 +1960,28 @@ def create_symbol_template(project_id, doc_id):
 
     if not all([crop_x is not None, crop_y is not None, crop_w, crop_h]):
         return jsonify({'success': False, 'error': 'Crop coordinates required'}), 400
+
+    # Validate crop coordinates are numbers
+    try:
+        crop_x = int(crop_x)
+        crop_y = int(crop_y)
+        crop_w = int(crop_w)
+        crop_h = int(crop_h)
+        if crop_w <= 0 or crop_h <= 0 or crop_w > 2000 or crop_h > 2000:
+            return jsonify({'success': False, 'error': 'Invalid crop dimensions'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Crop coordinates must be numbers'}), 400
+    
+    # Validate base64 image size (max 5MB decoded)
+    if crop_image_b64:
+        raw_b64 = crop_image_b64.split(',')[1] if ',' in crop_image_b64 else crop_image_b64
+        if len(raw_b64) > 5 * 1024 * 1024 * 1.37:  # ~5MB after base64 encoding overhead
+            return jsonify({'success': False, 'error': 'Crop image too large'}), 400
+    
+    # Limit templates per document (max 50)
+    template_count = TakeoffSymbolTemplate.query.filter_by(project_id=project_id, document_id=doc_id).count()
+    if template_count >= 50:
+        return jsonify({'success': False, 'error': 'Maximum 50 symbol templates per document'}), 400
 
     symbol_type_id = f"sym_{uuid.uuid4().hex[:8]}"
 
@@ -2188,7 +2328,7 @@ def detect_symbols(project_id, doc_id):
 
     except Exception as e:
         current_app.logger.error(f"Symbol detection error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Symbol detection failed. Please try again.'}), 500
 
     # Delete old detections for this symbol type only
     TakeoffSymbolDetection.query.filter_by(
@@ -2449,10 +2589,7 @@ def detect_symbols_ai(project_id, doc_id):
     except Exception as e:
         current_app.logger.error(f"AI symbol detection failed: {e}")
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-
+        return jsonify({'success': False, 'error': 'AI symbol detection failed. Please try again.'}), 500
 # =============================================================================
 # TAKEOFF - MANUAL SYMBOL PLACEMENT
 # =============================================================================
