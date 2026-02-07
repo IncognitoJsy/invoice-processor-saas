@@ -410,6 +410,22 @@ function takeoffCanvas(projectId, documentId) {
             } catch (e) { this.notify('Delete error: ' + e.message, 'error'); }
         },
 
+        async deleteSymbolTemplate(tpl) {
+            if (!confirm(`Delete "${tpl.label}" and all its detections from this drawing?`)) return;
+            try {
+                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/symbol-templates/${tpl.id}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.detections = this.detections.filter(d => d.symbol_type_id !== tpl.symbol_type_id);
+                    this.symbolTemplates = this.symbolTemplates.filter(t => t.id !== tpl.id);
+                    this.notify(`Removed "${tpl.label}" and all detections`);
+                    this.redraw();
+                }
+            } catch (e) { this.notify('Delete error: ' + e.message, 'error'); }
+        },
+
         startManualPlace(tpl) {
             this.manualPlacingTemplate = tpl;
             this.mode = 'select'; // Stay in select mode but track we're placing
