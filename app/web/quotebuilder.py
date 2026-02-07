@@ -1351,10 +1351,9 @@ def detect_symbols(project_id, doc_id):
 
         current_app.logger.info(f"OpenCV found {len(detections)} candidates for '{template.label}'")
 
-        # Step 2: Use Claude Vision to verify each candidate
-        # Filters out similar-looking symbols (e.g. S vs M vs H in circles)
         api_key = current_app.config.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
-        
+
+        # Step 2: If OpenCV found candidates, verify with Claude Vision
         if detections and len(detections) > 0 and api_key:
             try:
                 import anthropic
@@ -1362,19 +1361,15 @@ def detect_symbols(project_id, doc_id):
 
                 client = anthropic.Anthropic(api_key=api_key)
 
-                # Load template image
                 template_b64 = None
                 if template.crop_image_path and os.path.exists(template.crop_image_path):
                     with open(template.crop_image_path, 'rb') as f:
                         template_b64 = base64.b64encode(f.read()).decode()
 
-                # Load drawing for cropping candidates
                 drawing = cv2.imread(render_path)
 
-                # Crop each candidate region
                 candidate_crops = []
                 for i, det in enumerate(detections):
-                    # Use a slightly larger crop for better context
                     pad = 10
                     bx = max(0, det.get('box_x', det['x'] - det['w']//2) - pad)
                     by = max(0, det.get('box_y', det['y'] - det['h']//2) - pad)
@@ -1388,7 +1383,6 @@ def detect_symbols(project_id, doc_id):
                     candidate_crops.append({'index': i, 'b64': crop_b64})
 
                 if candidate_crops and template_b64:
-                    # Send all candidates to Claude in one call
                     content = []
                     content.append({
                         "type": "text",
@@ -1397,24 +1391,19 @@ def detect_symbols(project_id, doc_id):
                                  f"Tell me which candidates VISUALLY match the reference symbol — "
                                  f"same shape AND same letter/text inside. "
                                  f"Candidates may be ROTATED at any angle. "
+                                 f"The text/annotation near symbols may be oriented differently from the symbol itself — ignore text orientation. "
                                  f"Similar symbols with DIFFERENT letters (e.g. S vs M vs H inside circles) are NOT matches.\n\n"
                                  f"Reply with ONLY a JSON array of matching candidate indices, e.g. [0, 2, 5]\n"
                                  f"If none match: []")
                     })
-                    content.append({
-                        "type": "text",
-                        "text": "Reference symbol:"
-                    })
+                    content.append({"type": "text", "text": "Reference symbol:"})
                     content.append({
                         "type": "image",
                         "source": {"type": "base64", "media_type": "image/png", "data": template_b64}
                     })
 
                     for cc in candidate_crops:
-                        content.append({
-                            "type": "text",
-                            "text": f"Candidate #{cc['index']}:"
-                        })
+                        content.append({"type": "text", "text": f"Candidate #{cc['index']}:"})
                         content.append({
                             "type": "image",
                             "source": {"type": "base64", "media_type": "image/png", "data": cc['b64']}
@@ -1444,82 +1433,145 @@ def detect_symbols(project_id, doc_id):
                     f"Claude Vision verification failed (keeping OpenCV results): {vision_err}"
                 )
 
-        # If OpenCV found nothing, try Claude Vision as a last resort to find symbols directly
-        elif len(detections) == 0 and api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
+        # Step 3: If OpenCV found few results, use Claude Vision GRID search
+        # This handles complex symbols where template matching fails
+        # (symbols with text that rotates separately, complex multi-part symbols)
+        if len(detections) < 2 and api_key and template.crop_image_path and os.path.exists(template.crop_image_path):
             try:
                 import anthropic
-                from PIL import Image as PILImage
+                import cv2
 
                 client = anthropic.Anthropic(api_key=api_key)
 
-                pil_img = PILImage.open(render_path)
-                img_width, img_height = pil_img.size
-                pil_img.close()
+                drawing = cv2.imread(render_path)
+                img_h, img_w = drawing.shape[:2]
 
-                with open(render_path, 'rb') as f:
-                    drawing_b64 = base64.b64encode(f.read()).decode()
                 with open(template.crop_image_path, 'rb') as f:
                     template_b64 = base64.b64encode(f.read()).decode()
 
-                exclude_prompt = ""
-                if exclude_area:
-                    exclude_prompt = (f"\nEXCLUDE the key/legend area at x={exclude_area['x']}, "
-                                      f"y={exclude_area['y']}, w={exclude_area['w']}, h={exclude_area['h']}.")
+                # Split drawing into overlapping tiles
+                # Each tile is ~800x800 px with 200px overlap
+                tile_size = 800
+                overlap_px = 200
+                step = tile_size - overlap_px
+                tiles = []
 
-                prompt = (
-                    f'The drawing is {img_width}x{img_height} pixels. '
-                    f'Find ALL instances of the reference symbol (second image). '
-                    f'Symbols may be rotated. Match by visual appearance only. '
-                    f'Return pixel coords in original image space.{exclude_prompt}\n'
-                    f'JSON array: [{{"x":..,"y":..,"confidence":..}}] or []'
-                )
+                for ty in range(0, img_h, step):
+                    for tx in range(0, img_w, step):
+                        tx2 = min(tx + tile_size, img_w)
+                        ty2 = min(ty + tile_size, img_h)
+                        if (tx2 - tx) < 200 or (ty2 - ty) < 200:
+                            continue
+                        # Skip tiles entirely within key area
+                        if exclude_area:
+                            ka = exclude_area
+                            if (tx >= ka['x'] and tx2 <= ka['x'] + ka['w'] and
+                                ty >= ka['y'] and ty2 <= ka['y'] + ka['h']):
+                                continue
+                        tiles.append({'x': tx, 'y': ty, 'x2': tx2, 'y2': ty2})
 
-                content = [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": drawing_b64}},
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": template_b64}},
-                    {"type": "text", "text": prompt},
-                ]
+                current_app.logger.info(f"Grid search: {len(tiles)} tiles for '{template.label}'")
 
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=2000,
-                    messages=[{"role": "user", "content": content}],
-                )
+                grid_detections = []
+                # Process tiles in batches (up to 4 tiles per API call)
+                batch_size = 4
+                for batch_start in range(0, len(tiles), batch_size):
+                    batch_tiles = tiles[batch_start:batch_start + batch_size]
 
-                response_text = response.content[0].text.strip()
-                current_app.logger.info(f"Claude Vision fallback for '{template.label}': {response_text[:300]}")
+                    content = []
+                    content.append({
+                        "type": "text",
+                        "text": (f"Find ALL instances of the reference symbol in the following {len(batch_tiles)} tile(s) "
+                                 f"from an electrical drawing. The symbol may be ROTATED at any angle on the drawing. "
+                                 f"Text annotations near symbols may face a different direction — this is normal, "
+                                 f"match by the GRAPHICAL SHAPE not text orientation.\n\n"
+                                 f"For each tile, report found symbols with x,y coordinates RELATIVE to that tile's top-left corner (in pixels).\n"
+                                 f"Reply with ONLY JSON: {{\"tile_0\": [{{\"x\":..., \"y\":...}}], \"tile_1\": [...], ...}}\n"
+                                 f"Use empty arrays for tiles with no matches. No other text.")
+                    })
+                    content.append({"type": "text", "text": "Reference symbol:"})
+                    content.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": template_b64}
+                    })
 
-                import re
-                json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-                if json_match:
-                    raw = json.loads(json_match.group())
-                    # Scale coordinates if needed (Claude resizes to ~1568px)
-                    claude_max = 1568
-                    if img_width > img_height:
-                        scale = img_width / claude_max
-                    else:
-                        scale = img_height / claude_max
-
-                    for d in raw:
-                        rx, ry = int(d['x']), int(d['y'])
-                        # If coords seem to be in Claude's resized space, scale up
-                        if max(rx, ry) < claude_max * 1.1 and max(img_width, img_height) > 2000:
-                            rx = int(rx * scale)
-                            ry = int(ry * scale)
-                        det_w = template.crop_w or 30
-                        det_h = template.crop_h or 30
-                        detections.append({
-                            'x': rx, 'y': ry,
-                            'w': det_w, 'h': det_h,
-                            'confidence': float(d.get('confidence', 0.8)),
-                            'box_x': int(rx - det_w/2),
-                            'box_y': int(ry - det_h/2),
-                            'source': 'claude_vision',
+                    for idx, tile in enumerate(batch_tiles):
+                        crop = drawing[tile['y']:tile['y2'], tile['x']:tile['x2']]
+                        _, buf = cv2.imencode('.png', crop)
+                        tile_b64 = base64.b64encode(buf).decode()
+                        tw = tile['x2'] - tile['x']
+                        th = tile['y2'] - tile['y']
+                        content.append({
+                            "type": "text",
+                            "text": f"Tile {idx} ({tw}x{th} pixels):"
                         })
-                    current_app.logger.info(f"Claude Vision fallback found {len(detections)} x {template.label}")
+                        content.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": tile_b64}
+                        })
 
-            except Exception as fallback_err:
-                current_app.logger.warning(f"Claude Vision fallback failed: {fallback_err}")
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=1000,
+                        messages=[{"role": "user", "content": content}],
+                    )
+
+                    response_text = response.content[0].text.strip()
+                    current_app.logger.info(f"Grid batch {batch_start//batch_size}: {response_text[:300]}")
+
+                    # Parse response
+                    import re
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            tile_results = json.loads(json_match.group())
+                            for idx, tile in enumerate(batch_tiles):
+                                key = f"tile_{idx}"
+                                if key in tile_results and tile_results[key]:
+                                    for det_item in tile_results[key]:
+                                        # Convert tile-relative coords to full image coords
+                                        abs_x = tile['x'] + int(det_item['x'])
+                                        abs_y = tile['y'] + int(det_item['y'])
+
+                                        # Skip if in key area
+                                        if exclude_area:
+                                            ka = exclude_area
+                                            if (ka['x'] <= abs_x <= ka['x'] + ka['w'] and
+                                                ka['y'] <= abs_y <= ka['y'] + ka['h']):
+                                                continue
+
+                                        grid_detections.append({
+                                            'x': abs_x, 'y': abs_y,
+                                            'w': template.crop_w or 30,
+                                            'h': template.crop_h or 30,
+                                            'confidence': 0.85,
+                                            'box_x': abs_x - (template.crop_w or 30) // 2,
+                                            'box_y': abs_y - (template.crop_h or 30) // 2,
+                                            'source': 'claude_grid',
+                                        })
+                        except json.JSONDecodeError:
+                            current_app.logger.warning(f"Failed to parse grid batch response")
+
+                # Deduplicate grid detections (merge within 50px of each other or existing)
+                merged = []
+                for gd in grid_detections:
+                    is_dup = False
+                    for existing in merged + detections:
+                        dist = ((gd['x'] - existing['x'])**2 + (gd['y'] - existing['y'])**2) ** 0.5
+                        if dist < 50:
+                            is_dup = True
+                            break
+                    if not is_dup:
+                        merged.append(gd)
+
+                if merged:
+                    current_app.logger.info(f"Grid search found {len(merged)} additional detections for '{template.label}'")
+                    detections.extend(merged)
+                else:
+                    current_app.logger.info(f"Grid search found no additional detections")
+
+            except Exception as grid_err:
+                current_app.logger.warning(f"Grid search failed: {grid_err}", exc_info=True)
 
     except Exception as e:
         current_app.logger.error(f"Symbol detection error: {e}", exc_info=True)
