@@ -612,9 +612,14 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         setMode(m) {
+            // Require scale calibration before measurement modes
+            if (['room', 'cable', 'area'].includes(m) && !this.scaleCalibrated) {
+                this.notify('⚠️ Please calibrate the scale first (Manual or Auto-scale) before measuring', 'error');
+                return;
+            }
             this.mode = m; this.cablePoints = []; this.areaPoints = []; this.roomPoints = [];
             this.scalePoints = []; this.drawingRoom = false; this.isDrawingBox = false;
-            this.settingKeyArea = false; this.redraw();
+            this.settingKeyArea = false; this.manualPlacingTemplate = null; this.redraw();
         },
 
         getCursor() {
