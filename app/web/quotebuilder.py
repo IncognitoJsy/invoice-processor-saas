@@ -7,6 +7,9 @@ from flask import Blueprint, render_template, jsonify, request, send_file, curre
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from functools import wraps
+from collections import defaultdict
+import time
 import os
 import uuid
 import json
@@ -24,11 +27,45 @@ bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
 
 _product_cache = {}
 
+# Simple in-memory rate limiter
+_rate_limit_store = defaultdict(list)
+
+
+def rate_limit(max_calls, period_seconds):
+    """Rate limit decorator. max_calls per period_seconds per user."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            user_id = current_user.id if current_user.is_authenticated else 'anon'
+            key = f"{f.__name__}:{user_id}"
+            now = time.time()
+            
+            # Clean old entries
+            _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < period_seconds]
+            
+            if len(_rate_limit_store[key]) >= max_calls:
+                return jsonify({'success': False, 'error': 'Too many requests. Please wait a moment.'}), 429
+            
+            _rate_limit_store[key].append(now)
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
 
 def _verify_project_ownership(project_id):
     """Verify the current user owns this project. Returns project or None."""
     from app.models.project import Project
     return Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+
+
+@bp.after_request
+def add_security_headers(response):
+    """Add security headers to all quotebuilder responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 
 # =============================================================================
@@ -105,6 +142,7 @@ def get_projects():
 
 @bp.route('/api/projects', methods=['POST'])
 @login_required
+@rate_limit(10, 60)
 def create_project():
     """Create a new project"""
     from app.models.project import Project
@@ -325,6 +363,7 @@ def delete_project(project_id):
 
 @bp.route('/api/projects/<int:project_id>/documents', methods=['POST'])
 @login_required
+@rate_limit(10, 60)
 def upload_document(project_id):
     """Upload drawings/specs to a project"""
     from app.models.project import Project, ProjectDocument
@@ -405,6 +444,7 @@ def upload_document(project_id):
 
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/parse', methods=['POST'])
 @login_required
+@rate_limit(3, 60)
 def parse_document(project_id, doc_id):
     """Parse a drawing using AI to extract materials (legacy - now use takeoff canvas instead)"""
     from app.models.project import Project, ProjectDocument, ProjectMaterial
@@ -618,6 +658,7 @@ def delete_material(project_id, material_id):
 
 @bp.route('/api/projects/<int:project_id>/match-prices', methods=['POST'])
 @login_required
+@rate_limit(5, 60)
 def match_prices_from_accounting(project_id):
     """Match materials to QuickBooks/Xero products and pull prices"""
     from app.models.project import Project, ProjectMaterial
@@ -1023,6 +1064,7 @@ def calculate_labour(project_id):
 
 @bp.route('/api/projects/<int:project_id>/generate-quote', methods=['POST'])
 @login_required
+@rate_limit(10, 60)
 def generate_quote_pdf(project_id):
     """Generate professional PDF quotation"""
     from app.models.project import Project, ProjectMaterial, ProjectLabour
@@ -1371,6 +1413,7 @@ def generate_quote_pdf(project_id):
 
 @bp.route('/api/projects/<int:project_id>/generate-materials-list', methods=['POST'])
 @login_required
+@rate_limit(10, 60)
 def generate_materials_list(project_id):
     """Generate internal materials list PDF with cost, sell and profit breakdown"""
     from app.models.project import Project, ProjectMaterial, ProjectLabour
@@ -2056,6 +2099,7 @@ def delete_symbol_template(project_id, doc_id, template_id):
 
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/detect-symbols', methods=['POST'])
 @login_required
+@rate_limit(5, 60)
 def detect_symbols(project_id, doc_id):
     """Run symbol detection on a drawing for a given symbol template."""
     from app.models.project import Project, ProjectDocument
@@ -2424,6 +2468,7 @@ def _point_in_polygon(x, y, polygon):
 
 @bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/detect-symbols-ai', methods=['POST'])
 @login_required
+@rate_limit(3, 60)
 def detect_symbols_ai(project_id, doc_id):
     """
     AI-powered symbol detection using Claude Vision API.
