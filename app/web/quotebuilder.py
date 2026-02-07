@@ -2178,16 +2178,41 @@ def detect_symbols(project_id, doc_id):
         current_app.logger.error(f"Symbol detection error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+    # Delete old detections for this symbol type only
     TakeoffSymbolDetection.query.filter_by(
         project_id=project_id,
         document_id=doc_id,
         symbol_type_id=template.symbol_type_id,
     ).delete()
+    db.session.flush()
+
+    # Get ALL existing detections on this document (from other symbol types)
+    # to prevent overlapping boxes from different scans
+    existing_detections = TakeoffSymbolDetection.query.filter_by(
+        project_id=project_id,
+        document_id=doc_id,
+        rejected=False,
+    ).all()
+    existing_coords = [(d.x, d.y) for d in existing_detections]
+
+    MIN_OVERLAP_DISTANCE = 30  # pixels - skip if another box is within this radius
 
     rooms = TakeoffRoom.query.filter_by(project_id=project_id, document_id=doc_id).all()
 
     new_detections = []
+    skipped = 0
     for det in detections:
+        # Check overlap with ANY existing detection (from other symbol types)
+        too_close = False
+        for ex, ey in existing_coords:
+            dist = ((det['x'] - ex) ** 2 + (det['y'] - ey) ** 2) ** 0.5
+            if dist < MIN_OVERLAP_DISTANCE:
+                too_close = True
+                break
+        if too_close:
+            skipped += 1
+            continue
+
         room_id = None
         for room in rooms:
             points = room.get_boundary_points()
@@ -2218,12 +2243,15 @@ def detect_symbols(project_id, doc_id):
         new_detections.append(detection)
 
     template.total_found = len(new_detections)
+    if skipped:
+        current_app.logger.info(f"Skipped {skipped} overlapping detections for {template.label}")
 
     db.session.commit()
 
     return jsonify({
         'success': True,
         'count': len(new_detections),
+        'skipped': skipped,
         'detections': [d.to_dict() for d in new_detections],
     })
 
@@ -2327,8 +2355,27 @@ def detect_symbols_ai(project_id, doc_id):
             detections = [d for d in detections if d.get('room_id') == room_id]
         
         # Save to database
+        # Get existing detections to prevent overlapping boxes
+        existing_detections = TakeoffSymbolDetection.query.filter_by(
+            project_id=project_id,
+            document_id=doc_id,
+            rejected=False,
+        ).all()
+        existing_coords = [(ed.x, ed.y) for ed in existing_detections]
+        MIN_OVERLAP_DISTANCE = 30
+
         saved_detections = []
         for d in detections:
+            # Skip if overlapping with existing detection
+            too_close = False
+            for ex, ey in existing_coords:
+                dist = ((d['x'] - ex) ** 2 + (d['y'] - ey) ** 2) ** 0.5
+                if dist < MIN_OVERLAP_DISTANCE:
+                    too_close = True
+                    break
+            if too_close:
+                continue
+
             # Find matching template by name
             template_id = d.get('template_id')
             template = None
