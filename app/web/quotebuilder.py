@@ -2111,11 +2111,11 @@ def create_area(project_id, doc_id):
 @login_required
 def link_ufh_product(project_id):
     """Link an underfloor heating mat product to an area measurement"""
-    from app.models.takeoff import TakeoffProject
-    from app.models.project_material import ProjectMaterial
+    from app.models.project import Project
+    from app.models.project import ProjectMaterial
     from app.extensions import db
 
-    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
         return jsonify({'success': False, 'error': 'Project not found'}), 404
 
@@ -2165,11 +2165,11 @@ def link_ufh_product(project_id):
 @login_required
 def add_accessory(project_id):
     """Add an accessory product to a symbol template"""
-    from app.models.takeoff import TakeoffProject
-    from app.models.project_material import ProjectMaterial
+    from app.models.project import Project
+    from app.models.project import ProjectMaterial
     from app.extensions import db
 
-    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
         return jsonify({'success': False, 'error': 'Project not found'}), 404
 
@@ -2224,11 +2224,11 @@ def add_accessory(project_id):
 @login_required
 def remove_accessory(project_id, material_id):
     """Remove an accessory material"""
-    from app.models.takeoff import TakeoffProject
-    from app.models.project_material import ProjectMaterial
+    from app.models.project import Project
+    from app.models.project import ProjectMaterial
     from app.extensions import db
 
-    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
         return jsonify({'success': False, 'error': 'Project not found'}), 404
 
@@ -2474,7 +2474,6 @@ def get_takeoff_state(project_id, doc_id):
         TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,
         TakeoffCableRun, TakeoffArea
     )
-    from app.models.project_material import ProjectMaterial
 
     project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
@@ -2490,26 +2489,30 @@ def get_takeoff_state(project_id, doc_id):
     cable_runs = TakeoffCableRun.query.filter_by(project_id=project_id, document_id=doc_id).all()
     areas = TakeoffArea.query.filter_by(project_id=project_id, document_id=doc_id).all()
 
-    # Accessories (materials linked to symbol templates)
-    accessory_materials = ProjectMaterial.query.filter(
-        ProjectMaterial.project_id == project_id,
-        ProjectMaterial.category.like('%- Accessories')
-    ).all()
-
+    # Accessories - wrapped in try/except so it never breaks the page
     accessories = []
-    for am in accessory_materials:
-        parent_label = am.category.replace(' - Accessories', '')
-        tpl = next((t for t in templates if t.label == parent_label), None)
-        accessories.append({
-            'id': am.id,
-            'template_id': tpl.id if tpl else None,
-            'symbol_type_id': tpl.symbol_type_id if tpl else None,
-            'part_number': am.part_number,
-            'description': am.description,
-            'quantity': am.quantity,
-            'unit_cost': float(am.unit_cost or 0),
-            'unit_sell': float(am.unit_sell or 0),
-        })
+    try:
+        from app.models.project import ProjectMaterial
+        accessory_materials = ProjectMaterial.query.filter(
+            ProjectMaterial.project_id == project_id,
+            ProjectMaterial.category.like('%- Accessories')
+        ).all()
+
+        for am in accessory_materials:
+            parent_label = am.category.replace(' - Accessories', '')
+            tpl = next((t for t in templates if t.label == parent_label), None)
+            accessories.append({
+                'id': am.id,
+                'template_id': tpl.id if tpl else None,
+                'symbol_type_id': tpl.symbol_type_id if tpl else None,
+                'part_number': am.part_number,
+                'description': am.description,
+                'quantity': am.quantity,
+                'unit_cost': float(am.unit_cost or 0),
+                'unit_sell': float(am.unit_sell or 0),
+            })
+    except Exception as e:
+        current_app.logger.warning(f"Failed to load accessories: {e}")
 
     scale = _get_scale(document)
 
