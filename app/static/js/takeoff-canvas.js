@@ -55,8 +55,10 @@ function takeoffCanvas(projectId, documentId) {
             { value: 'swa', label: 'SWA', color: '#6b7280' },
         ],
 
-        // Areas
+        // Areas (Underfloor Heating)
         areas: [], areaPoints: [],
+        pendingUfhArea: null, // Area waiting for product link
+        showUfhModal: false, ufhSearch: '', ufhResults: [], ufhSearching: false, selectedUfhProduct: null,
 
         // Summary
         showSummary: false,
@@ -686,18 +688,84 @@ function takeoffCanvas(projectId, documentId) {
 
         undoLastCablePoint() { this.cablePoints.pop(); this.redraw(); },
 
-        // ── Areas ────────────────────────────────────────────────
+        // ── Areas (Underfloor Heating) ─────────────────────────
         async finishArea() {
             if (this.areaPoints.length < 3) return;
             try {
                 const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/areas`, {
                     method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({points: this.areaPoints, label: `Area ${this.areas.length+1}`})
+                    body: JSON.stringify({points: this.areaPoints, label: `UFH Zone ${this.areas.length+1}`})
                 });
                 const d = await r.json();
-                if (d.success) { this.areas.push(d.area); this.notify(`Area: ${d.area.area_sqm}m²`); }
+                if (d.success) {
+                    this.areas.push(d.area);
+                    this.pendingUfhArea = d.area;
+                    this.showUfhModal = true;
+                    this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null;
+                    this.notify(`UFH Area: ${d.area.area_sqm}m²`);
+                    this.$nextTick(() => { const el = document.getElementById('ufhSearchInput'); if (el) el.focus(); });
+                }
             } catch(e) { this.notify('Error','error'); }
             this.areaPoints = []; this.redraw();
+        },
+
+        async searchUfhProducts() {
+            if (this.ufhSearch.length < 2) { this.ufhResults = []; return; }
+            this.ufhSearching = true;
+            try {
+                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.ufhSearch)}`);
+                const d = await r.json();
+                this.ufhResults = d.products || [];
+            } catch(e) { console.error(e); }
+            this.ufhSearching = false;
+        },
+
+        async confirmUfhProduct() {
+            if (!this.selectedUfhProduct || !this.pendingUfhArea) return;
+            const area = this.pendingUfhArea;
+            const product = this.selectedUfhProduct;
+            const areaSqm = parseFloat(area.area_sqm);
+            const maxMatSize = 15; // Max mat size in m²
+
+            // Calculate how many mats needed
+            // Available mat sizes (common): 1,2,3,4,5,6,7,8,9,10,12,15
+            const matSizes = [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+            let remaining = areaSqm;
+            const matsNeeded = [];
+
+            while (remaining > 0.5) {
+                // Find the largest mat that fits
+                let bestSize = matSizes.find(s => s <= remaining + 0.5) || 1;
+                matsNeeded.push(bestSize);
+                remaining -= bestSize;
+            }
+
+            this.showUfhModal = false;
+
+            // Create materials for each mat
+            try {
+                for (const matSize of matsNeeded) {
+                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-ufh`, {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({
+                            area_id: area.id,
+                            product: product,
+                            mat_size_sqm: matSize,
+                            total_area_sqm: areaSqm,
+                        })
+                    });
+                }
+                this.notify(`UFH: ${matsNeeded.length} mat(s) for ${areaSqm}m² — ${matsNeeded.join('m² + ')}m²`);
+            } catch(e) { this.notify('UFH link error: ' + e.message, 'error'); }
+
+            this.pendingUfhArea = null;
+            this.selectedUfhProduct = null;
+        },
+
+        cancelUfhModal() {
+            this.showUfhModal = false;
+            this.pendingUfhArea = null;
+            this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null;
         },
 
         // ── Helpers ──────────────────────────────────────────────

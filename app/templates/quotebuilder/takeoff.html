@@ -64,7 +64,7 @@
                     {id: 'symbol', label: 'Mark Symbol', icon: '🔍'},
                     {id: 'room', label: 'Draw Room', icon: '🏠'},
                     {id: 'cable', label: 'Cable Run', icon: '📏'},
-                    {id: 'area', label: 'Floor Area', icon: '📐'},
+                    {id: 'area', label: 'UFH Area', icon: '🔥'},
                     {id: 'scale', label: 'Calibrate', icon: '📐'},
                 ]">
                     <button @click="setMode(m.id)"
@@ -117,7 +117,7 @@
                 <button @click="cablePoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
             </div>
             <div x-show="mode === 'area'" class="mb-2 p-3 rounded-lg bg-purple-900/20 border border-purple-600/20 text-xs text-purple-300 flex items-center gap-2">
-                📐 Click around perimeter to measure floor area.
+                🔥 Click around the room perimeter to measure <strong>Underfloor Heating</strong> area. You'll then link a UFH mat product.
                 <button @click="finishArea()" :disabled="areaPoints.length < 3" class="ml-auto px-2 py-0.5 bg-purple-600 text-white rounded text-xs font-semibold disabled:opacity-50">Calculate ✓</button>
                 <button @click="areaPoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
             </div>
@@ -252,13 +252,56 @@
 
             <!-- Areas -->
             <div x-show="areas.length > 0" class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <h3 class="text-sm font-bold text-gray-200 mb-3">📐 Measured Areas</h3>
+                <h3 class="text-sm font-bold text-gray-200 mb-3">🔥 Underfloor Heating</h3>
                 <template x-for="area in areas" :key="area.id">
                     <div class="flex items-center justify-between py-1.5">
                         <span class="text-xs text-gray-300" x-text="area.label"></span>
                         <span class="text-xs font-bold text-purple-400" x-text="area.area_sqm + ' m²'"></span>
                     </div>
                 </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- UFH Product Modal -->
+    <div x-show="showUfhModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelUfhModal()">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">🔥 Link UFH Mat Product</h3>
+                <button @click="cancelUfhModal()" class="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div class="mb-4 p-3 bg-purple-900/20 border border-purple-600/20 rounded-lg">
+                <p class="text-sm text-purple-300">
+                    Area: <strong x-text="pendingUfhArea?.area_sqm + ' m²'"></strong>
+                </p>
+                <p class="text-xs text-gray-400 mt-1" x-show="pendingUfhArea?.area_sqm > 15">
+                    ⚠ Larger than 15m² — multiple mats will be calculated automatically
+                </p>
+            </div>
+            <input id="ufhSearchInput" type="text" x-model="ufhSearch" @input.debounce.300ms="searchUfhProducts()"
+                   placeholder="Search UFH mat product..."
+                   class="w-full px-4 py-2 mb-3 rounded-lg border border-gray-600 bg-gray-800 text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            <div class="max-h-48 overflow-y-auto space-y-1 mb-4">
+                <template x-for="p in ufhResults" :key="p.id || p.sku">
+                    <div @click="selectedUfhProduct = p"
+                         :class="selectedUfhProduct?.id === p.id ? 'bg-purple-600/30 border-purple-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
+                         class="p-2 rounded border cursor-pointer transition">
+                        <div class="text-xs font-bold text-purple-400" x-text="p.sku || p.name"></div>
+                        <div class="text-[10px] text-gray-400" x-text="p.name || p.description"></div>
+                        <div class="text-[10px] text-gray-500">
+                            Cost: <span class="text-red-400" x-text="'£' + (p.purchase_cost || 0).toFixed(2)"></span>
+                            → Sell: <span class="text-green-400" x-text="'£' + (p.unit_price || 0).toFixed(2)"></span>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="ufhSearch.length >= 2 && !ufhSearching && ufhResults.length === 0" class="text-xs text-gray-500 text-center py-4">No products found</p>
+            </div>
+            <div class="flex gap-2">
+                <button @click="cancelUfhModal()" class="flex-1 px-3 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600">Cancel</button>
+                <button @click="confirmUfhProduct()" :disabled="!selectedUfhProduct"
+                        class="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 disabled:opacity-50">
+                    Link UFH Mat
+                </button>
             </div>
         </div>
     </div>
