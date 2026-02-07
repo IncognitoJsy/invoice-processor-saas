@@ -2158,6 +2158,143 @@ def link_ufh_product(project_id):
     })    
 
 
+@bp.route('/api/projects/<int:project_id>/link-ufh', methods=['POST'])
+@login_required
+def link_ufh_product(project_id):
+    """Link an underfloor heating mat product to an area measurement"""
+    from app.models.takeoff import TakeoffProject
+    from app.models.project_material import ProjectMaterial
+    from app.extensions import db
+
+    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    data = request.get_json()
+    product = data.get('product', {})
+    mat_size = data.get('mat_size_sqm', 0)
+    total_area = data.get('total_area_sqm', 0)
+    area_id = data.get('area_id')
+
+    category = f"Underfloor Heating - {mat_size}m²"
+
+    material = ProjectMaterial(
+        project_id=project_id,
+        category=category,
+        part_number=product.get('sku'),
+        description=f"{product.get('description') or product.get('name')} ({mat_size}m² mat)",
+        quantity=1,
+        unit='each',
+        unit_cost=product.get('purchase_cost'),
+        price_source='quickbooks' if product.get('id') else 'manual',
+        price_verified=True if product.get('id') else False,
+        qb_item_id=product.get('id'),
+        qb_item_name=product.get('name'),
+    )
+    material.calculate_totals(markup_percent=float(project.materials_markup_percent))
+    qb_sell = product.get('unit_price', 0)
+    if qb_sell and qb_sell > float(material.unit_sell or 0):
+        material.unit_sell = qb_sell
+        material.total_sell = round(1 * qb_sell, 2)
+
+    db.session.add(material)
+    project.recalculate_totals()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'material_id': material.id,
+        'mat_size_sqm': mat_size,
+        'total_area_sqm': total_area,
+    })
+
+
+# =============================================================================
+# TAKEOFF - ACCESSORIES
+# =============================================================================
+
+@bp.route('/api/projects/<int:project_id>/accessories', methods=['POST'])
+@login_required
+def add_accessory(project_id):
+    """Add an accessory product to a symbol template"""
+    from app.models.takeoff import TakeoffProject
+    from app.models.project_material import ProjectMaterial
+    from app.extensions import db
+
+    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    data = request.get_json()
+    product = data.get('product', {})
+    quantity = data.get('quantity', 1)
+    template_id = data.get('template_id')
+    symbol_type_id = data.get('symbol_type_id')
+    parent_label = data.get('parent_label', '')
+
+    category = f"{parent_label} - Accessories"
+
+    material = ProjectMaterial(
+        project_id=project_id,
+        category=category,
+        part_number=product.get('sku'),
+        description=product.get('description') or product.get('name'),
+        quantity=quantity,
+        unit='each',
+        unit_cost=product.get('purchase_cost'),
+        price_source='quickbooks' if product.get('id') else 'manual',
+        price_verified=True if product.get('id') else False,
+        qb_item_id=product.get('id'),
+        qb_item_name=product.get('name'),
+    )
+    material.calculate_totals(markup_percent=float(project.materials_markup_percent))
+    qb_sell = product.get('unit_price', 0)
+    if qb_sell and qb_sell > float(material.unit_sell or 0):
+        material.unit_sell = qb_sell
+        material.total_sell = round(quantity * qb_sell, 2)
+
+    db.session.add(material)
+    project.recalculate_totals()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'accessory': {
+            'id': material.id,
+            'template_id': template_id,
+            'symbol_type_id': symbol_type_id,
+            'part_number': material.part_number,
+            'description': material.description,
+            'quantity': material.quantity,
+            'unit_cost': float(material.unit_cost or 0),
+            'unit_sell': float(material.unit_sell or 0),
+        }
+    })
+
+
+@bp.route('/api/projects/<int:project_id>/accessories/<int:material_id>', methods=['DELETE'])
+@login_required
+def remove_accessory(project_id, material_id):
+    """Remove an accessory material"""
+    from app.models.takeoff import TakeoffProject
+    from app.models.project_material import ProjectMaterial
+    from app.extensions import db
+
+    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    material = ProjectMaterial.query.filter_by(id=material_id, project_id=project_id).first()
+    if not material:
+        return jsonify({'success': False, 'error': 'Material not found'}), 404
+
+    db.session.delete(material)
+    project.recalculate_totals()
+    db.session.commit()
+
+    return jsonify({'success': True})
+        
+
 # =============================================================================
 # TAKEOFF - PRODUCT SEARCH
 # =============================================================================
@@ -2389,6 +2526,7 @@ def get_takeoff_state(project_id, doc_id):
         TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,
         TakeoffCableRun, TakeoffArea
     )
+    from app.models.project_material import ProjectMaterial
 
     project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
@@ -2404,6 +2542,27 @@ def get_takeoff_state(project_id, doc_id):
     cable_runs = TakeoffCableRun.query.filter_by(project_id=project_id, document_id=doc_id).all()
     areas = TakeoffArea.query.filter_by(project_id=project_id, document_id=doc_id).all()
 
+    # Accessories (materials linked to symbol templates)
+    accessory_materials = ProjectMaterial.query.filter(
+        ProjectMaterial.project_id == project_id,
+        ProjectMaterial.category.like('%- Accessories')
+    ).all()
+
+    accessories = []
+    for am in accessory_materials:
+        parent_label = am.category.replace(' - Accessories', '')
+        tpl = next((t for t in templates if t.label == parent_label), None)
+        accessories.append({
+            'id': am.id,
+            'template_id': tpl.id if tpl else None,
+            'symbol_type_id': tpl.symbol_type_id if tpl else None,
+            'part_number': am.part_number,
+            'description': am.description,
+            'quantity': am.quantity,
+            'unit_cost': float(am.unit_cost or 0),
+            'unit_sell': float(am.unit_sell or 0),
+        })
+
     scale = _get_scale(document)
 
     return jsonify({
@@ -2415,6 +2574,7 @@ def get_takeoff_state(project_id, doc_id):
         'detections': [d.to_dict() for d in detections],
         'cable_runs': [r.to_dict() for r in cable_runs],
         'areas': [a.to_dict() for a in areas],
+        'accessories': accessories,
         'summary': {
             'total_rooms': len(rooms),
             'total_detections': len(detections),

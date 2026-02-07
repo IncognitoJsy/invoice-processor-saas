@@ -33,9 +33,19 @@ function takeoffCanvas(projectId, documentId) {
         // Product search (modal after symbol box)
         showProductModal: false, pendingBox: null,
         productSearch: '', productResults: [], productSearching: false, selectedProduct: null,
+        // Accessories (shared by symbol and UFH flows)
+        accessories: [], // Array of selected accessory products
+        accessorySearch: '', accessoryResults: [], accessorySearching: false,
+        modalStep: 'primary', // 'primary' | 'accessories'
 
         // Product link from sidebar
         linkingTemplate: null,
+
+        // Accessories
+        accessories: [], // {id, template_id, symbol_type_id, part_number, description, quantity, ...}
+        showAccessoryModal: false, accessoryTemplate: null,
+        accSearch: '', accResults: [], accSearching: false, selectedAccessory: null,
+        accApplyMode: 'all', accCustomQty: 1,
 
         // Key area
         keyArea: null, settingKeyArea: false,
@@ -57,8 +67,10 @@ function takeoffCanvas(projectId, documentId) {
 
         // Areas (Underfloor Heating)
         areas: [], areaPoints: [],
-        pendingUfhArea: null, // Area waiting for product link
+        pendingUfhArea: null,
         showUfhModal: false, ufhSearch: '', ufhResults: [], ufhSearching: false, selectedUfhProduct: null,
+        ufhStep: 'primary', // 'primary' | 'accessories'
+        ufhAccessories: [],
 
         // Summary
         showSummary: false,
@@ -97,6 +109,7 @@ function takeoffCanvas(projectId, documentId) {
                     }));
                     this.cableRuns = d.cable_runs || [];
                     this.areas = d.areas || [];
+                    this.accessories = d.accessories || [];
                     this.scale = d.scale || 50;
                     if (d.scale && d.scale !== 50) this.scaleCalibrated = true;
                     // Debug: log template linking status
@@ -347,13 +360,46 @@ function takeoffCanvas(projectId, documentId) {
         onSymbolBoxDrawn(box) {
             this.pendingBox = { ...box };
             this.showProductModal = true;
+            this.modalStep = 'primary';
             this.productSearch = ''; this.productResults = []; this.selectedProduct = null;
+            this.accessories = []; this.accessorySearch = ''; this.accessoryResults = [];
             this.$nextTick(() => { const el = document.getElementById('productSearchInput'); if (el) el.focus(); });
+        },
+
+        goToAccessories() {
+            if (!this.selectedProduct) return;
+            this.modalStep = 'accessories';
+            this.accessorySearch = ''; this.accessoryResults = [];
+            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
+        },
+
+        async searchAccessories() {
+            if (this.accessorySearch.length < 2) { this.accessoryResults = []; return; }
+            this.accessorySearching = true;
+            try {
+                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.accessorySearch)}`);
+                const d = await r.json();
+                this.accessoryResults = d.products || [];
+            } catch(e) { console.error(e); }
+            this.accessorySearching = false;
+        },
+
+        addAccessory(product) {
+            // Don't add duplicates
+            if (this.accessories.find(a => a.id === product.id)) return;
+            this.accessories.push({...product, qty: 1});
+            this.accessorySearch = ''; this.accessoryResults = [];
+            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
+        },
+
+        removeAccessory(index) {
+            this.accessories.splice(index, 1);
         },
 
         async confirmSymbolWithProduct() {
             if (!this.selectedProduct || !this.pendingBox) return;
             const box = this.pendingBox, product = this.selectedProduct;
+            const accs = [...this.accessories];
 
             // Crop image
             const cc = document.createElement('canvas');
@@ -374,7 +420,7 @@ function takeoffCanvas(projectId, documentId) {
                     const tmpl = data.template;
                     this.symbolTemplates.push(tmpl);
 
-                    // Link product (saves product info on template, but no materials yet since 0 detections)
+                    // Link primary product
                     const linkResp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
                         method: 'POST', headers: {'Content-Type':'application/json'},
                         body: JSON.stringify({ template_id: tmpl.id, product })
@@ -395,12 +441,25 @@ function takeoffCanvas(projectId, documentId) {
                         body: JSON.stringify({ template_id: tmpl.id, product })
                     });
 
+                    // Link accessories (each gets same quantity as detected symbols)
+                    for (const acc of accs) {
+                        await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
+                            method: 'POST', headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({
+                                template_id: tmpl.id,
+                                product: acc,
+                                is_accessory: true,
+                            })
+                        });
+                    }
+
                     // Reload to get updated template with linked product info
                     await this.loadState();
                     this.redraw();
                 }
             } catch (e) { this.notify('Error: ' + e.message, 'error'); }
             this.pendingBox = null;
+            this.accessories = [];
         },
 
         cancelProductModal() {
@@ -701,7 +760,9 @@ function takeoffCanvas(projectId, documentId) {
                     this.areas.push(d.area);
                     this.pendingUfhArea = d.area;
                     this.showUfhModal = true;
+                    this.ufhStep = 'primary';
                     this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null;
+                    this.ufhAccessories = [];
                     this.notify(`UFH Area: ${d.area.area_sqm}m²`);
                     this.$nextTick(() => { const el = document.getElementById('ufhSearchInput'); if (el) el.focus(); });
                 }
@@ -720,21 +781,34 @@ function takeoffCanvas(projectId, documentId) {
             this.ufhSearching = false;
         },
 
+        goToUfhAccessories() {
+            if (!this.selectedUfhProduct) return;
+            this.ufhStep = 'accessories';
+            this.accessorySearch = ''; this.accessoryResults = [];
+            this.$nextTick(() => { const el = document.getElementById('ufhAccessorySearchInput'); if (el) el.focus(); });
+        },
+
+        addUfhAccessory(product) {
+            if (this.ufhAccessories.find(a => a.id === product.id)) return;
+            this.ufhAccessories.push({...product, qty: 1});
+            this.accessorySearch = ''; this.accessoryResults = [];
+        },
+
+        removeUfhAccessory(index) {
+            this.ufhAccessories.splice(index, 1);
+        },
+
         async confirmUfhProduct() {
             if (!this.selectedUfhProduct || !this.pendingUfhArea) return;
             const area = this.pendingUfhArea;
             const product = this.selectedUfhProduct;
+            const accs = [...this.ufhAccessories];
             const areaSqm = parseFloat(area.area_sqm);
-            const maxMatSize = 15; // Max mat size in m²
 
-            // Calculate how many mats needed
-            // Available mat sizes (common): 1,2,3,4,5,6,7,8,9,10,12,15
             const matSizes = [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
             let remaining = areaSqm;
             const matsNeeded = [];
-
             while (remaining > 0.5) {
-                // Find the largest mat that fits
                 let bestSize = matSizes.find(s => s <= remaining + 0.5) || 1;
                 matsNeeded.push(bestSize);
                 remaining -= bestSize;
@@ -742,30 +816,102 @@ function takeoffCanvas(projectId, documentId) {
 
             this.showUfhModal = false;
 
-            // Create materials for each mat
             try {
                 for (const matSize of matsNeeded) {
                     await fetch(`/quotebuilder/api/projects/${this.projectId}/link-ufh`, {
                         method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({
-                            area_id: area.id,
-                            product: product,
-                            mat_size_sqm: matSize,
-                            total_area_sqm: areaSqm,
-                        })
+                        body: JSON.stringify({ area_id: area.id, product, mat_size_sqm: matSize, total_area_sqm: areaSqm })
                     });
                 }
-                this.notify(`UFH: ${matsNeeded.length} mat(s) for ${areaSqm}m² — ${matsNeeded.join('m² + ')}m²`);
+                for (const acc of accs) {
+                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-ufh`, {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({ area_id: area.id, product: acc, mat_size_sqm: 0, total_area_sqm: areaSqm, is_accessory: true })
+                    });
+                }
+                const accText = accs.length > 0 ? ` + ${accs.length} accessories` : '';
+                this.notify(`UFH: ${matsNeeded.length} mat(s) for ${areaSqm}m²${accText}`);
             } catch(e) { this.notify('UFH link error: ' + e.message, 'error'); }
 
-            this.pendingUfhArea = null;
-            this.selectedUfhProduct = null;
+            this.pendingUfhArea = null; this.selectedUfhProduct = null; this.ufhAccessories = [];
         },
 
         cancelUfhModal() {
-            this.showUfhModal = false;
-            this.pendingUfhArea = null;
-            this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null;
+            this.showUfhModal = false; this.pendingUfhArea = null;
+            this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null; this.ufhAccessories = [];
+        },
+
+        // ── Accessories ──────────────────────────────────────────
+        getAccessories(tpl) {
+            return this.accessories.filter(a => a.template_id === tpl.id);
+        },
+
+        openAccessoryModal(tpl) {
+            this.accessoryTemplate = tpl;
+            this.showAccessoryModal = true;
+            this.accSearch = ''; this.accResults = []; this.selectedAccessory = null;
+            this.accApplyMode = 'all'; this.accCustomQty = 1;
+            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
+        },
+
+        cancelAccessoryModal() {
+            this.showAccessoryModal = false; this.accessoryTemplate = null;
+            this.accSearch = ''; this.accResults = []; this.selectedAccessory = null;
+        },
+
+        async searchAccessoryProducts() {
+            if (this.accSearch.length < 2) { this.accResults = []; return; }
+            this.accSearching = true;
+            try {
+                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.accSearch)}`);
+                const d = await r.json();
+                this.accResults = d.products || [];
+            } catch(e) { console.error(e); }
+            this.accSearching = false;
+        },
+
+        async confirmAccessory() {
+            if (!this.selectedAccessory || !this.accessoryTemplate) return;
+            const tpl = this.accessoryTemplate;
+            const product = this.selectedAccessory;
+            const qty = this.accApplyMode === 'all' ? (tpl.total_found || 1) : (this.accCustomQty || 1);
+
+            this.showAccessoryModal = false;
+
+            try {
+                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/accessories`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        template_id: tpl.id,
+                        symbol_type_id: tpl.symbol_type_id,
+                        product: product,
+                        quantity: qty,
+                        parent_label: tpl.label,
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.accessories.push(data.accessory);
+                    this.notify(`Added ${product.sku || product.name} ×${qty}`);
+                } else {
+                    this.notify('Error: ' + (data.error || ''), 'error');
+                }
+            } catch(e) { this.notify('Error: ' + e.message, 'error'); }
+
+            this.accessoryTemplate = null; this.selectedAccessory = null;
+        },
+
+        async removeAccessory(acc) {
+            try {
+                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/accessories/${acc.id}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.accessories = this.accessories.filter(a => a.id !== acc.id);
+                    this.notify('Accessory removed');
+                }
+            } catch(e) { this.notify('Error: ' + e.message, 'error'); }
         },
 
         // ── Helpers ──────────────────────────────────────────────

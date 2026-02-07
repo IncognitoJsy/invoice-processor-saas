@@ -192,6 +192,27 @@
                                 ✕ Cancel placing
                             </button>
                         </div>
+                        <!-- Accessories -->
+                        <div x-show="tpl.default_part_number" class="mt-2 border-t border-gray-700 pt-2">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-[10px] font-semibold text-gray-400 uppercase">Accessories</span>
+                                <button @click="openAccessoryModal(tpl)" class="text-[10px] text-orange-400 hover:text-orange-300">+ Add accessory</button>
+                            </div>
+                            <template x-for="acc in getAccessories(tpl)" :key="acc.id">
+                                <div class="flex items-center justify-between py-0.5">
+                                    <div class="text-[10px] text-gray-400">
+                                        <span class="text-orange-400" x-text="acc.part_number"></span>
+                                        <span class="ml-1" x-text="acc.description?.substring(0, 30)"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-[10px] text-gray-500" x-text="'×' + acc.quantity"></span>
+                                        <button @click="removeAccessory(acc)" class="text-gray-600 hover:text-red-400">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -263,30 +284,29 @@
         </div>
     </div>
 
-    <!-- UFH Product Modal -->
-    <div x-show="showUfhModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelUfhModal()">
+    <!-- Accessory Modal -->
+    <div x-show="showAccessoryModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelAccessoryModal()">
         <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-bold text-white">🔥 Link UFH Mat Product</h3>
-                <button @click="cancelUfhModal()" class="text-gray-400 hover:text-white">✕</button>
+                <h3 class="text-lg font-bold text-white">🔧 Add Accessory</h3>
+                <button @click="cancelAccessoryModal()" class="text-gray-400 hover:text-white">✕</button>
             </div>
-            <div class="mb-4 p-3 bg-purple-900/20 border border-purple-600/20 rounded-lg">
-                <p class="text-sm text-purple-300">
-                    Area: <strong x-text="pendingUfhArea?.area_sqm + ' m²'"></strong>
-                </p>
-                <p class="text-xs text-gray-400 mt-1" x-show="pendingUfhArea?.area_sqm > 15">
-                    ⚠ Larger than 15m² — multiple mats will be calculated automatically
+            <div class="mb-3 p-3 bg-orange-900/20 border border-orange-600/20 rounded-lg">
+                <p class="text-sm text-orange-300">
+                    For: <strong x-text="accessoryTemplate?.label"></strong>
+                    (<span x-text="accessoryTemplate?.total_found || 0"></span> found)
                 </p>
             </div>
-            <input id="ufhSearchInput" type="text" x-model="ufhSearch" @input.debounce.300ms="searchUfhProducts()"
-                   placeholder="Search UFH mat product..."
-                   class="w-full px-4 py-2 mb-3 rounded-lg border border-gray-600 bg-gray-800 text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-            <div class="max-h-48 overflow-y-auto space-y-1 mb-4">
-                <template x-for="p in ufhResults" :key="p.id || p.sku">
-                    <div @click="selectedUfhProduct = p"
-                         :class="selectedUfhProduct?.id === p.id ? 'bg-purple-600/30 border-purple-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
+            <!-- Product search -->
+            <input id="accessorySearchInput" type="text" x-model="accSearch" @input.debounce.300ms="searchAccessoryProducts()"
+                   placeholder="Search accessory product..."
+                   class="w-full px-4 py-2 mb-3 rounded-lg border border-gray-600 bg-gray-800 text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+            <div class="max-h-40 overflow-y-auto space-y-1 mb-3">
+                <template x-for="p in accResults" :key="p.id || p.sku">
+                    <div @click="selectedAccessory = p"
+                         :class="selectedAccessory?.id === p.id ? 'bg-orange-600/30 border-orange-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
                          class="p-2 rounded border cursor-pointer transition">
-                        <div class="text-xs font-bold text-purple-400" x-text="p.sku || p.name"></div>
+                        <div class="text-xs font-bold text-orange-400" x-text="p.sku || p.name"></div>
                         <div class="text-[10px] text-gray-400" x-text="p.name || p.description"></div>
                         <div class="text-[10px] text-gray-500">
                             Cost: <span class="text-red-400" x-text="'£' + (p.purchase_cost || 0).toFixed(2)"></span>
@@ -294,14 +314,113 @@
                         </div>
                     </div>
                 </template>
-                <p x-show="ufhSearch.length >= 2 && !ufhSearching && ufhResults.length === 0" class="text-xs text-gray-500 text-center py-4">No products found</p>
+                <p x-show="accSearch.length >= 2 && !accSearching && accResults.length === 0" class="text-xs text-gray-500 text-center py-4">No products found</p>
+            </div>
+            <!-- Apply to options -->
+            <div x-show="selectedAccessory" class="mb-3 p-3 bg-gray-800 rounded-lg">
+                <p class="text-xs text-gray-400 mb-2">Apply to:</p>
+                <div class="flex gap-2">
+                    <button @click="accApplyMode = 'all'"
+                            :class="accApplyMode === 'all' ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300'"
+                            class="flex-1 px-2 py-1.5 rounded text-xs font-semibold transition">
+                        All ×<span x-text="accessoryTemplate?.total_found || 0"></span>
+                    </button>
+                    <button @click="accApplyMode = 'custom'"
+                            :class="accApplyMode === 'custom' ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300'"
+                            class="flex-1 px-2 py-1.5 rounded text-xs font-semibold transition">
+                        Custom qty
+                    </button>
+                </div>
+                <div x-show="accApplyMode === 'custom'" class="mt-2">
+                    <input type="number" x-model.number="accCustomQty" min="1" :max="accessoryTemplate?.total_found || 999"
+                           class="w-full px-3 py-1.5 rounded border border-gray-600 bg-gray-700 text-white text-xs">
+                </div>
             </div>
             <div class="flex gap-2">
-                <button @click="cancelUfhModal()" class="flex-1 px-3 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600">Cancel</button>
-                <button @click="confirmUfhProduct()" :disabled="!selectedUfhProduct"
-                        class="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 disabled:opacity-50">
-                    Link UFH Mat
+                <button @click="cancelAccessoryModal()" class="flex-1 px-3 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600">Cancel</button>
+                <button @click="confirmAccessory()" :disabled="!selectedAccessory"
+                        class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+                    Add Accessory
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UFH Product Modal -->
+    <div x-show="showUfhModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelUfhModal()">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div class="p-5 border-b border-gray-700">
+                <h3 class="text-base font-bold text-white">🔥 <span x-text="ufhStep === 'primary' ? 'Link UFH Mat Product' : 'Add UFH Accessories'"></span></h3>
+                <div class="mt-2 p-2 bg-purple-900/20 border border-purple-600/20 rounded">
+                    <p class="text-sm text-purple-300">Area: <strong x-text="pendingUfhArea?.area_sqm + ' m²'"></strong></p>
+                    <p class="text-xs text-gray-400 mt-0.5" x-show="pendingUfhArea?.area_sqm > 15">⚠ Multiple mats will be calculated automatically</p>
+                </div>
+            </div>
+            <!-- Step 1: UFH mat product -->
+            <div x-show="ufhStep === 'primary'" class="p-5 overflow-y-auto flex-1">
+                <input id="ufhSearchInput" type="text" x-model="ufhSearch" @input.debounce.300ms="searchUfhProducts()"
+                       placeholder="Search UFH mat product..."
+                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-purple-500 outline-none">
+                <div class="mt-2 max-h-40 overflow-y-auto space-y-1">
+                    <template x-for="p in ufhResults" :key="p.id || p.sku">
+                        <div @click="selectedUfhProduct = p"
+                             :class="selectedUfhProduct?.id === p.id ? 'bg-purple-600/30 border-purple-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
+                             class="p-2 rounded border cursor-pointer transition">
+                            <div class="text-xs font-bold text-purple-400" x-text="p.sku || p.name"></div>
+                            <div class="text-[10px] text-gray-400" x-text="p.name || p.description"></div>
+                            <div class="text-[10px]">Cost: <span class="text-red-400" x-text="'£' + (p.purchase_cost || 0).toFixed(2)"></span> → Sell: <span class="text-green-400" x-text="'£' + (p.unit_price || 0).toFixed(2)"></span></div>
+                        </div>
+                    </template>
+                </div>
+                <p x-show="ufhSearch.length >= 2 && !ufhSearching && ufhResults.length === 0" class="text-xs text-gray-500 text-center py-3">No products found</p>
+            </div>
+            <!-- Step 2: UFH accessories -->
+            <div x-show="ufhStep === 'accessories'" class="p-5 overflow-y-auto flex-1">
+                <div class="mb-3 p-2 bg-purple-600/10 border border-purple-600/30 rounded text-xs text-purple-300">
+                    Mat: <strong x-text="selectedUfhProduct?.name"></strong>
+                </div>
+                <input type="text" id="ufhAccessorySearchInput" x-model="accessorySearch" @input.debounce.300ms="searchAccessories()"
+                       placeholder="Search accessories (neostat, thermostat cable...)"
+                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-purple-500 outline-none">
+                <div class="mt-2 max-h-32 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="accessoryResults.length > 0 || accessorySearching">
+                    <template x-for="p in accessoryResults" :key="p.id">
+                        <div @click="addUfhAccessory(p)" class="p-2 cursor-pointer border-b border-gray-800 hover:bg-gray-800 transition">
+                            <div class="flex justify-between">
+                                <span class="text-xs font-bold text-green-400" x-text="p.sku || p.name"></span>
+                                <span class="text-xs text-amber-400" x-text="'£' + (p.purchase_cost||0).toFixed(2)"></span>
+                            </div>
+                            <div class="text-[10px] text-gray-400" x-text="p.name"></div>
+                        </div>
+                    </template>
+                    <div x-show="accessorySearching" class="text-xs text-gray-500 py-3 text-center">Searching...</div>
+                </div>
+                <div x-show="ufhAccessories.length > 0" class="mt-3">
+                    <div class="text-[10px] uppercase text-green-400 font-bold mb-1">Accessories added:</div>
+                    <template x-for="(acc, i) in ufhAccessories" :key="acc.id">
+                        <div class="flex items-center justify-between p-2 bg-green-900/20 border border-green-700/30 rounded mb-1">
+                            <div>
+                                <span class="text-xs font-semibold text-green-400" x-text="acc.sku || acc.name"></span>
+                                <span class="text-[10px] text-gray-400 ml-1" x-text="acc.name"></span>
+                            </div>
+                            <button @click="removeUfhAccessory(i)" class="text-red-400 hover:text-red-300 text-xs">✕</button>
+                        </div>
+                    </template>
+                </div>
+                <p x-show="ufhAccessories.length === 0" class="text-xs text-gray-500 mt-3 text-center">No accessories added yet — search above or skip</p>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-end gap-2">
+                <button @click="cancelUfhModal()" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
+                <template x-if="ufhStep === 'primary'">
+                    <button @click="goToUfhAccessories()" :disabled="!selectedUfhProduct" class="px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-semibold disabled:opacity-50">Next → Accessories</button>
+                </template>
+                <template x-if="ufhStep === 'accessories'">
+                    <div class="flex gap-2">
+                        <button @click="ufhStep = 'primary'" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">← Back</button>
+                        <button @click="confirmUfhProduct()" class="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-semibold">
+                            ✓ Confirm <span x-show="ufhAccessories.length > 0" x-text="'(' + (1 + ufhAccessories.length) + ' products)'"></span>
+                        </button>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -397,16 +516,17 @@
 
     <!-- Product Search Modal (after drawing symbol box) -->
     <div x-show="showProductModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="cancelProductModal()">
-        <div class="bg-gray-900 border border-gray-700 rounded-xl w-[420px] max-h-[70vh] flex flex-col">
+        <div class="bg-gray-900 border border-gray-700 rounded-xl w-[440px] max-h-[80vh] flex flex-col">
             <div class="p-5 border-b border-gray-700">
-                <h3 class="text-base font-bold text-white">🔌 Link Symbol to Product</h3>
-                <p class="text-xs text-gray-400 mt-1">Search your QuickBooks / Xero products</p>
+                <h3 class="text-base font-bold text-white">🔌 <span x-text="modalStep === 'primary' ? 'Link Symbol to Product' : 'Add Accessories'"></span></h3>
+                <p class="text-xs text-gray-400 mt-1" x-text="modalStep === 'primary' ? 'Search your QuickBooks / Xero products' : 'Add back boxes, fixings, etc. (optional)'"></p>
             </div>
-            <div class="p-5 overflow-y-auto flex-1">
+            <!-- Step 1: Primary product -->
+            <div x-show="modalStep === 'primary'" class="p-5 overflow-y-auto flex-1">
                 <input type="text" id="productSearchInput" x-model="productSearch" @input.debounce.300ms="searchProducts()"
                        placeholder="Part number, SKU, or description..."
                        class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
-                <div class="mt-2 max-h-56 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="productResults.length > 0 || productSearching">
+                <div class="mt-2 max-h-48 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="productResults.length > 0 || productSearching">
                     <template x-for="p in productResults" :key="p.id">
                         <div @click="selectedProduct = p" class="p-2.5 cursor-pointer border-b border-gray-800 transition"
                              :class="selectedProduct?.id === p.id ? 'bg-indigo-600/15 border-l-2 border-l-indigo-500' : 'hover:bg-gray-800'">
@@ -429,9 +549,54 @@
                     </div>
                 </div>
             </div>
+            <!-- Step 2: Accessories -->
+            <div x-show="modalStep === 'accessories'" class="p-5 overflow-y-auto flex-1">
+                <div class="mb-3 p-2 bg-indigo-600/10 border border-indigo-600/30 rounded text-xs text-indigo-300">
+                    Primary: <strong x-text="selectedProduct?.name"></strong>
+                </div>
+                <input type="text" id="accessorySearchInput" x-model="accessorySearch" @input.debounce.300ms="searchAccessories()"
+                       placeholder="Search accessories (back box, fixings...)"
+                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
+                <div class="mt-2 max-h-36 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="accessoryResults.length > 0 || accessorySearching">
+                    <template x-for="p in accessoryResults" :key="p.id">
+                        <div @click="addAccessory(p)" class="p-2 cursor-pointer border-b border-gray-800 hover:bg-gray-800 transition">
+                            <div class="flex justify-between">
+                                <span class="text-xs font-bold text-green-400" x-text="p.sku || p.name"></span>
+                                <span class="text-xs text-amber-400" x-text="'£' + (p.purchase_cost||0).toFixed(2)"></span>
+                            </div>
+                            <div class="text-[10px] text-gray-400" x-text="p.name"></div>
+                        </div>
+                    </template>
+                    <div x-show="accessorySearching" class="text-xs text-gray-500 py-3 text-center">Searching...</div>
+                </div>
+                <!-- Added accessories list -->
+                <div x-show="accessories.length > 0" class="mt-3">
+                    <div class="text-[10px] uppercase text-green-400 font-bold mb-1">Accessories added:</div>
+                    <template x-for="(acc, i) in accessories" :key="acc.id">
+                        <div class="flex items-center justify-between p-2 bg-green-900/20 border border-green-700/30 rounded mb-1">
+                            <div>
+                                <span class="text-xs font-semibold text-green-400" x-text="acc.sku || acc.name"></span>
+                                <span class="text-[10px] text-gray-400 ml-1" x-text="acc.name"></span>
+                            </div>
+                            <button @click="removeAccessory(i)" class="text-red-400 hover:text-red-300 text-xs">✕</button>
+                        </div>
+                    </template>
+                </div>
+                <p x-show="accessories.length === 0" class="text-xs text-gray-500 mt-3 text-center">No accessories added yet — search above or skip</p>
+            </div>
             <div class="p-4 border-t border-gray-700 flex justify-end gap-2">
                 <button @click="cancelProductModal()" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-                <button @click="confirmSymbolWithProduct()" :disabled="!selectedProduct" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Link & Detect</button>
+                <template x-if="modalStep === 'primary'">
+                    <button @click="goToAccessories()" :disabled="!selectedProduct" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Next → Accessories</button>
+                </template>
+                <template x-if="modalStep === 'accessories'">
+                    <div class="flex gap-2">
+                        <button @click="modalStep = 'primary'" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">← Back</button>
+                        <button @click="confirmSymbolWithProduct()" class="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-semibold">
+                            ✓ Confirm & Detect <span x-show="accessories.length > 0" x-text="'(' + (1 + accessories.length) + ' products)'"></span>
+                        </button>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
