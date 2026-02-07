@@ -905,25 +905,347 @@ def calculate_labour(project_id):
 def generate_quote_pdf(project_id):
     """Generate professional PDF quotation"""
     from app.models.project import Project, ProjectMaterial, ProjectLabour
-    # PDF generation would go here - using reportlab or similar
-    # For now, return a placeholder
-    
+    from app.extensions import db
+    from datetime import datetime, timedelta
+    import os
+    import io
+
     project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
     if not project:
         return jsonify({'success': False, 'error': 'Project not found'}), 404
-    
-    # Update status
-    project.status = 'quoted'
-    project.quoted_at = datetime.utcnow()
-    
-    from app.extensions import db
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'message': 'Quote generated',
-        'project': project.to_dict()
-    })
+
+    materials = ProjectMaterial.query.filter_by(project_id=project.id).order_by(ProjectMaterial.category).all()
+    labour_items = ProjectLabour.query.filter_by(project_id=project.id).all()
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.lib.colors import HexColor, black, white
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+
+        # Generate filename
+        safe_name = (project.name or 'Quote').replace(' ', '_').replace('/', '-')
+        filename = f"Quote_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+        upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'quotes')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+
+        width, height = A4
+        c = canvas.Canvas(filepath, pagesize=A4)
+
+        # Colours
+        primary = HexColor('#4F46E5')     # Indigo
+        dark = HexColor('#1F2937')
+        grey = HexColor('#6B7280')
+        light_grey = HexColor('#F3F4F6')
+        green = HexColor('#059669')
+        line_col = HexColor('#E5E7EB')
+
+        page_num = 1
+        margin_left = 30 * mm
+        margin_right = width - 30 * mm
+        content_width = margin_right - margin_left
+
+        def draw_header(c, y):
+            """Draw page header with company branding"""
+            # Logo / Company name
+            c.setFont('Helvetica-Bold', 22)
+            c.setFillColor(primary)
+            c.drawString(margin_left, y, 'GoZappify')
+            c.setFont('Helvetica', 8)
+            c.setFillColor(grey)
+            c.drawString(margin_left, y - 14, 'Electrical Quotation')
+
+            # Quote reference top-right
+            c.setFont('Helvetica-Bold', 10)
+            c.setFillColor(dark)
+            c.drawRightString(margin_right, y, f'QUOTE #{project.id:04d}')
+            c.setFont('Helvetica', 9)
+            c.setFillColor(grey)
+            c.drawRightString(margin_right, y - 13, datetime.utcnow().strftime('%d %B %Y'))
+            return y - 35
+
+        def draw_footer(c, page_num):
+            """Draw page footer"""
+            c.setFont('Helvetica', 7)
+            c.setFillColor(grey)
+            c.drawString(margin_left, 15 * mm, f'Quote #{project.id:04d} — {project.name or ""}')
+            c.drawRightString(margin_right, 15 * mm, f'Page {page_num}')
+            # Line above footer
+            c.setStrokeColor(line_col)
+            c.setLineWidth(0.5)
+            c.line(margin_left, 20 * mm, margin_right, 20 * mm)
+
+        def new_page(c, page_num):
+            c.showPage()
+            page_num += 1
+            y = height - 25 * mm
+            y = draw_header(c, y)
+            return y, page_num
+
+        def check_space(c, y, needed, page_num):
+            if y - needed < 30 * mm:
+                draw_footer(c, page_num)
+                y, page_num = new_page(c, page_num)
+            return y, page_num
+
+        # ── PAGE 1: Header + Client/Project Details ──────────────
+        y = height - 25 * mm
+        y = draw_header(c, y)
+
+        y -= 10
+
+        # QUOTATION title bar
+        c.setFillColor(primary)
+        c.roundRect(margin_left, y - 28, content_width, 30, 4, fill=1, stroke=0)
+        c.setFont('Helvetica-Bold', 14)
+        c.setFillColor(white)
+        c.drawString(margin_left + 10, y - 20, 'ELECTRICAL QUOTATION')
+        y -= 45
+
+        # Two-column: Client details | Project details
+        col_w = content_width / 2 - 5
+
+        # Left column - Client
+        c.setFont('Helvetica-Bold', 9)
+        c.setFillColor(primary)
+        c.drawString(margin_left, y, 'CLIENT')
+        c.setFont('Helvetica', 9)
+        c.setFillColor(dark)
+        y -= 14
+        client_name = project.client_name or 'TBC'
+        c.drawString(margin_left, y, client_name)
+        y -= 12
+        if project.client_email:
+            c.drawString(margin_left, y, project.client_email)
+            y -= 12
+        if project.client_phone:
+            c.drawString(margin_left, y, project.client_phone)
+            y -= 12
+
+        # Right column - Project
+        right_x = margin_left + col_w + 10
+        py = y + 14 + 12 + (12 if project.client_email else 0) + (12 if project.client_phone else 0)
+        c.setFont('Helvetica-Bold', 9)
+        c.setFillColor(primary)
+        c.drawString(right_x, py, 'PROJECT')
+        c.setFont('Helvetica', 9)
+        c.setFillColor(dark)
+        py -= 14
+        c.drawString(right_x, py, project.name or 'Untitled')
+        py -= 12
+        if project.site_address:
+            c.drawString(right_x, py, project.site_address)
+            py -= 12
+        valid_days = project.quote_valid_days or 30
+        valid_until = (datetime.utcnow() + timedelta(days=valid_days)).strftime('%d %B %Y')
+        c.setFont('Helvetica', 8)
+        c.setFillColor(grey)
+        c.drawString(right_x, py, f'Valid until: {valid_until}')
+
+        y -= 20
+
+        # Divider
+        c.setStrokeColor(line_col)
+        c.setLineWidth(0.5)
+        c.line(margin_left, y, margin_right, y)
+        y -= 15
+
+        # ── MATERIALS TABLE ──────────────────────────────────────
+        # Group by category
+        materials_by_cat = {}
+        for m in materials:
+            cat = m.category or 'General'
+            if cat not in materials_by_cat:
+                materials_by_cat[cat] = []
+            materials_by_cat[cat].append(m)
+
+        if materials:
+            c.setFont('Helvetica-Bold', 11)
+            c.setFillColor(dark)
+            c.drawString(margin_left, y, 'Materials')
+            y -= 5
+
+            # Table header
+            y -= 15
+            c.setFillColor(light_grey)
+            c.rect(margin_left, y - 3, content_width, 16, fill=1, stroke=0)
+            c.setFont('Helvetica-Bold', 7.5)
+            c.setFillColor(grey)
+            c.drawString(margin_left + 4, y, 'Item')
+            c.drawString(margin_left + content_width * 0.50, y, 'Qty')
+            c.drawRightString(margin_left + content_width * 0.70, y, 'Unit Price')
+            c.drawRightString(margin_right - 4, y, 'Total')
+            y -= 18
+
+            total_materials_sell = 0
+
+            for cat, cat_materials in materials_by_cat.items():
+                y, page_num = check_space(c, y, 25, page_num)
+
+                # Category header
+                c.setFont('Helvetica-Bold', 8)
+                c.setFillColor(primary)
+                c.drawString(margin_left + 4, y, cat)
+                y -= 14
+
+                for m in cat_materials:
+                    y, page_num = check_space(c, y, 14, page_num)
+
+                    unit_sell = float(m.unit_sell or 0)
+                    qty = int(m.quantity or 0)
+                    line_total = float(m.total_sell or 0)
+                    total_materials_sell += line_total
+
+                    c.setFont('Helvetica', 8)
+                    c.setFillColor(dark)
+
+                    # Truncate description if too long
+                    desc = (m.description or m.part_number or 'Item')[:55]
+                    sku_text = f"({m.part_number}) " if m.part_number else ''
+                    c.drawString(margin_left + 8, y, f'{sku_text}{desc}')
+                    c.drawString(margin_left + content_width * 0.50, y, str(qty))
+                    c.drawRightString(margin_left + content_width * 0.70, y, f'£{unit_sell:,.2f}')
+                    c.drawRightString(margin_right - 4, y, f'£{line_total:,.2f}')
+
+                    # Light line under each row
+                    y -= 3
+                    c.setStrokeColor(line_col)
+                    c.setLineWidth(0.3)
+                    c.line(margin_left, y, margin_right, y)
+                    y -= 11
+
+            # Materials subtotal
+            y -= 5
+            y, page_num = check_space(c, y, 20, page_num)
+            c.setFont('Helvetica-Bold', 9)
+            c.setFillColor(dark)
+            c.drawString(margin_left + 8, y, 'Materials Subtotal')
+            c.drawRightString(margin_right - 4, y, f'£{total_materials_sell:,.2f}')
+            y -= 20
+
+        # ── LABOUR ───────────────────────────────────────────────
+        total_labour = float(project.total_labour_cost or 0)
+        total_hours = float(project.total_labour_hours or 0)
+
+        if total_labour > 0:
+            y, page_num = check_space(c, y, 40, page_num)
+            c.setFont('Helvetica-Bold', 11)
+            c.setFillColor(dark)
+            c.drawString(margin_left, y, 'Labour')
+            y -= 18
+
+            labour_rate = float(project.labour_rate_per_hour or 0)
+            c.setFont('Helvetica', 9)
+            c.setFillColor(dark)
+            c.drawString(margin_left + 8, y, f'{total_hours:.1f} hours @ £{labour_rate:.2f}/hr')
+            c.drawRightString(margin_right - 4, y, f'£{total_labour:,.2f}')
+            y -= 20
+
+        # ── TOTALS BOX ───────────────────────────────────────────
+        y -= 10
+        y, page_num = check_space(c, y, 80, page_num)
+
+        # Totals background
+        box_height = 70
+        c.setFillColor(HexColor('#F9FAFB'))
+        c.setStrokeColor(line_col)
+        c.setLineWidth(1)
+        c.roundRect(margin_left, y - box_height + 15, content_width, box_height, 6, fill=1, stroke=1)
+
+        ty = y + 5
+        right_col = margin_right - 10
+
+        # Materials
+        mat_sell = float(project.total_materials_sell or 0)
+        c.setFont('Helvetica', 9)
+        c.setFillColor(grey)
+        c.drawString(margin_left + 10, ty, 'Materials')
+        c.setFillColor(dark)
+        c.drawRightString(right_col, ty, f'£{mat_sell:,.2f}')
+        ty -= 14
+
+        # Labour
+        c.setFillColor(grey)
+        c.drawString(margin_left + 10, ty, 'Labour')
+        c.setFillColor(dark)
+        c.drawRightString(right_col, ty, f'£{total_labour:,.2f}')
+        ty -= 14
+
+        # Contingency
+        contingency = float(project.contingency_amount or 0)
+        cont_pct = float(project.contingency_percent or 0)
+        c.setFillColor(grey)
+        c.drawString(margin_left + 10, ty, f'Contingency ({cont_pct:.0f}%)')
+        c.setFillColor(dark)
+        c.drawRightString(right_col, ty, f'£{contingency:,.2f}')
+        ty -= 6
+
+        # Divider line
+        c.setStrokeColor(primary)
+        c.setLineWidth(1)
+        c.line(margin_left + 10, ty, margin_right - 10, ty)
+        ty -= 16
+
+        # Grand total
+        grand_total = float(project.grand_total or 0)
+        c.setFont('Helvetica-Bold', 13)
+        c.setFillColor(dark)
+        c.drawString(margin_left + 10, ty, 'TOTAL (excl. VAT)')
+        c.setFillColor(primary)
+        c.drawRightString(right_col, ty, f'£{grand_total:,.2f}')
+
+        y = ty - 30
+
+        # ── TERMS ────────────────────────────────────────────────
+        y, page_num = check_space(c, y, 80, page_num)
+
+        c.setFont('Helvetica-Bold', 9)
+        c.setFillColor(dark)
+        c.drawString(margin_left, y, 'Terms & Conditions')
+        y -= 14
+
+        terms = [
+            f'This quotation is valid for {valid_days} days from the date of issue.',
+            'All prices are exclusive of VAT which will be charged at the prevailing rate.',
+            'Payment terms: 30 days from date of invoice.',
+            'Any additional works not specified in this quotation will be charged accordingly.',
+            'All electrical work will be carried out in accordance with BS 7671 (18th Edition).',
+            'An Electrical Installation Certificate will be provided upon completion.',
+        ]
+
+        c.setFont('Helvetica', 7.5)
+        c.setFillColor(grey)
+        for term in terms:
+            y, page_num = check_space(c, y, 12, page_num)
+            c.drawString(margin_left + 4, y, f'•  {term}')
+            y -= 11
+
+        # Footer
+        draw_footer(c, page_num)
+
+        c.save()
+
+        # Update project status
+        project.status = 'quoted'
+        project.quoted_at = datetime.utcnow()
+        db.session.commit()
+
+        current_app.logger.info(f"Quote PDF generated: {filepath}")
+
+        # Return the PDF as a download
+        from flask import send_file
+        return send_file(
+            filepath,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        current_app.logger.error(f"Quote PDF generation error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # =============================================================================

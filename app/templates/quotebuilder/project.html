@@ -440,13 +440,33 @@ function projectDetail(projectId) {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/generate-quote`, {
                     method: 'POST'
                 });
-                const data = await response.json();
-                if (data.success) {
-                    alert('Quote generated!');
+
+                if (response.ok) {
+                    // It returns a PDF file - trigger download
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    // Get filename from Content-Disposition header or use default
+                    const disposition = response.headers.get('Content-Disposition');
+                    let filename = 'Quote.pdf';
+                    if (disposition && disposition.includes('filename=')) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+
                     await this.loadProject();
+                } else {
+                    const data = await response.json();
+                    alert('Error: ' + (data.error || 'Failed to generate quote'));
                 }
             } catch (error) {
                 console.error('Error generating quote:', error);
+                alert('Error generating quote');
             }
         },
         
