@@ -1248,6 +1248,283 @@ def generate_quote_pdf(project_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/api/projects/<int:project_id>/generate-materials-list', methods=['POST'])
+@login_required
+def generate_materials_list(project_id):
+    """Generate internal materials list PDF with cost, sell and profit breakdown"""
+    from app.models.project import Project, ProjectMaterial, ProjectLabour
+    from app.extensions import db
+    from datetime import datetime
+    import os
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+    materials = ProjectMaterial.query.filter_by(project_id=project.id).order_by(ProjectMaterial.category).all()
+
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.units import mm
+        from reportlab.lib.colors import HexColor, black, white
+        from reportlab.pdfgen import canvas
+
+        safe_name = (project.name or 'Materials').replace(' ', '_').replace('/', '-')
+        filename = f"Materials_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+        upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'quotes')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+
+        # Landscape for wider table
+        width, height = landscape(A4)
+        c = canvas.Canvas(filepath, pagesize=landscape(A4))
+
+        primary = HexColor('#4F46E5')
+        dark = HexColor('#1F2937')
+        grey = HexColor('#6B7280')
+        light_grey = HexColor('#F3F4F6')
+        green = HexColor('#059669')
+        red = HexColor('#DC2626')
+        line_col = HexColor('#E5E7EB')
+
+        margin_left = 20 * mm
+        margin_right = width - 20 * mm
+        content_width = margin_right - margin_left
+        page_num = 1
+
+        def draw_header(c, y):
+            c.setFont('Helvetica-Bold', 18)
+            c.setFillColor(primary)
+            c.drawString(margin_left, y, 'GoZappify')
+            c.setFont('Helvetica', 8)
+            c.setFillColor(grey)
+            c.drawString(margin_left, y - 13, 'INTERNAL — Materials & Profit Tracker')
+
+            c.setFont('Helvetica-Bold', 10)
+            c.setFillColor(dark)
+            c.drawRightString(margin_right, y, project.name or 'Untitled')
+            c.setFont('Helvetica', 8)
+            c.setFillColor(grey)
+            c.drawRightString(margin_right, y - 13, f'Generated: {datetime.utcnow().strftime("%d %b %Y")}')
+            if project.client_name:
+                c.drawRightString(margin_right, y - 24, f'Client: {project.client_name}')
+            return y - 40
+
+        def draw_footer(c, page_num):
+            c.setFont('Helvetica', 7)
+            c.setFillColor(grey)
+            c.drawString(margin_left, 12 * mm, f'CONFIDENTIAL — {project.name} — Materials List')
+            c.drawRightString(margin_right, 12 * mm, f'Page {page_num}')
+            c.setFont('Helvetica-Bold', 7)
+            c.setFillColor(red)
+            c.drawCentredString(width / 2, 12 * mm, 'INTERNAL USE ONLY — DO NOT SHARE WITH CLIENT')
+            c.setStrokeColor(line_col)
+            c.setLineWidth(0.5)
+            c.line(margin_left, 17 * mm, margin_right, 17 * mm)
+
+        def new_page(c, page_num):
+            c.showPage()
+            page_num += 1
+            y = height - 18 * mm
+            y = draw_header(c, y)
+            draw_table_header(c, y)
+            return y - 16, page_num
+
+        # Column positions (landscape A4 = ~297mm wide, ~190mm usable)
+        cols = {
+            'part':   margin_left + 4,
+            'desc':   margin_left + content_width * 0.12,
+            'qty':    margin_left + content_width * 0.48,
+            'cost_u': margin_left + content_width * 0.55,
+            'cost_t': margin_left + content_width * 0.65,
+            'sell_u': margin_left + content_width * 0.74,
+            'sell_t': margin_left + content_width * 0.83,
+            'profit': margin_left + content_width * 0.92,
+            'margin': margin_right - 4,
+        }
+
+        def draw_table_header(c, y):
+            c.setFillColor(dark)
+            c.rect(margin_left, y - 3, content_width, 16, fill=1, stroke=0)
+            c.setFont('Helvetica-Bold', 7)
+            c.setFillColor(white)
+            c.drawString(cols['part'], y, 'Part No.')
+            c.drawString(cols['desc'], y, 'Description')
+            c.drawString(cols['qty'], y, 'Qty')
+            c.drawRightString(cols['cost_t'] - 4, y, 'Unit Cost')
+            c.drawRightString(cols['sell_u'] - 4, y, 'Total Cost')
+            c.drawRightString(cols['sell_t'] - 4, y, 'Unit Sell')
+            c.drawRightString(cols['profit'] - 4, y, 'Total Sell')
+            c.drawRightString(cols['margin'], y, 'Profit    %')
+
+        def check_space(c, y, needed, page_num):
+            if y - needed < 25 * mm:
+                draw_footer(c, page_num)
+                y, page_num = new_page(c, page_num)
+            return y, page_num
+
+        # ── PAGE 1 ───────────────────────────────────────────────
+        y = height - 18 * mm
+        y = draw_header(c, y)
+
+        # CONFIDENTIAL banner
+        c.setFillColor(HexColor('#FEF2F2'))
+        c.setStrokeColor(red)
+        c.setLineWidth(1)
+        c.roundRect(margin_left, y - 14, content_width, 18, 3, fill=1, stroke=1)
+        c.setFont('Helvetica-Bold', 8)
+        c.setFillColor(red)
+        c.drawCentredString(width / 2, y - 9, 'CONFIDENTIAL — INTERNAL COST & PROFIT BREAKDOWN — NOT FOR CLIENT')
+        y -= 25
+
+        # Table header
+        draw_table_header(c, y)
+        y -= 16
+
+        # Group materials
+        materials_by_cat = {}
+        for m in materials:
+            cat = m.category or 'General'
+            if cat not in materials_by_cat:
+                materials_by_cat[cat] = []
+            materials_by_cat[cat].append(m)
+
+        grand_cost = 0
+        grand_sell = 0
+
+        for cat, cat_materials in materials_by_cat.items():
+            y, page_num = check_space(c, y, 20, page_num)
+
+            # Category header
+            c.setFillColor(HexColor('#EEF2FF'))
+            c.rect(margin_left, y - 3, content_width, 14, fill=1, stroke=0)
+            c.setFont('Helvetica-Bold', 7.5)
+            c.setFillColor(primary)
+            c.drawString(margin_left + 4, y, cat)
+
+            cat_cost = sum(float(m.total_cost or 0) for m in cat_materials)
+            cat_sell = sum(float(m.total_sell or 0) for m in cat_materials)
+            cat_profit = cat_sell - cat_cost
+            c.setFillColor(green if cat_profit >= 0 else red)
+            c.drawRightString(cols['margin'], y, f'£{cat_profit:,.2f}')
+            y -= 16
+
+            for m in cat_materials:
+                y, page_num = check_space(c, y, 13, page_num)
+
+                unit_cost = float(m.unit_cost or 0)
+                unit_sell = float(m.unit_sell or 0)
+                qty = int(m.quantity or 0)
+                total_cost = float(m.total_cost or 0)
+                total_sell = float(m.total_sell or 0)
+                line_profit = total_sell - total_cost
+                margin_pct = ((line_profit / total_cost) * 100) if total_cost > 0 else 0
+
+                grand_cost += total_cost
+                grand_sell += total_sell
+
+                c.setFont('Helvetica', 7.5)
+                c.setFillColor(dark)
+
+                # Part number
+                c.drawString(cols['part'], y, (m.part_number or '-')[:15])
+                # Description (truncated)
+                c.drawString(cols['desc'], y, (m.description or '-')[:45])
+                # Qty
+                c.drawString(cols['qty'], y, str(qty))
+                # Unit cost
+                c.drawRightString(cols['cost_t'] - 4, y, f'£{unit_cost:,.2f}')
+                # Total cost
+                c.drawRightString(cols['sell_u'] - 4, y, f'£{total_cost:,.2f}')
+                # Unit sell
+                c.drawRightString(cols['sell_t'] - 4, y, f'£{unit_sell:,.2f}')
+                # Total sell
+                c.drawRightString(cols['profit'] - 4, y, f'£{total_sell:,.2f}')
+                # Profit + margin
+                c.setFillColor(green if line_profit >= 0 else red)
+                c.setFont('Helvetica-Bold', 7.5)
+                c.drawRightString(cols['margin'] - 30, y, f'£{line_profit:,.2f}')
+                c.setFont('Helvetica', 7)
+                c.drawRightString(cols['margin'], y, f'{margin_pct:.1f}%')
+
+                # Row line
+                y -= 3
+                c.setStrokeColor(line_col)
+                c.setLineWidth(0.3)
+                c.line(margin_left, y, margin_right, y)
+                y -= 10
+
+        # ── GRAND TOTALS ─────────────────────────────────────────
+        y -= 5
+        y, page_num = check_space(c, y, 60, page_num)
+
+        grand_profit = grand_sell - grand_cost
+        overall_margin = ((grand_profit / grand_cost) * 100) if grand_cost > 0 else 0
+
+        # Totals box
+        box_h = 50
+        c.setFillColor(HexColor('#F9FAFB'))
+        c.setStrokeColor(dark)
+        c.setLineWidth(1.5)
+        c.roundRect(margin_left, y - box_h + 10, content_width, box_h, 5, fill=1, stroke=1)
+
+        ty = y
+        c.setFont('Helvetica-Bold', 9)
+        c.setFillColor(dark)
+        c.drawString(margin_left + 10, ty, 'TOTALS')
+
+        c.setFont('Helvetica', 9)
+        c.drawString(margin_left + content_width * 0.30, ty, 'Total Cost:')
+        c.setFillColor(red)
+        c.drawRightString(margin_left + content_width * 0.48, ty, f'£{grand_cost:,.2f}')
+
+        c.setFillColor(dark)
+        c.drawString(margin_left + content_width * 0.50, ty, 'Total Sell:')
+        c.setFillColor(dark)
+        c.drawRightString(margin_left + content_width * 0.68, ty, f'£{grand_sell:,.2f}')
+
+        ty -= 16
+        c.setFont('Helvetica-Bold', 11)
+        c.setFillColor(green if grand_profit >= 0 else red)
+        c.drawString(margin_left + 10, ty, f'MATERIALS PROFIT: £{grand_profit:,.2f}  ({overall_margin:.1f}%)')
+
+        # Labour + contingency + grand total
+        labour_cost = float(project.total_labour_cost or 0)
+        contingency = float(project.contingency_amount or 0)
+        project_total = float(project.grand_total or 0)
+
+        c.setFont('Helvetica', 9)
+        c.setFillColor(dark)
+        c.drawString(margin_left + content_width * 0.50, ty, f'Labour: £{labour_cost:,.2f}')
+        c.drawString(margin_left + content_width * 0.72, ty, f'Contingency: £{contingency:,.2f}')
+
+        ty -= 14
+        total_profit = project_total - grand_cost - labour_cost
+        c.setFont('Helvetica-Bold', 10)
+        c.setFillColor(dark)
+        c.drawString(margin_left + content_width * 0.50, ty, f'Project Total: £{project_total:,.2f}')
+        c.setFillColor(green if total_profit >= 0 else red)
+        c.drawString(margin_left + content_width * 0.72, ty, f'Est. Project Profit: £{total_profit:,.2f}')
+
+        # Footer
+        draw_footer(c, page_num)
+        c.save()
+
+        current_app.logger.info(f"Materials list PDF generated: {filepath}")
+
+        from flask import send_file
+        return send_file(
+            filepath,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        current_app.logger.error(f"Materials list PDF error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500        
+
+
 # =============================================================================
 # TAKEOFF - DRAWING RENDERING
 # =============================================================================

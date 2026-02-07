@@ -28,6 +28,10 @@
                     class="px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition">
                 Generate Quote
             </button>
+            <button @click="generateMaterialsList()" 
+                    class="px-4 py-2 bg-gray-700 text-white text-sm font-semibold rounded-xl hover:bg-gray-600 transition">
+                📋 Materials List
+            </button>
         </div>
     </div>
     
@@ -95,7 +99,6 @@
         
         <!-- Documents Tab -->
         <div x-show="activeTab === 'documents'" class="space-y-6">
-            <!-- Upload Area -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center"
                  @dragover.prevent="$el.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10')"
                  @dragleave.prevent="$el.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10')"
@@ -113,7 +116,6 @@
                 </label>
             </div>
             
-            <!-- Documents List -->
             <div x-show="documents.length > 0" class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="font-semibold text-gray-900 dark:text-white">Uploaded Documents</h3>
@@ -136,7 +138,6 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3">
-                                <!-- Open Takeoff Button - Main action now -->
                                 <a :href="'/quotebuilder/project/' + projectId + '/takeoff/' + doc.id"
                                    class="px-4 py-2 text-sm bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition">
                                     📐 Open Takeoff
@@ -150,7 +151,6 @@
         
         <!-- Materials Tab -->
         <div x-show="activeTab === 'materials'" class="space-y-6">
-            <!-- Actions Bar -->
             <div class="flex flex-wrap gap-3">
                 <button @click="matchPrices()" 
                         class="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition">
@@ -166,7 +166,6 @@
                 </button>
             </div>
             
-            <!-- Materials by Category -->
             <template x-for="(items, category) in materialsByCategory" :key="category">
                 <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
@@ -440,14 +439,11 @@ function projectDetail(projectId) {
                 const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/generate-quote`, {
                     method: 'POST'
                 });
-
                 if (response.ok) {
-                    // It returns a PDF file - trigger download
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    // Get filename from Content-Disposition header or use default
                     const disposition = response.headers.get('Content-Disposition');
                     let filename = 'Quote.pdf';
                     if (disposition && disposition.includes('filename=')) {
@@ -458,7 +454,6 @@ function projectDetail(projectId) {
                     a.click();
                     a.remove();
                     window.URL.revokeObjectURL(url);
-
                     await this.loadProject();
                 } else {
                     const data = await response.json();
@@ -467,6 +462,36 @@ function projectDetail(projectId) {
             } catch (error) {
                 console.error('Error generating quote:', error);
                 alert('Error generating quote');
+            }
+        },
+
+        async generateMaterialsList() {
+            try {
+                const response = await fetch(`/quotebuilder/api/projects/${this.projectId}/generate-materials-list`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const disposition = response.headers.get('Content-Disposition');
+                    let filename = 'Materials_List.pdf';
+                    if (disposition && disposition.includes('filename=')) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    const data = await response.json();
+                    alert('Error: ' + (data.error || 'Failed to generate materials list'));
+                }
+            } catch (error) {
+                console.error('Error generating materials list:', error);
+                alert('Error generating materials list');
             }
         },
         
