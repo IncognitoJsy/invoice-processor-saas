@@ -25,6 +25,12 @@ bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
 _product_cache = {}
 
 
+def _verify_project_ownership(project_id):
+    """Verify the current user owns this project. Returns project or None."""
+    from app.models.project import Project
+    return Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+
+
 # =============================================================================
 # PAGE ROUTES
 # =============================================================================
@@ -1797,6 +1803,9 @@ def get_symbol_templates(project_id, doc_id):
     """Get all symbol templates for a document"""
     from app.models.takeoff import TakeoffSymbolTemplate
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     templates = TakeoffSymbolTemplate.query.filter_by(
         project_id=project_id, document_id=doc_id
     ).all()
@@ -1881,6 +1890,9 @@ def delete_symbol_template(project_id, doc_id, template_id):
     """Delete a symbol template and all its detections"""
     from app.models.takeoff import TakeoffSymbolTemplate, TakeoffSymbolDetection
     from app.extensions import db
+
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     template = TakeoffSymbolTemplate.query.filter_by(
         id=template_id, project_id=project_id, document_id=doc_id
@@ -2452,6 +2464,9 @@ def add_manual_detection(project_id, doc_id):
     from app.models.takeoff import TakeoffSymbolDetection
     from app.extensions import db
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     data = request.get_json()
 
     detection = TakeoffSymbolDetection(
@@ -2480,6 +2495,9 @@ def update_detection(project_id, detection_id):
     from app.models.takeoff import TakeoffSymbolDetection
     from app.extensions import db
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     detection = TakeoffSymbolDetection.query.filter_by(
         id=detection_id, project_id=project_id
     ).first()
@@ -2502,6 +2520,9 @@ def delete_detection(project_id, detection_id):
     from app.models.takeoff import TakeoffSymbolDetection
     from app.extensions import db
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     detection = TakeoffSymbolDetection.query.filter_by(
         id=detection_id, project_id=project_id
     ).first()
@@ -2523,6 +2544,9 @@ def get_rooms(project_id, doc_id):
     """Get all rooms for a document"""
     from app.models.takeoff import TakeoffRoom
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     rooms = TakeoffRoom.query.filter_by(
         project_id=project_id, document_id=doc_id
     ).order_by(TakeoffRoom.sort_order).all()
@@ -2539,6 +2563,9 @@ def create_room(project_id, doc_id):
     """Create a room zone on the drawing"""
     from app.models.takeoff import TakeoffRoom
     from app.extensions import db
+
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     data = request.get_json()
 
@@ -2577,6 +2604,9 @@ def update_room(project_id, room_id):
     from app.models.takeoff import TakeoffRoom
     from app.extensions import db
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     room = TakeoffRoom.query.filter_by(id=room_id, project_id=project_id).first()
     if not room:
         return jsonify({'success': False, 'error': 'Room not found'}), 404
@@ -2609,6 +2639,9 @@ def delete_room(project_id, room_id):
     """Delete a room and unassign its detections"""
     from app.models.takeoff import TakeoffRoom, TakeoffSymbolDetection
     from app.extensions import db
+
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     room = TakeoffRoom.query.filter_by(id=room_id, project_id=project_id).first()
     if not room:
@@ -2656,6 +2689,9 @@ def get_cable_runs(project_id, doc_id):
     """Get all cable runs for a document"""
     from app.models.takeoff import TakeoffCableRun
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     runs = TakeoffCableRun.query.filter_by(
         project_id=project_id, document_id=doc_id
     ).all()
@@ -2673,6 +2709,9 @@ def create_cable_run(project_id, doc_id):
     from app.models.project import ProjectDocument
     from app.models.takeoff import TakeoffCableRun
     from app.extensions import db
+
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     data = request.get_json()
     points = data.get('route_points', [])
@@ -2710,6 +2749,9 @@ def delete_cable_run(project_id, run_id):
     from app.models.takeoff import TakeoffCableRun
     from app.extensions import db
 
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     run = TakeoffCableRun.query.filter_by(id=run_id, project_id=project_id).first()
     if not run:
         return jsonify({'success': False, 'error': 'Cable run not found'}), 404
@@ -2730,6 +2772,9 @@ def create_area(project_id, doc_id):
     from app.models.project import ProjectDocument
     from app.models.takeoff import TakeoffArea
     from app.extensions import db
+
+    if not _verify_project_ownership(project_id):
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     data = request.get_json()
     points = data.get('points', [])
