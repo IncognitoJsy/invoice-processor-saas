@@ -28,6 +28,7 @@ function takeoffCanvas(projectId, documentId) {
         symbolTemplates: [], detections: [], detecting: false, detectingTemplateId: null,
         isDrawingBox: false, boxStart: null, currentBox: null,
         manualPlacingTemplate: null, // Template being manually placed on drawing
+        draggingDetection: null, dragOffset: null, // Dragging a detection box
 
         // Product search (modal after symbol box)
         showProductModal: false, pendingBox: null,
@@ -88,7 +89,10 @@ function takeoffCanvas(projectId, documentId) {
                 if (d.success) {
                     this.rooms = d.rooms || [];
                     this.symbolTemplates = d.symbol_templates || [];
-                    this.detections = d.detections || [];
+                    this.detections = (d.detections || []).map(det => ({
+                        ...det,
+                        locked: det.confirmed || false,
+                    }));
                     this.cableRuns = d.cable_runs || [];
                     this.areas = d.areas || [];
                     this.scale = d.scale || 50;
@@ -200,8 +204,17 @@ function takeoffCanvas(projectId, documentId) {
             // Manual placement mode — don't pan, let click handler deal with it
             if (this.manualPlacingTemplate) return;
 
-            // Pan in select mode (no other action active)
+            // In select mode, check if clicking on an unlocked detection box to drag it
             if (this.mode === 'select' && !this.settingKeyArea) {
+                const hitDet = this.findDetectionBodyAt(img.x, img.y);
+                if (hitDet && !hitDet.locked) {
+                    this.draggingDetection = hitDet;
+                    this.dragOffset = { x: img.x - hitDet.x, y: img.y - hitDet.y };
+                    this.canvas.style.cursor = 'move';
+                    return;
+                }
+
+                // Otherwise pan
                 this.isPanning = true;
                 this.panAnchorX = e.clientX; this.panAnchorY = e.clientY;
                 this.panStartX = this.panX; this.panStartY = this.panY;
@@ -221,6 +234,16 @@ function takeoffCanvas(projectId, documentId) {
         onMouseMove(e) {
             const rect = this.canvas.getBoundingClientRect();
             const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+
+            // Dragging a detection box
+            if (this.draggingDetection) {
+                const img = this.screenToImage(sx, sy);
+                this.draggingDetection.x = img.x - this.dragOffset.x;
+                this.draggingDetection.y = img.y - this.dragOffset.y;
+                this.didDrag = true;
+                this.redraw();
+                return;
+            }
 
             if (this.isPanning) {
                 const dx = e.clientX - this.panAnchorX, dy = e.clientY - this.panAnchorY;
@@ -242,6 +265,17 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         onMouseUp(e) {
+            // Finished dragging a detection
+            if (this.draggingDetection) {
+                if (this.didDrag) {
+                    this.saveDetectionPosition(this.draggingDetection);
+                }
+                this.draggingDetection = null;
+                this.dragOffset = null;
+                this.canvas.style.cursor = this.getCursor();
+                return;
+            }
+
             if (this.isPanning) {
                 this.isPanning = false;
                 this.canvas.style.cursor = this.getCursor();
@@ -284,14 +318,18 @@ function takeoffCanvas(projectId, documentId) {
         // Attach click via canvas mouseup when not dragging
         handleCanvasClick(e) {
             if (this.didDrag) return;
-            // In select mode after a non-drag click, check detection hits
+            // In select mode after a non-drag click, check detection button hits
             if (this.mode === 'select' && !this.manualPlacingTemplate) {
                 const rect = this.canvas.getBoundingClientRect();
                 const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
                 const hit = this.findDetectionAt(img.x, img.y);
                 if (hit) {
-                    if (confirm(`Remove this ${hit.symbol_label || 'detection'}?`)) {
-                        this.deleteDetection(hit);
+                    if (hit.action === 'delete') {
+                        if (confirm(`Remove this ${hit.det.symbol_label || 'detection'}?`)) {
+                            this.deleteDetection(hit.det);
+                        }
+                    } else if (hit.action === 'lock') {
+                        this.toggleDetectionLock(hit.det);
                     }
                     return;
                 }
@@ -475,9 +513,51 @@ function takeoffCanvas(projectId, documentId) {
                 const xBtnY = d.y - h/2;
                 const xBtnRadius = Math.max(12, w * 0.2);
                 const dist = Math.sqrt((imgX - xBtnX)**2 + (imgY - xBtnY)**2);
-                if (dist < xBtnRadius / this.zoom + 5) return d;
+                if (dist < xBtnRadius / this.zoom + 5) return { det: d, action: 'delete' };
+                // Check if click is on the lock button (top-left corner)
+                const lBtnX = d.x - w/2;
+                const lBtnY = d.y - h/2;
+                const lDist = Math.sqrt((imgX - lBtnX)**2 + (imgY - lBtnY)**2);
+                if (lDist < xBtnRadius / this.zoom + 5) return { det: d, action: 'lock' };
             }
             return null;
+        },
+
+        // Hit test for detection body (for dragging)
+        findDetectionBodyAt(imgX, imgY) {
+            for (const d of this.detections) {
+                if (d.rejected) continue;
+                const tpl = this.symbolTemplates.find(t => t.symbol_type_id === d.symbol_type_id);
+                const w = tpl?.crop?.w || 40, h = tpl?.crop?.h || 40;
+                if (imgX >= d.x - w/2 && imgX <= d.x + w/2 &&
+                    imgY >= d.y - h/2 && imgY <= d.y + h/2) {
+                    return d;
+                }
+            }
+            return null;
+        },
+
+        async saveDetectionPosition(det) {
+            try {
+                await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ x: Math.round(det.x), y: Math.round(det.y) })
+                });
+            } catch (e) { console.error('Save position error:', e); }
+        },
+
+        async toggleDetectionLock(det) {
+            det.locked = !det.locked;
+            try {
+                await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ confirmed: det.locked })
+                });
+                this.notify(det.locked ? '🔒 Locked' : '🔓 Unlocked');
+            } catch (e) { console.error('Lock error:', e); }
+            this.redraw();
         },
         async searchProducts() {
             if (this.productSearch.length < 2) { this.productResults = []; return; }
@@ -727,29 +807,38 @@ function takeoffCanvas(projectId, documentId) {
                 const tpl = this.symbolTemplates.find(t=>t.symbol_type_id===d.symbol_type_id);
                 const w = tpl?.crop?.w || d.w || 40;
                 const h = tpl?.crop?.h || d.h || 40;
-                const col = tpl?.color || '#4ade80';
-                // Box outline
-                ctx.strokeStyle = col; ctx.lineWidth = lw(3);
+                const col = d.locked ? '#22c55e' : (tpl?.color || '#4ade80');
+                // Box outline (thicker if locked)
+                ctx.strokeStyle = col; ctx.lineWidth = lw(d.locked ? 4 : 3);
+                if (d.locked) ctx.setLineDash([]);
+                else ctx.setLineDash([lw(6), lw(3)]);
                 ctx.strokeRect(d.x-w/2, d.y-h/2, w, h);
+                ctx.setLineDash([]);
                 // Semi-transparent fill
-                ctx.fillStyle = col.slice(0,7) + '30';
+                ctx.fillStyle = col.slice(0,7) + (d.locked ? '15' : '30');
                 ctx.fillRect(d.x-w/2, d.y-h/2, w, h);
                 // Label badge
                 const label = d.symbol_label || '?';
                 ctx.font = `bold ${lw(11)}px system-ui`;
-                const tw = ctx.measureText(label).width + lw(10);
+                const tw2 = ctx.measureText(label).width + lw(10);
                 ctx.fillStyle = col;
-                ctx.fillRect(d.x-w/2, d.y-h/2-lw(16), tw, lw(15));
+                ctx.fillRect(d.x-w/2, d.y-h/2-lw(16), tw2, lw(15));
                 ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
                 ctx.fillText(label, d.x-w/2+lw(5), d.y-h/2-lw(15));
                 // X delete button (top-right corner)
-                const xR = lw(8);
+                const btnR = lw(8);
                 const xCx = d.x + w/2, xCy = d.y - h/2;
                 ctx.fillStyle = '#ef4444';
-                ctx.beginPath(); ctx.arc(xCx, xCy, xR, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(xCx, xCy, btnR, 0, Math.PI*2); ctx.fill();
                 ctx.strokeStyle = '#fff'; ctx.lineWidth = lw(2);
-                ctx.beginPath(); ctx.moveTo(xCx-xR*0.5, xCy-xR*0.5); ctx.lineTo(xCx+xR*0.5, xCy+xR*0.5); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(xCx+xR*0.5, xCy-xR*0.5); ctx.lineTo(xCx-xR*0.5, xCy+xR*0.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(xCx-btnR*0.5, xCy-btnR*0.5); ctx.lineTo(xCx+btnR*0.5, xCy+btnR*0.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(xCx+btnR*0.5, xCy-btnR*0.5); ctx.lineTo(xCx-btnR*0.5, xCy+btnR*0.5); ctx.stroke();
+                // Lock button (top-left corner)
+                const lCx = d.x - w/2, lCy = d.y - h/2;
+                ctx.fillStyle = d.locked ? '#22c55e' : '#6b7280';
+                ctx.beginPath(); ctx.arc(lCx, lCy, btnR, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = `${lw(10)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(d.locked ? '🔒' : '🔓', lCx, lCy);
             }
 
             // Cable runs

@@ -1839,7 +1839,7 @@ def update_detection(project_id, detection_id):
         return jsonify({'success': False, 'error': 'Detection not found'}), 404
 
     data = request.get_json()
-    for field in ['confirmed', 'rejected', 'room_id', 'part_number', 'product_description', 'material_id']:
+    for field in ['confirmed', 'rejected', 'room_id', 'part_number', 'product_description', 'material_id', 'x', 'y']:
         if field in data:
             setattr(detection, field, data[field])
 
