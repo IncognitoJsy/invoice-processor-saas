@@ -91,7 +91,11 @@
             </div>
 
             <!-- Mode instructions -->
-            <div x-show="mode === 'symbol'" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
+            <div x-show="manualPlacingTemplate" class="mb-2 p-3 rounded-lg bg-blue-900/20 border border-blue-600/20 text-xs text-blue-300">
+                ➕ <strong>Click on the drawing</strong> to place "<span x-text="manualPlacingTemplate?.label"></span>". Click multiple times to add more.
+                <button @click="cancelManualPlace()" class="ml-2 px-2 py-0.5 bg-red-600 text-white rounded text-xs font-semibold">Done</button>
+            </div>
+            <div x-show="mode === 'symbol' && !manualPlacingTemplate" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
                 🔍 <strong>Drag a box</strong> around a symbol on the drawing key. You'll then search for the matching product.
             </div>
             <div x-show="mode === 'room' && !drawingRoom" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
@@ -169,10 +173,21 @@
                         </div>
                         <!-- Unlinked - show link button -->
                         <button x-show="!tpl.default_part_number" @click="openLinkProduct(tpl)" class="w-full mt-1 px-3 py-1.5 border border-dashed border-indigo-600/40 rounded text-xs text-indigo-400 hover:bg-indigo-600/10 transition">+ Link Product</button>
-                        <!-- Re-scan -->
-                        <button @click="runDetection(tpl)" :disabled="detecting" class="w-full mt-2 px-3 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition disabled:opacity-50">
-                            <span x-show="!detecting">🔄 Re-scan</span><span x-show="detecting">Scanning...</span>
-                        </button>
+                        <!-- Action buttons -->
+                        <div class="flex gap-1 mt-2">
+                            <!-- Re-scan (per template) -->
+                            <button @click="runDetection(tpl)" :disabled="detecting" class="flex-1 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition disabled:opacity-50">
+                                <span x-show="detectingTemplateId !== tpl.id">🔄 Re-scan</span>
+                                <span x-show="detectingTemplateId === tpl.id">Scanning...</span>
+                            </button>
+                            <!-- Manual add -->
+                            <button x-show="manualPlacingTemplate?.id !== tpl.id" @click="startManualPlace(tpl)" class="flex-1 px-2 py-1 bg-blue-700/50 text-blue-300 rounded text-xs hover:bg-blue-700/70 transition">
+                                ➕ Add
+                            </button>
+                            <button x-show="manualPlacingTemplate?.id === tpl.id" @click="cancelManualPlace()" class="flex-1 px-2 py-1 bg-red-700/50 text-red-300 rounded text-xs hover:bg-red-700/70 transition animate-pulse">
+                                ✕ Cancel placing
+                            </button>
+                        </div>
                     </div>
                 </template>
             </div>

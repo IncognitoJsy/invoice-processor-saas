@@ -25,8 +25,9 @@ function takeoffCanvas(projectId, documentId) {
         showAutoScaleModal: false, autoScaleRatio: '', autoScalePaper: 'A1', autoScaleOrientation: 'landscape',
 
         // Symbol detection
-        symbolTemplates: [], detections: [], detecting: false,
+        symbolTemplates: [], detections: [], detecting: false, detectingTemplateId: null,
         isDrawingBox: false, boxStart: null, currentBox: null,
+        manualPlacingTemplate: null, // Template being manually placed on drawing
 
         // Product search (modal after symbol box)
         showProductModal: false, pendingBox: null,
@@ -262,6 +263,23 @@ function takeoffCanvas(projectId, documentId) {
             const rect = this.canvas.getBoundingClientRect();
             const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
 
+            // Manual placement mode — click to place a detection
+            if (this.manualPlacingTemplate) {
+                this.placeManualDetection(img);
+                return;
+            }
+
+            // Select mode — check if clicking X on a detection box
+            if (this.mode === 'select' && !this.didDrag) {
+                const hit = this.findDetectionAt(img.x, img.y);
+                if (hit) {
+                    if (confirm(`Remove this ${hit.symbol_label || 'detection'}?`)) {
+                        this.deleteDetection(hit);
+                    }
+                    return;
+                }
+            }
+
             if (this.mode === 'room' && this.drawingRoom) { this.roomPoints.push(img); this.redraw(); }
             if (this.mode === 'cable') { this.cablePoints.push(img); this.redraw(); }
             if (this.mode === 'area') { this.areaPoints.push(img); this.redraw(); }
@@ -344,6 +362,7 @@ function takeoffCanvas(projectId, documentId) {
 
         async runDetection(template) {
             this.detecting = true;
+            this.detectingTemplateId = template.id;
             try {
                 const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/detect-symbols`, {
                     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -360,9 +379,82 @@ function takeoffCanvas(projectId, documentId) {
                 } else { this.notify('Detection failed: ' + (data.error||''), 'error'); }
             } catch (e) { this.notify('Detection error: ' + e.message, 'error'); }
             this.detecting = false;
+            this.detectingTemplateId = null;
         },
 
         // ── Product Search ───────────────────────────────────────
+
+        // ── Delete / Manual Add Detections ────────────────────────
+        async deleteDetection(det) {
+            try {
+                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.detections = this.detections.filter(d => d.id !== det.id);
+                    // Update template count
+                    const tpl = this.symbolTemplates.find(t => t.symbol_type_id === det.symbol_type_id);
+                    if (tpl) tpl.total_found = Math.max(0, (tpl.total_found || 1) - 1);
+                    this.notify(`Removed ${det.symbol_label || 'detection'}`);
+                    this.redraw();
+                }
+            } catch (e) { this.notify('Delete error: ' + e.message, 'error'); }
+        },
+
+        startManualPlace(tpl) {
+            this.manualPlacingTemplate = tpl;
+            this.mode = 'select'; // Stay in select mode but track we're placing
+            this.notify(`Click on the drawing to place "${tpl.label}"`);
+        },
+
+        cancelManualPlace() {
+            this.manualPlacingTemplate = null;
+            this.notify('Manual placement cancelled');
+        },
+
+        async placeManualDetection(imgCoords) {
+            const tpl = this.manualPlacingTemplate;
+            if (!tpl) return;
+
+            try {
+                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/detections`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        symbol_type_id: tpl.symbol_type_id,
+                        symbol_label: tpl.label,
+                        x: Math.round(imgCoords.x),
+                        y: Math.round(imgCoords.y),
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.detections.push(data.detection);
+                    // Update template count
+                    const t = this.symbolTemplates.find(s => s.symbol_type_id === tpl.symbol_type_id);
+                    if (t) t.total_found = (t.total_found || 0) + 1;
+                    this.notify(`Placed ${tpl.label} manually`);
+                    this.redraw();
+                    // Don't clear manualPlacingTemplate — allow placing multiple
+                }
+            } catch (e) { this.notify('Place error: ' + e.message, 'error'); }
+        },
+
+        // ── Detection hit test (for clicking X to delete) ─────────
+        findDetectionAt(imgX, imgY) {
+            for (const d of this.detections) {
+                if (d.rejected) continue;
+                const tpl = this.symbolTemplates.find(t => t.symbol_type_id === d.symbol_type_id);
+                const w = tpl?.crop?.w || 40, h = tpl?.crop?.h || 40;
+                // Check if click is on the X button (top-right corner of detection box)
+                const xBtnX = d.x + w/2;
+                const xBtnY = d.y - h/2;
+                const xBtnRadius = Math.max(12, w * 0.2);
+                const dist = Math.sqrt((imgX - xBtnX)**2 + (imgY - xBtnY)**2);
+                if (dist < xBtnRadius / this.zoom + 5) return d;
+            }
+            return null;
+        },
         async searchProducts() {
             if (this.productSearch.length < 2) { this.productResults = []; return; }
             this.productSearching = true;
@@ -518,6 +610,7 @@ function takeoffCanvas(projectId, documentId) {
         },
 
         getCursor() {
+            if (this.manualPlacingTemplate) return 'crosshair';
             if (this.mode === 'symbol' || this.settingKeyArea) return 'crosshair';
             if (this.mode === 'room' && this.drawingRoom) return 'crosshair';
             if (this.mode === 'cable' || this.mode === 'area' || this.mode === 'scale') return 'crosshair';
@@ -620,6 +713,14 @@ function takeoffCanvas(projectId, documentId) {
                 ctx.fillRect(d.x-w/2, d.y-h/2-lw(16), tw, lw(15));
                 ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
                 ctx.fillText(label, d.x-w/2+lw(5), d.y-h/2-lw(15));
+                // X delete button (top-right corner)
+                const xR = lw(8);
+                const xCx = d.x + w/2, xCy = d.y - h/2;
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath(); ctx.arc(xCx, xCy, xR, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = lw(2);
+                ctx.beginPath(); ctx.moveTo(xCx-xR*0.5, xCy-xR*0.5); ctx.lineTo(xCx+xR*0.5, xCy+xR*0.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(xCx+xR*0.5, xCy-xR*0.5); ctx.lineTo(xCx-xR*0.5, xCy+xR*0.5); ctx.stroke();
             }
 
             // Cable runs
