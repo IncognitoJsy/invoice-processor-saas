@@ -2157,58 +2157,6 @@ def link_ufh_product(project_id):
         'total_area_sqm': total_area,
     })    
 
-
-@bp.route('/api/projects/<int:project_id>/link-ufh', methods=['POST'])
-@login_required
-def link_ufh_product(project_id):
-    """Link an underfloor heating mat product to an area measurement"""
-    from app.models.takeoff import TakeoffProject
-    from app.models.project_material import ProjectMaterial
-    from app.extensions import db
-
-    project = TakeoffProject.query.filter_by(id=project_id, user_id=current_user.id).first()
-    if not project:
-        return jsonify({'success': False, 'error': 'Project not found'}), 404
-
-    data = request.get_json()
-    product = data.get('product', {})
-    mat_size = data.get('mat_size_sqm', 0)
-    total_area = data.get('total_area_sqm', 0)
-    area_id = data.get('area_id')
-
-    category = f"Underfloor Heating - {mat_size}m²"
-
-    material = ProjectMaterial(
-        project_id=project_id,
-        category=category,
-        part_number=product.get('sku'),
-        description=f"{product.get('description') or product.get('name')} ({mat_size}m² mat)",
-        quantity=1,
-        unit='each',
-        unit_cost=product.get('purchase_cost'),
-        price_source='quickbooks' if product.get('id') else 'manual',
-        price_verified=True if product.get('id') else False,
-        qb_item_id=product.get('id'),
-        qb_item_name=product.get('name'),
-    )
-    material.calculate_totals(markup_percent=float(project.materials_markup_percent))
-    qb_sell = product.get('unit_price', 0)
-    if qb_sell and qb_sell > float(material.unit_sell or 0):
-        material.unit_sell = qb_sell
-        material.total_sell = round(1 * qb_sell, 2)
-
-    db.session.add(material)
-    project.recalculate_totals()
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'material_id': material.id,
-        'mat_size_sqm': mat_size,
-        'total_area_sqm': total_area,
-    })
-
-
 # =============================================================================
 # TAKEOFF - ACCESSORIES
 # =============================================================================
@@ -2293,7 +2241,7 @@ def remove_accessory(project_id, material_id):
     db.session.commit()
 
     return jsonify({'success': True})
-        
+
 
 # =============================================================================
 # TAKEOFF - PRODUCT SEARCH
