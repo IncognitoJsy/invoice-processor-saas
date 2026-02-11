@@ -20,16 +20,30 @@ def create_app(config_name='default'):
     limiter.init_app(app)
     csrf.init_app(app)
     
-    # Create tables if they don't exist (for SQLite on Railway)
+# Create tables with retry logic for Railway Postgres restarts
+    import time
     with app.app_context():
-        db.create_all()
-    
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                db.create_all()
+                app.logger.info('Database connection established')
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = (attempt + 1) * 3
+                    app.logger.warning(f'DB connection attempt {attempt + 1} failed, retrying in {wait}s: {e}')
+                    time.sleep(wait)
+                else:
+                    app.logger.error(f'Failed to connect to database after {max_retries} attempts')
+                    raise
+
     # Configure logging
     configure_logging(app)
-    
+
     # Register blueprints
     register_blueprints(app)
-    
+
     # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
     from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder
     csrf.exempt(upload.bp)
@@ -40,33 +54,37 @@ def create_app(config_name='default'):
     csrf.exempt(billing.bp)
     csrf.exempt(invoices.bp)
     csrf.exempt(quotebuilder.bp)
-    
+
     # Register error handlers
     register_error_handlers(app)
-    
+
     # Security headers
     register_security_headers(app)
-    
+
     # Health check endpoint
     @app.route('/health')
     def health():
-        return {'status': 'healthy'}, 200
-    
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            return {'status': 'healthy', 'database': 'connected'}, 200
+        except Exception as e:
+            return {'status': 'unhealthy', 'database': str(e)}, 503
+
     @app.route('/')
     def index():
         from flask_login import current_user
         if current_user.is_authenticated:
             return redirect(url_for('dashboard.index'))
         return render_template('landing/index.html')
-    
+
     @app.route('/robots.txt')
     def robots():
         return app.send_static_file('robots.txt')
-    
+
     @app.route('/favicon.ico')
     def favicon():
         return app.send_static_file('images/favicon.ico')
-    
+
     @app.route('/serve-takeoff-js')
     def serve_takeoff_js():
         import os
@@ -87,12 +105,11 @@ def create_app(config_name='default'):
                 if 'static' in root or f.endswith('.js'):
                     result.append(os.path.join(root, f))
         return '<br>'.join(sorted(result)[:100]) or 'No files found'
-    
+
     # Wrap with WhiteNoise for static files in production
     app.wsgi_app = WhiteNoise(app.wsgi_app, root='/app/app/static/', prefix='static/')
-    
-    return app
 
+    return app
 
 def configure_logging(app):
     """Configure application logging"""

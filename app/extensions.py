@@ -7,7 +7,7 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 
 # Initialize extensions
-db = SQLAlchemy()
+db = SQLAlchemy(engine_options={"pool_pre_ping": True})
 migrate = Migrate()
 login_manager = LoginManager()
 csrf = CSRFProtect()
