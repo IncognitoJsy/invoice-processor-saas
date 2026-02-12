@@ -77,13 +77,23 @@ def api_upload_to_queue():
     from app.models.queued_invoice import QueuedInvoice
     from app.extensions import db
     
-    if 'files' not in request.files:
-        return jsonify({'error': 'No files provided'}), 400
+    current_app.logger.info(f"Queue upload request - files keys: {list(request.files.keys())}")
+    current_app.logger.info(f"Queue upload request - form keys: {list(request.form.keys())}")
+    current_app.logger.info(f"Queue upload request - content_type: {request.content_type}")
     
-    files = request.files.getlist('files')
+    # Try multiple possible field names
+    files = []
+    if 'files' in request.files:
+        files = request.files.getlist('files')
+    elif 'file' in request.files:
+        files = request.files.getlist('file')
+    else:
+        # Try to get any files regardless of field name
+        for key in request.files:
+            files.extend(request.files.getlist(key))
     
-    if not files or len(files) == 0:
-        return jsonify({'error': 'No files selected'}), 400
+    if not files:
+        return jsonify({'error': 'No files provided', 'debug_keys': list(request.files.keys())}), 400
     
     results = []
     errors = []
