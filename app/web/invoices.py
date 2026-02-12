@@ -74,12 +74,16 @@ def get_invoice(invoice_id):
 def delete_invoice(invoice_id):
     """Delete an invoice"""
     from app.models.invoice import Invoice
+    from app.models.queued_invoice import QueuedInvoice
     from app.extensions import db
     
     invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
     
     if not invoice:
         return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+    
+    # Clear any queue references to this invoice
+    QueuedInvoice.query.filter_by(processed_invoice_id=invoice_id).update({'processed_invoice_id': None})
     
     db.session.delete(invoice)
     db.session.commit()
