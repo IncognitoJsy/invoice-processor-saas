@@ -174,9 +174,15 @@ def fetch_emails_for_user(user_id):
         result['errors'].append('No active supplier filters')
         return result
     
-    # Add time filter - only fetch emails from last 30 days
-    # (on first run this gets recent history; subsequent runs are deduped)
-    query += " newer_than:30d"
+    # Time filter - use last_checked for subsequent runs, 1 day for first run
+    if connection.last_checked:
+        # Convert to Gmail's after: format (epoch seconds)
+        import calendar
+        epoch = int(calendar.timegm(connection.last_checked.timetuple()))
+        query += f" after:{epoch}"
+    else:
+        # First run - only get last 1 day (we already did the initial 30-day fetch)
+        query += " newer_than:1d"
     
     logger.info(f"Fetching emails for user {user_id} with query: {query}")
     
