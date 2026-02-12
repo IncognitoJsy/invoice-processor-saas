@@ -177,16 +177,30 @@ def api_preview(queue_id):
     if not item:
         return jsonify({'error': 'Not found'}), 404
     
-    if not os.path.exists(item.file_path):
-        return jsonify({'error': 'File not found on disk'}), 404
+    # Resolve the file path - handle both relative and absolute paths
+    filepath = item.file_path
+    if not os.path.isabs(filepath):
+        # Try from the app root directory (one level up from app/)
+        app_root = os.path.dirname(current_app.root_path)
+        filepath = os.path.join(app_root, item.file_path)
+    
+    current_app.logger.info(f"Preview file path: {filepath} (exists: {os.path.exists(filepath)})")
+    
+    if not os.path.exists(filepath):
+        # Also try relative to current working directory
+        cwd_path = os.path.join(os.getcwd(), item.file_path)
+        current_app.logger.info(f"Trying CWD path: {cwd_path} (exists: {os.path.exists(cwd_path)})")
+        if os.path.exists(cwd_path):
+            filepath = cwd_path
+        else:
+            return jsonify({'error': 'File not found on disk', 'tried': [filepath, cwd_path]}), 404
     
     is_pdf = item.filename.lower().endswith('.pdf')
     response = send_file(
-        item.file_path,
+        filepath,
         mimetype='application/pdf' if is_pdf else 'image/*',
         as_attachment=False
     )
-    # Headers to help with Cloudflare and iframe embedding
     response.headers['Content-Disposition'] = f'inline; filename="{item.original_filename}"'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Cache-Control'] = 'private, max-age=300'

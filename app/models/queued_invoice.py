@@ -31,7 +31,7 @@ class QueuedInvoice(db.Model):
     # Status tracking
     status = db.Column(db.String(20), default='queued')  # queued, processing, completed, failed
     target_tab = db.Column(db.String(20))  # 'invoice' or 'quote' - set when user drags to process
-    processed_invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=True)
+    processed_invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id', ondelete='SET NULL'), nullable=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -640,9 +640,9 @@ function queueManager() {
             }
         },
         
-        // Preview - open in new tab (more reliable than iframe with Cloudflare)
+        // Preview - show in modal
         previewItem(item) {
-            window.open('/queue/api/' + item.id + '/preview', '_blank');
+            this.previewingItem = item;
         },
         
         // Toast notifications
