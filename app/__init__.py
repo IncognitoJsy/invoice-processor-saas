@@ -166,7 +166,7 @@ def register_security_headers(app):
     @app.after_request
     def add_security_headers(response):
         # Prevent clickjacking - block all framing
-        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         
         # Prevent MIME type sniffing
         response.headers['X-Content-Type-Options'] = 'nosniff'
