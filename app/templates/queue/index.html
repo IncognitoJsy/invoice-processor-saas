@@ -642,9 +642,9 @@ function queueManager() {
             }
         },
         
-        // Preview - show in modal
+        // Preview - open in new tab
         previewItem(item) {
-            this.previewingItem = item;
+            window.open('/queue/api/' + item.id + '/preview', '_blank');
         },
         
         // Toast notifications
