@@ -180,10 +180,17 @@ def api_preview(queue_id):
     if not os.path.exists(item.file_path):
         return jsonify({'error': 'File not found on disk'}), 404
     
-    return send_file(
+    is_pdf = item.filename.lower().endswith('.pdf')
+    response = send_file(
         item.file_path,
-        mimetype='application/pdf' if item.filename.lower().endswith('.pdf') else 'image/*'
+        mimetype='application/pdf' if is_pdf else 'image/*',
+        as_attachment=False
     )
+    # Headers to help with Cloudflare and iframe embedding
+    response.headers['Content-Disposition'] = f'inline; filename="{item.original_filename}"'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Cache-Control'] = 'private, max-age=300'
+    return response
 
 
 @bp.route('/api/<int:queue_id>/process', methods=['POST'])
