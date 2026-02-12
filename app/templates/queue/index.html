@@ -355,9 +355,11 @@
                 
                 <!-- PDF Viewer -->
                 <div class="flex-1 overflow-hidden">
-                    <iframe :src="'/queue/api/' + previewingItem.id + '/preview'" 
-                            class="w-full h-full min-h-[60vh]"
-                            style="border: none;"></iframe>
+                    <template x-if="previewingItem && previewingItem.id">
+                        <iframe :src="'/queue/api/' + previewingItem.id + '/preview'" 
+                                class="w-full h-full min-h-[60vh]"
+                                style="border: none;"></iframe>
+                    </template>
                 </div>
             </div>
         </div>
