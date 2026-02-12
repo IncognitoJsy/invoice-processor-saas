@@ -193,7 +193,7 @@ def register_security_headers(app):
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: blob:",
             "connect-src 'self' https://appcenter.intuit.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com",
-            "frame-src https://js.stripe.com https://appcenter.intuit.com",
+            "frame-src 'self' https://js.stripe.com https://appcenter.intuit.com",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self' https://appcenter.intuit.com",
