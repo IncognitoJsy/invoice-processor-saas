@@ -54,6 +54,7 @@ def create_app(config_name='default'):
     csrf.exempt(billing.bp)
     csrf.exempt(invoices.bp)
     csrf.exempt(quotebuilder.bp)
+    csrf.exempt(queue.bp)
 
     # Register error handlers
     register_error_handlers(app)
