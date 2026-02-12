@@ -7,6 +7,8 @@ from app.models.password_reset import PasswordResetToken
 from app.models.supplier_account import SupplierAccount
 from app.models.xero import XeroConnection
 from app.models.part_number_correction import PartNumberCorrection
+from app.models.queued_invoice import QueuedInvoice
+from app.models.email_connection import EmailConnection, SupplierFilter
 from app.models.project import Project, ProjectDocument, ProjectMaterial, ProjectLabour, SupplierQuoteRequest
 from app.models.takeoff import (
     TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,

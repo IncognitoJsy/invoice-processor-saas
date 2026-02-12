@@ -162,8 +162,10 @@
                     </a>
                     <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Queue
+                    </a>
                     <a href="/quotebuilder" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'quotebuilder' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Quote Builder   
+                    </a>
                     <a href="/billing" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'billing' in request.endpoint and 'topup' not in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Billing
                     </a>
@@ -262,7 +264,7 @@
                                 Billing
                             </a>
                             
-                            <a href="mailto:support@gozappify.com" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <a href="/cdn-cgi/l/email-protection#3b484e4b4b54494f7b5c54415a4b4b525d4215585456" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/>
                                 </svg>
@@ -444,7 +446,7 @@
     {% endif %}
     
     <!-- Global Loading Helper Script -->
-    <script>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
         // Helper function to show loading state
         window.showLoading = function() {
             document.querySelector('[x-data]').__x.$data.loading = true;
@@ -465,12 +467,4 @@
             // Auto-show loading on links with data-loading attribute
             document.querySelectorAll('a[data-loading]').forEach(function(link) {
                 link.addEventListener('click', function() {
-                    window.showLoading();
-                });
-            });
-        });
-    </script>
-    
-    {% block scripts %}{% endblock %}
-</body>
-</html>
+           
