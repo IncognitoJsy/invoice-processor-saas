@@ -392,6 +392,9 @@
 
 <!-- Queue JavaScript - inside content block to avoid Cloudflare script injection issues -->
 <script>
+// Get CSRF token
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+
 function queueManager() {
     return {
         // State
@@ -467,6 +470,7 @@ function queueManager() {
             try {
                 const res = await fetch('/queue/api/upload', {
                     method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
                     body: formData
                 });
                 const data = await res.json();
@@ -548,7 +552,7 @@ function queueManager() {
             try {
                 const res = await fetch(`/queue/api/${id}/process`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ target_tab: targetTab })
                 });
                 const data = await res.json();
@@ -595,7 +599,7 @@ function queueManager() {
             if (!confirm('Remove this file from the queue?')) return;
             
             try {
-                const res = await fetch(`/queue/api/${id}/delete`, { method: 'DELETE' });
+                const res = await fetch(`/queue/api/${id}/delete`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
                 
                 if (data.success) {
@@ -613,7 +617,7 @@ function queueManager() {
             
             for (const id of [...this.selectedItems]) {
                 try {
-                    await fetch(`/queue/api/${id}/delete`, { method: 'DELETE' });
+                    await fetch(`/queue/api/${id}/delete`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
                     this.items = this.items.filter(i => i.id !== id);
                 } catch (e) {}
             }
@@ -624,7 +628,7 @@ function queueManager() {
         // Clear completed
         async clearCompleted() {
             try {
-                const res = await fetch('/queue/api/clear-completed', { method: 'POST' });
+                const res = await fetch('/queue/api/clear-completed', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
                 
                 if (data.success) {
