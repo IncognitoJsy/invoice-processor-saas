@@ -389,11 +389,8 @@
             </div>
         </template>
     </div>
-</div>
 
-{% endblock %}
-
-{% block scripts %}
+<!-- Queue JavaScript - inside content block to avoid Cloudflare script injection issues -->
 <script>
 function queueManager() {
     return {
@@ -660,4 +657,6 @@ function queueManager() {
     };
 }
 </script>
+</div>
+
 {% endblock %}
