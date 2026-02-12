@@ -143,3 +143,17 @@ def health():
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat()
     })
+
+@bp.route('/fetch-emails', methods=['POST'])
+def fetch_emails_task():
+    """Cron endpoint to fetch emails for all active users"""
+    from app.services.email_fetcher import fetch_all_users
+    
+    # Verify cron secret
+    secret = request.headers.get('X-Cron-Secret') or request.args.get('secret')
+    expected = os.environ.get('CRON_SECRET', '')
+    if not expected or secret != expected:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    results = fetch_all_users()
+    return jsonify({'success': True, 'results': {str(k): v for k, v in results.items()}})    

@@ -45,7 +45,7 @@ def create_app(config_name='default'):
     register_blueprints(app)
 
     # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
-    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue
+    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue, gmail_auth
     csrf.exempt(upload.bp)
     csrf.exempt(user_api.bp)
     csrf.exempt(integrations.bp)
@@ -55,6 +55,7 @@ def create_app(config_name='default'):
     csrf.exempt(invoices.bp)
     csrf.exempt(quotebuilder.bp)
     csrf.exempt(queue.bp)
+    csrf.exempt(gmail_auth.bp)
 
     # Register error handlers
     register_error_handlers(app)
@@ -131,7 +132,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes
+    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
@@ -155,6 +156,7 @@ def register_blueprints(app):
     app.register_blueprint(pages.bp)
     app.register_blueprint(part_number_routes.part_number_bp)
     app.register_blueprint(quotebuilder.bp)
+    app.register_blueprint(gmail_auth.bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)
@@ -192,7 +194,7 @@ def register_security_headers(app):
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: blob:",
-            "connect-src 'self' https://appcenter.intuit.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com",
+            "connect-src 'self' https://appcenter.intuit.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com https://accounts.google.com",
             "frame-src 'self' https://js.stripe.com https://appcenter.intuit.com",
             "object-src 'none'",
             "base-uri 'self'",
