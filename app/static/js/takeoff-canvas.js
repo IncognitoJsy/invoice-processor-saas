@@ -632,8 +632,8 @@ function takeoffCanvas(projectId, documentId) {
         st.productId = product.id;
         st.productName = product.name;
         st.productSku = product.sku || '';
-        st.purchasePrice = product.purchase_price || 0;
-        st.salePrice = product.sale_price || 0;
+        st.purchasePrice = product.purchase_cost || product.purchase_price || 0;
+        st.salePrice = product.unit_price || product.sale_price || 0;
         if (st.name === 'New Symbol') st.name = product.name;
       }
       this.showProductSearch = false;

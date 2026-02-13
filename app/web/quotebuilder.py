@@ -25,7 +25,6 @@ PAPER_SIZES_MM = {
 
 bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
 
-_product_cache = {}
 
 # Simple in-memory rate limiter
 _rate_limit_store = defaultdict(list)
@@ -3133,140 +3132,115 @@ def remove_accessory(project_id, material_id):
 # =============================================================================
 # TAKEOFF - PRODUCT SEARCH
 # =============================================================================
+# PRODUCT SEARCH WITH CACHING
+# =============================================================================
+
+# In-memory product cache: { user_id: { 'products': [...], 'cached_at': time } }
+_product_cache = {}
+_CACHE_TTL_SECONDS = 600  # 10 minutes
+
 
 @bp.route('/api/products/search')
 @login_required
 def search_products():
-    """Search QuickBooks/Xero products by SKU or description.
-    
-    Uses in-memory cache to avoid hitting QB/Xero API on every keystroke.
-    Cache refreshes every 10 minutes or on manual refresh.
-    """
-    from datetime import datetime, timedelta
+    """Search QuickBooks/Xero products with in-memory caching."""
+    import time
 
-    query = request.args.get('q', '').strip().upper()
-    force_refresh = request.args.get('refresh', '').lower() == 'true'
-
+    query = request.args.get('q', '').strip()
     if len(query) < 2:
         return jsonify({'success': True, 'products': []})
 
     user_id = current_user.id
-    cache_entry = _product_cache.get(user_id)
-    cache_valid = (
-        cache_entry
-        and not force_refresh
-        and (datetime.utcnow() - cache_entry['timestamp']) < timedelta(minutes=10)
-    )
+    now = time.time()
 
-    # Use cached products if available
-    if cache_valid:
-        all_items = cache_entry['products']
-        source = cache_entry['source']
+    cached = _product_cache.get(user_id)
+    if cached and (now - cached['cached_at']) < _CACHE_TTL_SECONDS:
+        all_products = cached['products']
     else:
-        # Fetch fresh from QB or Xero
-        all_items = []
-        source = 'none'
+        all_products = _load_all_products(user_id)
+        _product_cache[user_id] = {'products': all_products, 'cached_at': now}
+        current_app.logger.info(f"Product cache refreshed for user {user_id}: {len(all_products)} items")
 
-        # ── Try QuickBooks ────────────────────────────────────────
-        try:
-            from app.models.quickbooks import QuickBooksConnection
-            from app.integrations.quickbooks_service import QuickBooksService
-
-            qb_connection = QuickBooksConnection.query.filter_by(
-                user_id=current_user.id,
-                is_active=True
-            ).first()
-
-            if qb_connection:
-                qb_service = QuickBooksService()
-                response = qb_service.get_items(qb_connection)
-
-                if response and 'error' not in response:
-                    items = response.get('QueryResponse', {}).get('Item', [])
-                    for item in items:
-                        all_items.append({
-                            'id': item.get('Id'),
-                            'sku': item.get('Sku', ''),
-                            'name': item.get('Name', ''),
-                            'description': item.get('Description', ''),
-                            'purchase_cost': float(item.get('PurchaseCost', 0) or 0),
-                            'unit_price': float(item.get('UnitPrice', 0) or 0),
-                            'source': 'quickbooks',
-                        })
-                    source = 'quickbooks'
-                    current_app.logger.info(f"Product cache refreshed: {len(all_items)} items from QuickBooks")
-
-        except Exception as e:
-            current_app.logger.warning(f"QB product search error: {e}")
-
-        # ── Try Xero if no QB ─────────────────────────────────────
-        if not all_items:
-            try:
-                from app.models.xero import XeroConnection
-                from app.integrations.xero_service import XeroService
-
-                xero_connection = XeroConnection.query.filter_by(
-                    user_id=current_user.id,
-                    is_active=True
-                ).first()
-
-                if xero_connection:
-                    xero_service = XeroService()
-                    items = xero_service.get_items(xero_connection)
-
-                    if items:
-                        for item in items:
-                            purchase_price = 0
-                            sale_price = 0
-                            if item.get('PurchaseDetails'):
-                                purchase_price = float(item['PurchaseDetails'].get('UnitPrice', 0) or 0)
-                            if item.get('SalesDetails'):
-                                sale_price = float(item['SalesDetails'].get('UnitPrice', 0) or 0)
-
-                            all_items.append({
-                                'id': item.get('ItemID'),
-                                'sku': item.get('Code', ''),
-                                'name': item.get('Name', ''),
-                                'description': item.get('Description', ''),
-                                'purchase_cost': purchase_price,
-                                'unit_price': sale_price,
-                                'source': 'xero',
-                            })
-                        source = 'xero'
-                        current_app.logger.info(f"Product cache refreshed: {len(all_items)} items from Xero")
-
-            except (ImportError, Exception) as e:
-                current_app.logger.warning(f"Xero product search error: {e}")
-
-        # Store in cache
-        if all_items:
-            _product_cache[user_id] = {
-                'products': all_items,
-                'timestamp': datetime.utcnow(),
-                'source': source,
-            }
-
-    # Filter cached products by search query
-    products = []
-    for item in all_items:
-        sku = (item.get('sku') or '').upper()
-        name = (item.get('name') or '').upper()
-        desc = (item.get('description') or '').upper()
-
-        if query in sku or query in name or query in desc:
-            products.append(item)
-            if len(products) >= 20:
+    q_upper = query.upper()
+    results = []
+    for p in all_products:
+        if (q_upper in (p.get('sku') or '').upper() or
+            q_upper in (p.get('name') or '').upper() or
+            q_upper in (p.get('description') or '').upper()):
+            results.append(p)
+            if len(results) >= 25:
                 break
 
-    return jsonify({
-        'success': True,
-        'products': products,
-        'source': source,
-        'cached': cache_valid or False,
-        'total_items': len(all_items),
-    })
+    return jsonify({'success': True, 'products': results})
 
 
+@bp.route('/api/products/cache/clear', methods=['POST'])
+@login_required
+def clear_product_cache():
+    """Manually clear the product cache for current user."""
+    _product_cache.pop(current_user.id, None)
+    return jsonify({'success': True, 'message': 'Cache cleared'})
+
+
+def _load_all_products(user_id):
+    """Load all products from QuickBooks or Xero for a user."""
+    products = []
+
+    try:
+        from app.models.quickbooks import QuickBooksConnection
+        from app.integrations.quickbooks_service import QuickBooksService
+
+        qb_connection = QuickBooksConnection.query.filter_by(user_id=user_id, is_active=True).first()
+        if qb_connection:
+            qb_service = QuickBooksService()
+            response = qb_service.get_items(qb_connection)
+            items = response.get('QueryResponse', {}).get('Item', [])
+            for item in items:
+                if not item.get('Active', True):
+                    continue
+                products.append({
+                    'id': item.get('Id'),
+                    'sku': item.get('Sku', ''),
+                    'name': item.get('Name', ''),
+                    'description': item.get('Description', ''),
+                    'purchase_cost': float(item.get('PurchaseCost', 0) or 0),
+                    'unit_price': float(item.get('UnitPrice', 0) or 0),
+                    'source': 'quickbooks',
+                })
+            if products:
+                return products
+    except Exception as e:
+        current_app.logger.warning(f"QB product load error: {e}")
+
+    try:
+        from app.models.xero import XeroConnection
+        from app.integrations.xero_service import XeroService
+
+        xero_connection = XeroConnection.query.filter_by(user_id=user_id, is_active=True).first()
+        if xero_connection:
+            xero_service = XeroService()
+            items = xero_service.get_items(xero_connection)
+            if items:
+                for item in items:
+                    purchase_price = 0
+                    sale_price = 0
+                    if item.get('PurchaseDetails'):
+                        purchase_price = float(item['PurchaseDetails'].get('UnitPrice', 0) or 0)
+                    if item.get('SalesDetails'):
+                        sale_price = float(item['SalesDetails'].get('UnitPrice', 0) or 0)
+                    products.append({
+                        'id': item.get('ItemID'),
+                        'sku': item.get('Code', ''),
+                        'name': item.get('Name', ''),
+                        'description': item.get('Description', ''),
+                        'purchase_cost': purchase_price,
+                        'unit_price': sale_price,
+                        'source': 'xero',
+                    })
+    except Exception as e:
+        current_app.logger.warning(f"Xero product load error: {e}")
+
+    return products
 
 
 # =============================================================================

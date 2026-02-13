@@ -392,7 +392,7 @@
                       class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700 transition flex items-center justify-between">
                 <div>
                   <div class="text-sm text-white" x-text="prod.name"></div>
-                  <div class="text-xs text-gray-400" x-text="(prod.sku || 'No SKU') + ' • Buy: £' + (prod.purchase_price||0).toFixed(2) + ' • Sell: £' + (prod.sale_price||0).toFixed(2)"></div>
+                  <div class="text-xs text-gray-400" x-text="(prod.sku || 'No SKU') + ' • Buy: £' + (prod.purchase_cost||prod.purchase_price||0).toFixed(2) + ' • Sell: £' + (prod.unit_price||prod.sale_price||0).toFixed(2)"></div>
                 </div>
                 <span class="text-xs text-indigo-400 font-medium">Link</span>
               </button>
