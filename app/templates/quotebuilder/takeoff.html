@@ -166,6 +166,15 @@
             <option :value="ct.value" x-text="ct.label"></option>
           </template>
         </select>
+        <div class="mt-2 flex items-center justify-between">
+          <template x-if="cableTypes.find(t => t.value === activeCableType)?.productName">
+            <span class="text-xs text-green-400" x-text="'🔗 ' + cableTypes.find(t => t.value === activeCableType).productName + ' (£' + (cableTypes.find(t => t.value === activeCableType).pricePerMetre || 0).toFixed(2) + '/m)'"></span>
+          </template>
+          <template x-if="!cableTypes.find(t => t.value === activeCableType)?.productName">
+            <span class="text-xs text-gray-600">No product linked</span>
+          </template>
+          <button @click="openCableProductSearch(activeCableType)" class="text-xs px-2 py-0.5 rounded bg-blue-900/40 text-blue-400 hover:bg-blue-800/50">🔗 Link</button>
+        </div>
       </div>
 
       <!-- Containment type selector -->
@@ -267,7 +276,10 @@
               <template x-for="cs in cableSummary" :key="cs.label">
                 <div class="flex items-center justify-between text-xs">
                   <span class="text-gray-400" x-text="cs.label"></span>
-                  <span class="text-gray-300 font-mono" x-text="cs.metres.toFixed(1) + 'm (' + cs.runs + ' runs)'"></span>
+                  <div class="text-right">
+                    <span class="text-gray-300 font-mono" x-text="cs.metres.toFixed(1) + 'm (' + cs.runs + ' runs)'"></span>
+                    <span x-show="cs.pricePerMetre > 0" class="text-green-400 font-mono ml-1" x-text="'£' + (cs.metres * cs.pricePerMetre).toFixed(2)"></span>
+                  </div>
                 </div>
               </template>
             </div>
@@ -404,6 +416,37 @@
     </div>
   </template>
 </div>
+
+  <!-- Cable/Containment Product Search Modal -->
+  <template x-if="showCableProductSearch">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showCableProductSearch = false">
+      <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <div class="px-5 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h3 class="text-sm font-semibold text-white">Link Product to Cable Type</h3>
+          <button @click="showCableProductSearch = false" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div class="p-5">
+          <input id="cable-product-search-input" type="text" x-model="cableProductSearchQuery" @input.debounce.300ms="searchCableProducts()"
+                 placeholder="Search cable by name or SKU..."
+                 class="w-full text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white placeholder-gray-500 focus:ring-blue-500 focus:border-blue-500">
+          <div x-show="cableProductSearching" class="text-xs text-gray-400 mt-3 text-center">Searching...</div>
+          <div class="mt-3 max-h-60 overflow-y-auto space-y-1">
+            <template x-for="prod in cableProductSearchResults" :key="prod.id">
+              <button @click="linkCableProduct(prod)"
+                      class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700 transition flex items-center justify-between">
+                <div>
+                  <div class="text-sm text-white" x-text="prod.name"></div>
+                  <div class="text-xs text-gray-400" x-text="(prod.sku || 'No SKU') + ' • £' + (prod.unit_price||prod.purchase_cost||0).toFixed(2) + '/unit'"></div>
+                </div>
+                <span class="text-xs text-blue-400 font-medium">Link</span>
+              </button>
+            </template>
+            <div x-show="cableProductSearchResults.length === 0 && cableProductSearchQuery.length >= 2 && !cableProductSearching" class="text-xs text-gray-500 text-center py-4">No products found</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
 
 <style>
   .tool-btn { @apply text-xs px-2.5 py-1.5 rounded font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition whitespace-nowrap; }

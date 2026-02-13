@@ -55,21 +55,28 @@ function takeoffCanvas(projectId, documentId) {
 
     // Cable runs
     cableTypes: [
-      { value: 'twin_earth_1.5', label: '1.5mm T&E (Lighting)', color: '#facc15' },
-      { value: 'twin_earth_2.5', label: '2.5mm T&E (Sockets)', color: '#3b82f6' },
-      { value: 'twin_earth_4.0', label: '4.0mm T&E (Ring/Radial)', color: '#22d3ee' },
-      { value: 'twin_earth_6.0', label: '6.0mm T&E (Cooker)', color: '#ef4444' },
-      { value: 'twin_earth_10', label: '10mm T&E (Shower)', color: '#a855f7' },
-      { value: 'cat6', label: 'Cat6 Data', color: '#10b981' },
-      { value: 'fire_alarm', label: 'Fire Alarm', color: '#f97316' },
-      { value: 'swa', label: 'SWA', color: '#6b7280' },
+      { value: 'twin_earth_1.5', label: '1.5mm T&E (Lighting)', color: '#facc15', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'twin_earth_2.5', label: '2.5mm T&E (Sockets)', color: '#3b82f6', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'twin_earth_4.0', label: '4.0mm T&E (Ring/Radial)', color: '#22d3ee', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'twin_earth_6.0', label: '6.0mm T&E (Cooker)', color: '#ef4444', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'twin_earth_10', label: '10mm T&E (Shower)', color: '#a855f7', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'cat6', label: 'Cat6 Data', color: '#10b981', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'fire_alarm', label: 'Fire Alarm', color: '#f97316', productId: null, productName: null, pricePerMetre: 0 },
+      { value: 'swa', label: 'SWA', color: '#6b7280', productId: null, productName: null, pricePerMetre: 0 },
     ],
     activeCableType: 'twin_earth_2.5',
     cableRuns: [],
-    // Each: { id, type, points:[], metres, visible, label }
+    // Each: { id, type, points:[], metres, visible, label, color, metresWithWaste }
     cableDrawing: false,
     cablePoints: [],
     nextCableId: 1,
+
+    // Cable/containment product search
+    showCableProductSearch: false,
+    cableProductSearchQuery: '',
+    cableProductSearchResults: [],
+    cableProductSearching: false,
+    cableProductSearchFor: null, // cable type value we're linking
 
     // Containment
     containmentTypes: [
@@ -640,6 +647,38 @@ function takeoffCanvas(projectId, documentId) {
       this.autoSave();
     },
 
+    // ─── Cable/Containment product search ───────────
+    openCableProductSearch(cableTypeValue) {
+      this.cableProductSearchFor = cableTypeValue;
+      this.cableProductSearchQuery = '';
+      this.cableProductSearchResults = [];
+      this.showCableProductSearch = true;
+      this.$nextTick(() => { document.getElementById('cable-product-search-input')?.focus(); });
+    },
+
+    async searchCableProducts() {
+      if (this.cableProductSearchQuery.length < 2) return;
+      this.cableProductSearching = true;
+      try {
+        const res = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.cableProductSearchQuery)}`);
+        const data = await res.json();
+        this.cableProductSearchResults = data.products || [];
+      } catch (e) { console.error('Search error:', e); }
+      this.cableProductSearching = false;
+    },
+
+    linkCableProduct(product) {
+      const ct = this.cableTypes.find(t => t.value === this.cableProductSearchFor);
+      if (ct) {
+        ct.productId = product.id;
+        ct.productName = product.name;
+        // Price per metre: QB unit_price is typically per unit (per metre for cable)
+        ct.pricePerMetre = product.unit_price || product.sale_price || 0;
+      }
+      this.showCableProductSearch = false;
+      this.autoSave();
+    },
+
     // ─── Utility calculations ───────────────────────
     calcPolylineLength(points) {
       let len = 0;
@@ -704,7 +743,10 @@ function takeoffCanvas(projectId, documentId) {
     get cableSummary() {
       const grouped = {};
       for (const run of this.cableRuns) {
-        if (!grouped[run.type]) grouped[run.type] = { label: run.label, color: run.color, metres: 0, runs: 0 };
+        if (!grouped[run.type]) {
+          const ct = this.cableTypes.find(t => t.value === run.type);
+          grouped[run.type] = { label: run.label, color: run.color, metres: 0, runs: 0, pricePerMetre: ct?.pricePerMetre || 0, productName: ct?.productName || null };
+        }
         grouped[run.type].metres += run.metresWithWaste || run.metres;
         grouped[run.type].runs++;
       }
@@ -1021,7 +1063,9 @@ function takeoffCanvas(projectId, documentId) {
         symbolTypes: this.symbolTypes,
         markers: this.markers,
         rooms: this.rooms,
+        cableTypes: this.cableTypes,
         cableRuns: this.cableRuns,
+        containmentTypes: this.containmentTypes,
         containmentRuns: this.containmentRuns,
         areas: this.areas,
         nextMarkerId: this.nextMarkerId,
@@ -1031,11 +1075,14 @@ function takeoffCanvas(projectId, documentId) {
         nextAreaId: this.nextAreaId,
       };
       try {
-        await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/takeoff-v8-state`, {
+        const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/takeoff-v8-state`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(state),
         });
+        const data = await res.json();
+        if (!data.success) console.error('Save failed:', data);
+        else console.log('State saved:', this.markers.length, 'markers,', this.cableRuns.length, 'cables');
       } catch (e) { console.error('Save error:', e); }
       this.saving = false;
     },
@@ -1051,7 +1098,20 @@ function takeoffCanvas(projectId, documentId) {
             this.symbolTypes = state.symbolTypes || [];
             this.markers = state.markers || [];
             this.rooms = state.rooms || [];
+            // Restore cable types with product links
+            if (state.cableTypes) {
+              for (const saved of state.cableTypes) {
+                const ct = this.cableTypes.find(t => t.value === saved.value);
+                if (ct) { ct.productId = saved.productId; ct.productName = saved.productName; ct.pricePerMetre = saved.pricePerMetre || 0; }
+              }
+            }
             this.cableRuns = state.cableRuns || [];
+            if (state.containmentTypes) {
+              for (const saved of state.containmentTypes) {
+                const ct = this.containmentTypes.find(t => t.value === saved.value);
+                if (ct && saved.productId) { ct.productId = saved.productId; ct.productName = saved.productName; ct.pricePerMetre = saved.pricePerMetre || 0; }
+              }
+            }
             this.containmentRuns = state.containmentRuns || [];
             this.areas = state.areas || [];
             this.nextMarkerId = state.nextMarkerId || (this.markers.length > 0 ? Math.max(...this.markers.map(m => m.id)) + 1 : 1);
@@ -1059,6 +1119,7 @@ function takeoffCanvas(projectId, documentId) {
             this.nextCableId = state.nextCableId || (this.cableRuns.length > 0 ? Math.max(...this.cableRuns.map(c => c.id)) + 1 : 1);
             this.nextContainmentId = state.nextContainmentId || (this.containmentRuns.length > 0 ? Math.max(...this.containmentRuns.map(c => c.id)) + 1 : 1);
             this.nextAreaId = state.nextAreaId || (this.areas.length > 0 ? Math.max(...this.areas.map(a => a.id)) + 1 : 1);
+            console.log('State loaded:', this.markers.length, 'markers,', this.cableRuns.length, 'cables,', this.symbolTypes.length, 'symbol types');
             this.render();
           }
         }
