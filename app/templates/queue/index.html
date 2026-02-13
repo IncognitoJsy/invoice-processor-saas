@@ -5,7 +5,7 @@
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" 
      x-data="queueManager()"
-     x-init="loadQueue()">
+     x-init="init()">
     
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
@@ -15,30 +15,127 @@
                 Upload supplier invoices, then drag them to process as invoices or quotes
             </p>
         </div>
-        <div class="mt-4 sm:mt-0 flex items-center space-x-3">
-            <!-- Email Auto-Fetch Toggle (Phase 2 - disabled for now) -->
-            <div class="flex items-center space-x-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg opacity-60 cursor-not-allowed" title="Coming soon - auto-fetch from email">
-                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                </svg>
-                <span class="text-xs font-medium text-gray-400">Auto-Fetch</span>
-                <div class="w-8 h-4 bg-gray-300 dark:bg-gray-600 rounded-full relative">
-                    <div class="w-3 h-3 bg-white rounded-full absolute left-0.5 top-0.5"></div>
+        <div class="mt-4 sm:mt-0 flex items-center space-x-3 flex-wrap gap-y-2">
+            <!-- Gmail: Not Connected -->
+            <template x-if="!gmail.connected">
+                <a href="/auth/gmail/connect"
+                   class="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition text-sm font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    <span>Connect Gmail</span>
+                </a>
+            </template>
+            <!-- Gmail: Connected -->
+            <template x-if="gmail.connected">
+                <div class="flex items-center space-x-2">
+                    <button @click="toggleAutoFetch()" 
+                            class="flex items-center space-x-2 px-3 py-2 rounded-lg transition text-sm"
+                            :class="gmail.is_active ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                        <span x-text="gmail.is_active ? 'Auto-Fetch On' : 'Auto-Fetch Off'" class="font-medium"></span>
+                        <div class="w-8 h-4 rounded-full relative transition-colors"
+                             :class="gmail.is_active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'">
+                            <div class="w-3 h-3 bg-white rounded-full absolute top-0.5 transition-all"
+                                 :class="gmail.is_active ? 'right-0.5' : 'left-0.5'"></div>
+                        </div>
+                    </button>
+                    <button @click="showGmailPanel = !showGmailPanel"
+                            class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
+                            title="Gmail settings & suppliers">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                    <button @click="fetchNow()" :disabled="fetching"
+                            class="flex items-center space-x-1 px-3 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition disabled:opacity-50"
+                            title="Fetch emails now">
+                        <svg class="w-4 h-4" :class="fetching ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span x-text="fetching ? 'Fetching...' : 'Fetch Now'"></span>
+                    </button>
                 </div>
-            </div>
+            </template>
             
-            <button @click="clearCompleted()" 
-                    x-show="completedCount > 0"
+            <button @click="clearCompleted()" x-show="completedCount > 0"
                     class="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition">
                 Clear Completed (<span x-text="completedCount"></span>)
             </button>
         </div>
     </div>
     
-    <!-- Main Layout: Upload + Queue on left, Drop Zones on right -->
+    <!-- Gmail Settings Panel -->
+    <div x-show="gmail.connected && showGmailPanel" x-transition
+         class="mb-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                    <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Gmail Connected</h3>
+                    <p class="text-xs text-gray-500" x-text="gmail.email_address"></p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <span class="text-xs text-gray-400" x-text="gmail.emails_fetched_count + ' PDFs fetched'"></span>
+                <span x-show="gmail.last_error" class="text-xs text-red-500" x-text="gmail.last_error"></span>
+                <button @click="disconnectGmail()" class="text-xs text-red-500 hover:text-red-700 font-medium">Disconnect</button>
+            </div>
+        </div>
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Supplier Email Filters</h4>
+                <span class="text-xs text-gray-400">Only emails from these addresses will be fetched</span>
+            </div>
+            <div class="flex items-center space-x-2 mb-4">
+                <input type="text" x-model="newSupplierName" placeholder="Supplier name"
+                       class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-primary-500 focus:border-primary-500">
+                <input type="email" x-model="newSupplierEmail" placeholder="sender@example.com"
+                       class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-primary-500 focus:border-primary-500">
+                <button @click="addSupplier()" :disabled="!newSupplierName || !newSupplierEmail"
+                        class="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
+                    Add
+                </button>
+            </div>
+            <div class="space-y-2">
+                <template x-for="supplier in suppliers" :key="supplier.id">
+                    <div class="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="flex items-center space-x-3">
+                            <button @click="toggleSupplier(supplier.id)" 
+                                    class="w-4 h-4 rounded border flex items-center justify-center transition"
+                                    :class="supplier.is_active ? 'bg-green-500 border-green-500' : 'border-gray-300 dark:border-gray-600'">
+                                <svg x-show="supplier.is_active" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                            <div>
+                                <span class="text-sm font-medium text-gray-900 dark:text-white" x-text="supplier.supplier_name"></span>
+                                <span class="text-xs text-gray-500 ml-2" x-text="supplier.email_address"></span>
+                            </div>
+                        </div>
+                        <button @click="deleteSupplier(supplier.id)" class="text-gray-400 hover:text-red-500 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+                <div x-show="suppliers.length === 0" class="text-center py-4">
+                    <p class="text-xs text-gray-400">No supplier filters yet. Add supplier email addresses above.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <!-- Left Column: Upload Zone + Queue Stack -->
         <div class="lg:col-span-2 space-y-6">
             
             <!-- Upload Drop Zone -->
@@ -48,25 +145,16 @@
                  @dragleave.prevent="isDraggingFile = false"
                  @drop.prevent="handleFileDrop($event)"
                  @click="$refs.fileInput.click()">
-                
-                <input type="file" 
-                       x-ref="fileInput" 
-                       @change="handleFileSelect($event)" 
-                       multiple 
-                       accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" 
-                       class="hidden">
-                
+                <input type="file" x-ref="fileInput" @change="handleFileSelect($event)" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" class="hidden">
                 <div class="px-8 py-10 text-center">
-                    <svg class="mx-auto w-12 h-12 mb-4 transition-colors" 
-                         :class="isDraggingFile ? 'text-primary-500' : 'text-gray-400'"
-                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="mx-auto w-12 h-12 mb-4 transition-colors" :class="isDraggingFile ? 'text-primary-500' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                     </svg>
                     <p class="text-sm font-medium" :class="isDraggingFile ? 'text-primary-600 dark:text-primary-400' : 'text-gray-600 dark:text-gray-400'">
                         <span x-show="!isDraggingFile">Drop PDF invoices here or <span class="text-primary-600 dark:text-primary-400 underline cursor-pointer">browse files</span></span>
                         <span x-show="isDraggingFile">Drop files to add to queue</span>
                     </p>
-                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">PDF, JPG, PNG — multiple files supported</p>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">PDF, JPG, PNG &#8212; multiple files supported</p>
                 </div>
             </div>
             
@@ -74,7 +162,7 @@
             <template x-if="uploading">
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                     <div class="flex items-center space-x-3">
-                        <svg class="w-5 h-5 text-primary-600 spinner" fill="none" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5 text-primary-600 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -87,9 +175,7 @@
             <div>
                 <div class="flex items-center justify-between mb-3">
                     <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                        Queued 
-                        <span class="inline-flex items-center justify-center px-2 py-0.5 ml-1 text-xs font-bold rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300" 
-                              x-text="queuedItems.length"></span>
+                        Queued <span class="inline-flex items-center justify-center px-2 py-0.5 ml-1 text-xs font-bold rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300" x-text="queuedItems.length"></span>
                     </h2>
                     <div x-show="queuedItems.length > 1" class="flex items-center space-x-2">
                         <button @click="selectAll()" class="text-xs text-primary-600 dark:text-primary-400 hover:underline">Select All</button>
@@ -98,109 +184,68 @@
                     </div>
                 </div>
                 
-                <!-- Empty State -->
-                <div x-show="queuedItems.length === 0 && !loading" 
-                     class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
+                <div x-show="queuedItems.length === 0 && !loading" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
                     <svg class="mx-auto w-16 h-16 text-gray-300 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                     </svg>
                     <p class="text-gray-500 dark:text-gray-400 font-medium">No invoices in queue</p>
-                    <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">Upload PDFs above to get started</p>
+                    <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">Upload PDFs above or connect Gmail to auto-fetch</p>
                 </div>
                 
-                <!-- Loading State -->
                 <div x-show="loading" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-                    <svg class="mx-auto w-8 h-8 text-primary-600 spinner mb-3" fill="none" viewBox="0 0 24 24">
+                    <svg class="mx-auto w-8 h-8 text-primary-600 animate-spin mb-3" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <p class="text-sm text-gray-500">Loading queue...</p>
                 </div>
                 
-                <!-- Queue Cards -->
                 <div class="space-y-3" x-show="queuedItems.length > 0">
                     <template x-for="item in queuedItems" :key="item.id">
                         <div class="group bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing"
                              :class="{ 'ring-2 ring-primary-500 border-primary-500': selectedItems.includes(item.id) }"
-                             draggable="true"
-                             @dragstart="startDrag($event, item)"
-                             @dragend="endDrag($event)">
-                            
+                             draggable="true" @dragstart="startDrag($event, item)" @dragend="endDrag($event)">
                             <div class="p-4 flex items-center space-x-4">
                                 <!-- Checkbox -->
                                 <label class="flex-shrink-0 cursor-pointer" @click.stop>
-                                    <input type="checkbox" 
-                                           :checked="selectedItems.includes(item.id)"
-                                           @change="toggleSelect(item.id)"
+                                    <input type="checkbox" :checked="selectedItems.includes(item.id)" @change="toggleSelect(item.id)"
                                            class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500">
                                 </label>
-                                
                                 <!-- PDF Icon -->
                                 <div class="flex-shrink-0 w-10 h-12 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center justify-center relative">
                                     <svg class="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M14,2H6C4.9,2,4,2.9,4,4v16c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8L14,2z M14,8V3.5L18.5,8H14z M6,20V4h7v5h5v11H6z"/>
                                     </svg>
-                                    <span x-show="item.page_count > 1" 
-                                          class="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
-                                          x-text="item.page_count"></span>
+                                    <span x-show="item.page_count > 1" class="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 text-white text-xs font-bold rounded-full flex items-center justify-center" x-text="item.page_count"></span>
                                 </div>
-                                
                                 <!-- File Info -->
                                 <div class="flex-1 min-w-0">
                                     <p class="text-sm font-medium text-gray-900 dark:text-white truncate" x-text="item.filename"></p>
                                     <div class="flex items-center space-x-3 mt-1">
-                                        <span class="text-xs text-gray-400 dark:text-gray-500" x-text="item.file_size_display"></span>
-                                        <span x-show="item.page_count > 1" class="text-xs text-gray-400 dark:text-gray-500" x-text="item.page_count + ' pages'"></span>
-                                        <span class="text-xs text-gray-400 dark:text-gray-500" x-text="item.age_display"></span>
+                                        <span class="text-xs text-gray-400" x-text="item.file_size_display"></span>
+                                        <span x-show="item.page_count > 1" class="text-xs text-gray-400" x-text="item.page_count + ' pages'"></span>
+                                        <span class="text-xs text-gray-400" x-text="item.age_display"></span>
                                         <span x-show="item.source === 'email'" class="inline-flex items-center text-xs text-blue-600 dark:text-blue-400">
-                                            <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                                            </svg>
+                                            <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                                             <span x-text="item.supplier_name || item.source_email"></span>
                                         </span>
                                     </div>
                                 </div>
-                                
                                 <!-- Actions -->
                                 <div class="flex-shrink-0 flex items-center space-x-1">
-                                    <!-- Preview -->
-                                    <button @click.stop="previewItem(item)" 
-                                            class="p-2 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-                                            title="Preview PDF">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                        </svg>
+                                    <button @click.stop="previewItem(item)" class="p-2 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title="Preview">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                     </button>
-                                    
-                                    <!-- Quick Process as Invoice -->
-                                    <button @click.stop="processItem(item.id, 'invoice')"
-                                            class="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-                                            title="Process as Invoice">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                        </svg>
+                                    <button @click.stop="processItem(item.id, 'invoice')" class="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title="Process as Invoice">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                     </button>
-                                    
-                                    <!-- Quick Process as Quote -->
-                                    <button @click.stop="processItem(item.id, 'quote')"
-                                            class="p-2 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-                                            title="Process as Quote">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                                        </svg>
+                                    <button @click.stop="processItem(item.id, 'quote')" class="p-2 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title="Process as Quote">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                                     </button>
-                                    
-                                    <!-- Delete -->
-                                    <button @click.stop="deleteItem(item.id)"
-                                            class="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-                                            title="Remove from queue">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
+                                    <button @click.stop="deleteItem(item.id)" class="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title="Remove">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                     </button>
                                 </div>
-                                
                                 <!-- Drag Handle -->
                                 <div class="flex-shrink-0 text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing">
                                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -208,7 +253,6 @@
                                     </svg>
                                 </div>
                             </div>
-                            
                             <!-- Processing indicator -->
                             <template x-if="processingItems.includes(item.id)">
                                 <div class="px-4 pb-3">
@@ -223,25 +267,15 @@
                 </div>
                 
                 <!-- Batch Actions -->
-                <div x-show="selectedItems.length > 0" 
-                     x-transition
+                <div x-show="selectedItems.length > 0" x-transition
                      class="mt-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-4 flex items-center justify-between">
                     <span class="text-sm font-medium text-primary-700 dark:text-primary-300">
                         <span x-text="selectedItems.length"></span> selected
                     </span>
                     <div class="flex items-center space-x-2">
-                        <button @click="batchProcess('invoice')"
-                                class="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                            Process as Invoices
-                        </button>
-                        <button @click="batchProcess('quote')"
-                                class="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
-                            Process as Quotes
-                        </button>
-                        <button @click="batchDelete()"
-                                class="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-                            Delete
-                        </button>
+                        <button @click="batchProcess('invoice')" class="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition">Process as Invoices</button>
+                        <button @click="batchProcess('quote')" class="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">Process as Quotes</button>
+                        <button @click="batchDelete()" class="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition">Delete</button>
                     </div>
                 </div>
             </div>
@@ -249,48 +283,42 @@
         
         <!-- Right Column: Drop Zones -->
         <div class="space-y-6">
-            <!-- Process as Invoice Drop Zone -->
+            <!-- Process as Invoice -->
             <div class="border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200"
                  :class="dragOverZone === 'invoice' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 scale-[1.02]' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-green-300 dark:hover:border-green-700'"
-                 @dragover.prevent="dragOverZone = 'invoice'"
-                 @dragleave.prevent="dragOverZone = null"
+                 @dragover.prevent="dragOverZone = 'invoice'" @dragleave.prevent="dragOverZone = null"
                  @drop.prevent="handleDropToProcess($event, 'invoice')">
-                
                 <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-colors"
                      :class="dragOverZone === 'invoice' ? 'bg-green-500' : 'bg-green-100 dark:bg-green-900/30'">
                     <svg class="w-8 h-8" :class="dragOverZone === 'invoice' ? 'text-white' : 'text-green-600 dark:text-green-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                 </div>
-                
                 <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Process as Invoice</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
                     <span x-show="dragOverZone !== 'invoice'">Drag PDFs here to process as supplier invoices</span>
                     <span x-show="dragOverZone === 'invoice'" class="text-green-600 dark:text-green-400 font-medium">Release to process!</span>
                 </p>
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">→ Extracts costs, applies markup, syncs to accounting</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">&#8594; Extracts costs, applies markup, syncs to accounting</p>
             </div>
             
-            <!-- Process as Quote Drop Zone -->
+            <!-- Process as Quote -->
             <div class="border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200"
                  :class="dragOverZone === 'quote' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-[1.02]' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-purple-300 dark:hover:border-purple-700'"
-                 @dragover.prevent="dragOverZone = 'quote'"
-                 @dragleave.prevent="dragOverZone = null"
+                 @dragover.prevent="dragOverZone = 'quote'" @dragleave.prevent="dragOverZone = null"
                  @drop.prevent="handleDropToProcess($event, 'quote')">
-                
                 <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-colors"
                      :class="dragOverZone === 'quote' ? 'bg-purple-500' : 'bg-purple-100 dark:bg-purple-900/30'">
                     <svg class="w-8 h-8" :class="dragOverZone === 'quote' ? 'text-white' : 'text-purple-600 dark:text-purple-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
                 </div>
-                
                 <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Process as Quote</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
                     <span x-show="dragOverZone !== 'quote'">Drag PDFs here to process as supplier quotes</span>
                     <span x-show="dragOverZone === 'quote'" class="text-purple-600 dark:text-purple-400 font-medium">Release to process!</span>
                 </p>
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">→ Creates customer estimates with your markup</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">&#8594; Creates customer estimates with your markup</p>
             </div>
             
             <!-- Recently Processed -->
@@ -309,7 +337,7 @@
                             </div>
                             <div class="flex-1 min-w-0">
                                 <p class="text-xs font-medium text-gray-900 dark:text-white truncate" x-text="item.filename"></p>
-                                <p class="text-xs text-gray-400" x-text="(item.target_tab || 'invoice') + ' • ' + item.age_display"></p>
+                                <p class="text-xs text-gray-400" x-text="(item.target_tab || 'invoice') + ' &#8226; ' + item.age_display"></p>
                             </div>
                         </div>
                     </template>
@@ -322,43 +350,25 @@
     <template x-if="previewingItem">
         <div class="fixed inset-0 z-[101] flex items-center justify-center bg-gray-900/70 backdrop-blur-sm"
              @click.self="previewingItem = null"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100">
+             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[85vh] flex flex-col"
-                 x-transition:enter="transition ease-out duration-200"
-                 x-transition:enter-start="opacity-0 scale-95"
-                 x-transition:enter-end="opacity-100 scale-100">
-                
-                <!-- Modal Header -->
+                 x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
                 <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                     <div>
                         <h3 class="font-semibold text-gray-900 dark:text-white" x-text="previewingItem.filename"></h3>
-                        <p class="text-xs text-gray-500 mt-0.5" x-text="previewingItem.file_size_display + (previewingItem.page_count > 1 ? ' • ' + previewingItem.page_count + ' pages' : '')"></p>
+                        <p class="text-xs text-gray-500 mt-0.5" x-text="previewingItem.file_size_display + (previewingItem.page_count > 1 ? ' &#8226; ' + previewingItem.page_count + ' pages' : '')"></p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button @click="processItem(previewingItem.id, 'invoice'); previewingItem = null"
-                                class="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                            Process as Invoice
-                        </button>
-                        <button @click="processItem(previewingItem.id, 'quote'); previewingItem = null"
-                                class="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
-                            Process as Quote
-                        </button>
+                        <button @click="processItem(previewingItem.id, 'invoice'); previewingItem = null" class="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition">Process as Invoice</button>
+                        <button @click="processItem(previewingItem.id, 'quote'); previewingItem = null" class="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">Process as Quote</button>
                         <button @click="previewingItem = null" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
                 </div>
-                
-                <!-- PDF Viewer -->
                 <div class="flex-1 overflow-hidden">
                     <template x-if="previewingItem && previewingItem.id">
-                        <iframe :src="'/queue/api/' + previewingItem.id + '/preview'" 
-                                class="w-full h-full min-h-[60vh]"
-                                style="border: none;"></iframe>
+                        <iframe :src="'/queue/api/' + previewingItem.id + '/preview'" class="w-full h-full min-h-[60vh]" style="border: none;"></iframe>
                     </template>
                 </div>
             </div>
@@ -369,24 +379,12 @@
     <div class="fixed bottom-6 right-6 z-50 space-y-2">
         <template x-for="toast in toasts" :key="toast.id">
             <div x-show="toast.visible"
-                 x-transition:enter="transition ease-out duration-300"
-                 x-transition:enter-start="opacity-0 translate-y-2"
-                 x-transition:enter-end="opacity-100 translate-y-0"
-                 x-transition:leave="transition ease-in duration-200"
-                 x-transition:leave-start="opacity-100"
-                 x-transition:leave-end="opacity-0"
+                 x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+                 x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
                  class="px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center space-x-2"
-                 :class="{
-                     'bg-green-600 text-white': toast.type === 'success',
-                     'bg-red-600 text-white': toast.type === 'error',
-                     'bg-primary-600 text-white': toast.type === 'info'
-                 }">
-                <svg x-show="toast.type === 'success'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-                <svg x-show="toast.type === 'error'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
+                 :class="{ 'bg-green-600 text-white': toast.type === 'success', 'bg-red-600 text-white': toast.type === 'error', 'bg-primary-600 text-white': toast.type === 'info' }">
+                <svg x-show="toast.type === 'success'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg x-show="toast.type === 'error'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 <span x-text="toast.message"></span>
             </div>
         </template>
@@ -394,275 +392,208 @@
 
 <!-- Queue JavaScript - inside content block to avoid Cloudflare script injection issues -->
 <script>
-// Get CSRF token
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
 
 function queueManager() {
     return {
-        // State
-        items: [],
-        selectedItems: [],
-        processingItems: [],
-        loading: true,
-        uploading: false,
-        uploadStatus: '',
-        isDraggingFile: false,
-        dragOverZone: null,
-        draggedItemId: null,
-        previewingItem: null,
-        toasts: [],
-        toastCounter: 0,
+        items: [], selectedItems: [], processingItems: [],
+        loading: true, uploading: false, uploadStatus: '',
+        isDraggingFile: false, dragOverZone: null, draggedItemId: null,
+        previewingItem: null, toasts: [], toastCounter: 0,
         
-        // Computed
-        get queuedItems() {
-            return this.items.filter(i => i.status === 'queued');
-        },
-        get completedItems() {
-            return this.items.filter(i => i.status === 'completed' || i.status === 'failed');
-        },
-        get completedCount() {
-            return this.completedItems.length;
+        // Gmail state
+        gmail: { connected: false, email_address: '', is_active: false, last_checked: null, last_error: null, emails_fetched_count: 0 },
+        suppliers: [], showGmailPanel: false, fetching: false,
+        newSupplierName: '', newSupplierEmail: '',
+        
+        get queuedItems() { return this.items.filter(i => i.status === 'queued'); },
+        get completedItems() { return this.items.filter(i => i.status === 'completed' || i.status === 'failed'); },
+        get completedCount() { return this.completedItems.length; },
+        
+        async init() {
+            await this.loadQueue();
+            await this.loadGmailStatus();
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('success') === 'gmail_connected') {
+                this.showToast('success', 'Gmail connected successfully!');
+                window.history.replaceState({}, '', '/queue/');
+            }
+            if (params.get('error')) {
+                const errors = { 'gmail_not_configured': 'Gmail not configured', 'gmail_connect_failed': 'Connection failed', 'gmail_callback_failed': 'Authorization failed', 'invalid_state': 'Invalid session' };
+                this.showToast('error', errors[params.get('error')] || 'An error occurred');
+                window.history.replaceState({}, '', '/queue/');
+            }
         },
         
-        // Load queue from server
+        // === Gmail Methods ===
+        async loadGmailStatus() {
+            try {
+                const res = await fetch('/auth/gmail/status');
+                const data = await res.json();
+                if (data.connected) { this.gmail = data; await this.loadSuppliers(); }
+            } catch (e) { console.error('Gmail status error:', e); }
+        },
+        async loadSuppliers() {
+            try {
+                const res = await fetch('/auth/gmail/suppliers');
+                const data = await res.json();
+                if (data.success) this.suppliers = data.suppliers;
+            } catch (e) { console.error('Suppliers error:', e); }
+        },
+        async toggleAutoFetch() {
+            try {
+                const res = await fetch('/auth/gmail/toggle', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) { this.gmail.is_active = data.is_active; this.showToast('success', data.is_active ? 'Auto-fetch enabled' : 'Auto-fetch disabled'); }
+            } catch (e) { this.showToast('error', 'Toggle failed'); }
+        },
+        async fetchNow() {
+            this.fetching = true;
+            try {
+                const res = await fetch('/auth/gmail/fetch-now', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    this.showToast('success', `Fetched ${data.fetched} PDF${data.fetched !== 1 ? 's' : ''}, ${data.skipped} skipped`);
+                    if (data.fetched > 0) await this.loadQueue();
+                } else { this.showToast('error', data.error || 'Fetch failed'); }
+            } catch (e) { this.showToast('error', 'Fetch failed'); }
+            finally { this.fetching = false; }
+        },
+        async disconnectGmail() {
+            if (!confirm('Disconnect Gmail? Your supplier filters will be preserved.')) return;
+            try {
+                const res = await fetch('/auth/gmail/disconnect', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) { this.gmail = { connected: false }; this.showGmailPanel = false; this.showToast('success', 'Gmail disconnected'); }
+            } catch (e) { this.showToast('error', 'Disconnect failed'); }
+        },
+        async addSupplier() {
+            if (!this.newSupplierName || !this.newSupplierEmail) return;
+            try {
+                const res = await fetch('/auth/gmail/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ supplier_name: this.newSupplierName, email_address: this.newSupplierEmail }) });
+                const data = await res.json();
+                if (data.success) { this.suppliers.push(data.supplier); this.newSupplierName = ''; this.newSupplierEmail = ''; this.showToast('success', 'Supplier added'); }
+                else { this.showToast('error', data.error || 'Failed'); }
+            } catch (e) { this.showToast('error', 'Failed to add supplier'); }
+        },
+        async deleteSupplier(id) {
+            try {
+                const res = await fetch(`/auth/gmail/suppliers/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) { this.suppliers = this.suppliers.filter(s => s.id !== id); this.showToast('success', 'Supplier removed'); }
+            } catch (e) { this.showToast('error', 'Failed to remove'); }
+        },
+        async toggleSupplier(id) {
+            try {
+                const res = await fetch(`/auth/gmail/suppliers/${id}/toggle`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) { const s = this.suppliers.find(s => s.id === id); if (s) s.is_active = data.is_active; }
+            } catch (e) { this.showToast('error', 'Toggle failed'); }
+        },
+        
+        // === Queue Methods ===
         async loadQueue() {
             try {
                 const res = await fetch('/queue/api/list?status=all');
                 const data = await res.json();
-                if (data.success) {
-                    this.items = data.items;
-                }
-            } catch (e) {
-                console.error('Failed to load queue:', e);
-            } finally {
-                this.loading = false;
-            }
+                if (data.success) this.items = data.items;
+            } catch (e) { console.error('Queue load error:', e); }
+            finally { this.loading = false; }
         },
-        
-        // File upload handlers
         handleFileDrop(event) {
             this.isDraggingFile = false;
-            
-            // Check if this is a queue item drag (not a file drop)
             if (event.dataTransfer.getData('queue-item-id')) return;
-            
             const files = event.dataTransfer.files;
-            if (files.length > 0) {
-                this.uploadFiles(files);
-            }
+            if (files.length > 0) this.uploadFiles(files);
         },
-        
         handleFileSelect(event) {
             const files = event.target.files;
-            if (files.length > 0) {
-                this.uploadFiles(files);
-            }
-            event.target.value = ''; // Reset input
+            if (files.length > 0) this.uploadFiles(files);
+            event.target.value = '';
         },
-        
         async uploadFiles(files) {
             this.uploading = true;
             this.uploadStatus = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`;
-            
             const formData = new FormData();
-            for (let i = 0; i < files.length; i++) {
-                formData.append('files', files[i]);
-            }
-            
+            for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
             try {
-                const res = await fetch('/queue/api/upload', {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken },
-                    body: formData
-                });
+                const res = await fetch('/queue/api/upload', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
                 const data = await res.json();
-                
                 if (data.success) {
-                    // Add new items to the list
-                    if (data.items) {
-                        this.items = [...data.items, ...this.items];
-                    }
+                    if (data.items) this.items = [...data.items, ...this.items];
                     this.showToast('success', `${data.queued} file${data.queued > 1 ? 's' : ''} added to queue`);
-                    
-                    if (data.errors && data.errors.length > 0) {
-                        data.errors.forEach(err => this.showToast('error', err));
-                    }
-                } else {
-                    this.showToast('error', data.error || 'Upload failed');
-                }
-            } catch (e) {
-                console.error('Upload failed:', e);
-                this.showToast('error', 'Upload failed - please try again');
-            } finally {
-                this.uploading = false;
-                this.uploadStatus = '';
-            }
+                    if (data.errors && data.errors.length > 0) data.errors.forEach(err => this.showToast('error', err));
+                } else { this.showToast('error', data.error || 'Upload failed'); }
+            } catch (e) { this.showToast('error', 'Upload failed'); }
+            finally { this.uploading = false; this.uploadStatus = ''; }
         },
-        
-        // Drag and drop for queue items
         startDrag(event, item) {
             this.draggedItemId = item.id;
             event.dataTransfer.setData('queue-item-id', item.id.toString());
             event.dataTransfer.effectAllowed = 'move';
-            
-            // If item is in selection, drag all selected
-            if (this.selectedItems.includes(item.id) && this.selectedItems.length > 1) {
+            if (this.selectedItems.includes(item.id) && this.selectedItems.length > 1)
                 event.dataTransfer.setData('queue-batch', JSON.stringify(this.selectedItems));
-            }
         },
-        
-        endDrag(event) {
-            this.draggedItemId = null;
-            this.dragOverZone = null;
-        },
-        
+        endDrag(event) { this.draggedItemId = null; this.dragOverZone = null; },
         handleDropToProcess(event, targetTab) {
             this.dragOverZone = null;
-            
             const batchData = event.dataTransfer.getData('queue-batch');
             const singleId = event.dataTransfer.getData('queue-item-id');
-            
-            if (batchData) {
-                // Batch process
-                const ids = JSON.parse(batchData);
-                this.batchProcessIds(ids, targetTab);
-            } else if (singleId) {
-                this.processItem(parseInt(singleId), targetTab);
-            }
+            if (batchData) this.batchProcessIds(JSON.parse(batchData), targetTab);
+            else if (singleId) this.processItem(parseInt(singleId), targetTab);
         },
-        
-        // Selection
-        toggleSelect(id) {
-            const idx = this.selectedItems.indexOf(id);
-            if (idx >= 0) {
-                this.selectedItems.splice(idx, 1);
-            } else {
-                this.selectedItems.push(id);
-            }
-        },
-        selectAll() {
-            this.selectedItems = this.queuedItems.map(i => i.id);
-        },
-        deselectAll() {
-            this.selectedItems = [];
-        },
-        
-        // Process single item
+        toggleSelect(id) { const idx = this.selectedItems.indexOf(id); if (idx >= 0) this.selectedItems.splice(idx, 1); else this.selectedItems.push(id); },
+        selectAll() { this.selectedItems = this.queuedItems.map(i => i.id); },
+        deselectAll() { this.selectedItems = []; },
         async processItem(id, targetTab) {
             this.processingItems.push(id);
-            
             try {
-                const res = await fetch(`/queue/api/${id}/process`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ target_tab: targetTab })
-                });
+                const res = await fetch(`/queue/api/${id}/process`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ target_tab: targetTab }) });
                 const data = await res.json();
-                
                 if (data.success) {
-                    // Update item status in local state
                     const item = this.items.find(i => i.id === id);
-                    if (item) {
-                        item.status = 'completed';
-                        item.target_tab = targetTab;
-                    }
+                    if (item) { item.status = 'completed'; item.target_tab = targetTab; }
                     this.selectedItems = this.selectedItems.filter(i => i !== id);
-                    
-                    const processedCount = data.processed || 1;
-                    this.showToast('success', `Processed ${processedCount} invoice${processedCount > 1 ? 's' : ''} as ${targetTab}`);
-                } else {
-                    if (data.quota_exceeded) {
-                        this.showToast('error', 'Invoice quota exceeded - upgrade or top up');
-                    } else {
-                        this.showToast('error', data.error || 'Processing failed');
-                    }
-                }
-            } catch (e) {
-                console.error('Process failed:', e);
-                this.showToast('error', 'Processing failed - please try again');
-            } finally {
-                this.processingItems = this.processingItems.filter(i => i !== id);
-            }
+                    const c = data.processed || 1;
+                    this.showToast('success', `Processed ${c} invoice${c > 1 ? 's' : ''} as ${targetTab}`);
+                } else { this.showToast('error', data.quota_exceeded ? 'Quota exceeded' : (data.error || 'Failed')); }
+            } catch (e) { this.showToast('error', 'Processing failed'); }
+            finally { this.processingItems = this.processingItems.filter(i => i !== id); }
         },
-        
-        // Batch process
-        batchProcess(targetTab) {
-            this.batchProcessIds([...this.selectedItems], targetTab);
-        },
-        
-        async batchProcessIds(ids, targetTab) {
-            for (const id of ids) {
-                await this.processItem(id, targetTab);
-            }
-        },
-        
-        // Delete
+        batchProcess(targetTab) { this.batchProcessIds([...this.selectedItems], targetTab); },
+        async batchProcessIds(ids, targetTab) { for (const id of ids) await this.processItem(id, targetTab); },
         async deleteItem(id) {
             if (!confirm('Remove this file from the queue?')) return;
-            
             try {
                 const res = await fetch(`/queue/api/${id}/delete`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
-                
-                if (data.success) {
-                    this.items = this.items.filter(i => i.id !== id);
-                    this.selectedItems = this.selectedItems.filter(i => i !== id);
-                    this.showToast('success', 'Removed from queue');
-                }
-            } catch (e) {
-                this.showToast('error', 'Failed to delete');
-            }
+                if (data.success) { this.items = this.items.filter(i => i.id !== id); this.selectedItems = this.selectedItems.filter(i => i !== id); this.showToast('success', 'Removed'); }
+            } catch (e) { this.showToast('error', 'Delete failed'); }
         },
-        
         async batchDelete() {
-            if (!confirm(`Delete ${this.selectedItems.length} items from queue?`)) return;
-            
+            if (!confirm(`Delete ${this.selectedItems.length} items?`)) return;
             for (const id of [...this.selectedItems]) {
-                try {
-                    await fetch(`/queue/api/${id}/delete`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
-                    this.items = this.items.filter(i => i.id !== id);
-                } catch (e) {}
+                try { await fetch(`/queue/api/${id}/delete`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } }); this.items = this.items.filter(i => i.id !== id); } catch (e) {}
             }
             this.selectedItems = [];
-            this.showToast('success', 'Items removed from queue');
+            this.showToast('success', 'Items removed');
         },
-        
-        // Clear completed
         async clearCompleted() {
             try {
                 const res = await fetch('/queue/api/clear-completed', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
-                
-                if (data.success) {
-                    this.items = this.items.filter(i => i.status === 'queued' || i.status === 'processing');
-                    this.showToast('success', `Cleared ${data.cleared} items`);
-                }
-            } catch (e) {
-                this.showToast('error', 'Failed to clear');
-            }
+                if (data.success) { this.items = this.items.filter(i => i.status === 'queued' || i.status === 'processing'); this.showToast('success', `Cleared ${data.cleared} items`); }
+            } catch (e) { this.showToast('error', 'Clear failed'); }
         },
-        
-        // Preview - open in new tab
-        previewItem(item) {
-            window.open('/queue/api/' + item.id + '/preview', '_blank');
-        },
-        
-        // Toast notifications
+        previewItem(item) { window.open('/queue/api/' + item.id + '/preview', '_blank'); },
         showToast(type, message) {
             const id = ++this.toastCounter;
             const toast = { id, type, message, visible: true };
             this.toasts.push(toast);
-            
-            setTimeout(() => {
-                toast.visible = false;
-                setTimeout(() => {
-                    this.toasts = this.toasts.filter(t => t.id !== id);
-                }, 300);
-            }, 4000);
+            setTimeout(() => { toast.visible = false; setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 300); }, 4000);
         }
     };
 }
 </script>
 </div>
-
 {% endblock %}
