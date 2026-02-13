@@ -14,7 +14,7 @@ class EmailConnection(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
     # Provider info
-    provider = db.Column(db.String(20), nullable=False)  # 'gmail' or 'outlook'
+    provider = db.Column(db.String(20), nullable=False)  # 'gmail' or 'imap'
     email_address = db.Column(db.String(255), nullable=False)
     
     # Encrypted OAuth token
@@ -28,6 +28,11 @@ class EmailConnection(db.Model):
     last_checked = db.Column(db.DateTime)
     last_error = db.Column(db.Text)
     emails_fetched_count = db.Column(db.Integer, default=0)
+
+    # IMAP-specific fields
+    imap_server = db.Column(db.String(255), nullable=True)
+    imap_port = db.Column(db.Integer, nullable=True, default=993)
+    use_ssl = db.Column(db.Boolean, nullable=True, default=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

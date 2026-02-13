@@ -45,7 +45,7 @@ def create_app(config_name='default'):
     register_blueprints(app)
 
     # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
-    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue, gmail_auth
+    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue, gmail_auth, imap_auth
     csrf.exempt(upload.bp)
     csrf.exempt(user_api.bp)
     csrf.exempt(integrations.bp)
@@ -56,6 +56,7 @@ def create_app(config_name='default'):
     csrf.exempt(quotebuilder.bp)
     csrf.exempt(queue.bp)
     csrf.exempt(gmail_auth.bp)
+    csrf.exempt(imap_auth.bp)
 
     # Register error handlers
     register_error_handlers(app)
@@ -132,7 +133,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth
+    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
@@ -157,6 +158,7 @@ def register_blueprints(app):
     app.register_blueprint(part_number_routes.part_number_bp)
     app.register_blueprint(quotebuilder.bp)
     app.register_blueprint(gmail_auth.bp)
+    app.register_blueprint(imap_auth.bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)

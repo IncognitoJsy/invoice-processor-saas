@@ -301,17 +301,17 @@ def toggle_supplier(supplier_id):
 @bp.route('/fetch-now', methods=['POST'])
 @login_required
 def fetch_now():
-    """Manually trigger email fetch for current user"""
+    """Manually trigger email fetch for current user (Gmail + IMAP)"""
     from app.services.email_fetcher import fetch_emails_for_user
     
+    # Check if user has ANY active email connection
     connection = EmailConnection.query.filter_by(
         user_id=current_user.id,
-        provider='gmail',
         is_active=True
     ).first()
     
     if not connection:
-        return jsonify({'success': False, 'error': 'Gmail not connected or inactive'}), 400
+        return jsonify({'success': False, 'error': 'No email connected or inactive'}), 400
     
     try:
         result = fetch_emails_for_user(current_user.id)
