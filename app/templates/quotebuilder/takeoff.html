@@ -7,15 +7,22 @@
 
   <!-- Toolbar -->
   <div class="flex-shrink-0 bg-gray-900 border-b border-gray-800 px-3 py-2 flex items-center gap-2 overflow-x-auto">
-    <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}"
+    <a href="{{ url_for('quotebuilder.project', project_id=project.id) }}"
        class="text-gray-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-gray-800 whitespace-nowrap">← Back</a>
     <div class="w-px h-6 bg-gray-700"></div>
 
     <!-- Scale -->
     <button @click="setTool('scale')"
             class="text-xs px-2.5 py-1.5 rounded font-medium whitespace-nowrap transition"
-            :class="scaleCalibrated ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-yellow-900/40 text-yellow-400 border border-yellow-800'">
-      📏 <span x-text="scaleCalibrated ? 'Scale ✓' : 'Set Scale'"></span>
+            :class="tool==='scale' ? 'bg-red-600 text-white' : (scaleCalibrated ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-yellow-900/40 text-yellow-400 border border-yellow-800')"
+            title="Click two points of a known distance">
+      📏 Manual Scale
+    </button>
+    <button @click="showAutoScale = true"
+            class="text-xs px-2.5 py-1.5 rounded font-medium whitespace-nowrap transition"
+            :class="scaleCalibrated ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-yellow-900/40 text-yellow-400 border border-yellow-800'"
+            title="Set scale from drawing ratio e.g. 1:50 @ A1">
+      🔢 Auto Scale
     </button>
     <div class="w-px h-6 bg-gray-700"></div>
 
@@ -89,6 +96,43 @@
       <span class="text-gray-400 text-sm">metres</span>
       <button @click="confirmScale()" class="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 font-medium">Set Scale</button>
       <button @click="scaleInputVisible=false; scalePoints=[]; render()" class="px-3 py-2 text-sm bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Auto scale modal -->
+  <div x-show="showAutoScale" x-transition class="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-2xl w-80">
+    <h3 class="text-sm font-semibold text-white mb-3">Auto Scale from Drawing Ratio</h3>
+    <p class="text-xs text-gray-400 mb-3">Enter the scale shown on your drawing title block (e.g. 1:50, 1:100)</p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-400 mb-1 block">Scale Ratio</label>
+        <input type="text" x-model="autoScaleRatio" placeholder="e.g. 1:50 or just 50"
+               class="w-full text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white placeholder-gray-500"
+               @keydown.enter="confirmAutoScale()">
+      </div>
+      <div class="flex gap-2">
+        <div class="flex-1">
+          <label class="text-xs text-gray-400 mb-1 block">Paper Size</label>
+          <select x-model="autoScalePaper" class="w-full text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white">
+            <option value="A0">A0</option>
+            <option value="A1">A1</option>
+            <option value="A2">A2</option>
+            <option value="A3">A3</option>
+            <option value="A4">A4</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="text-xs text-gray-400 mb-1 block">Orientation</label>
+          <select x-model="autoScaleOrientation" class="w-full text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white">
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button @click="confirmAutoScale()" class="flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 font-medium">Set Scale</button>
+        <button @click="showAutoScale = false" class="px-3 py-2 text-sm bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600">Cancel</button>
+      </div>
     </div>
   </div>
 

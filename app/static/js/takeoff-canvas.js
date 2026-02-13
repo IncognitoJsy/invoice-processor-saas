@@ -27,6 +27,16 @@ function takeoffCanvas(projectId, documentId) {
     scaleInputVisible: false,
     scaleRealMetres: '',
 
+    // Auto scale
+    showAutoScale: false,
+    autoScaleRatio: '',
+    autoScalePaper: 'A1',
+    autoScaleOrientation: 'landscape',
+
+    // Smooth zoom
+    _targetZoom: 1,
+    _animating: false,
+
     // Symbol types & placed markers
     symbolTypes: [],
     // Each: { id, name, color, productId, productName, productSku, purchasePrice, salePrice, visible }
@@ -129,6 +139,7 @@ function takeoffCanvas(projectId, documentId) {
       this.canvas.height = ch;
       const sx = cw / this.imgW, sy = ch / this.imgH;
       this.zoom = Math.min(sx, sy) * 0.95;
+      this._targetZoom = this.zoom;
       this.panX = (cw - this.imgW * this.zoom) / 2;
       this.panY = (ch - this.imgH * this.zoom) / 2;
       this.render();
@@ -139,17 +150,20 @@ function takeoffCanvas(projectId, documentId) {
       const ro = new ResizeObserver(() => { if (this.img && this.imgW) { this.canvas.width = this.canvas.parentElement.clientWidth; this.canvas.height = this.canvas.parentElement.clientHeight; this.render(); } });
       ro.observe(this.canvas.parentElement);
 
-      // Wheel zoom
+      // Wheel zoom — smooth animated
+      this._targetZoom = this.zoom;
+      this._zoomCenterX = 0;
+      this._zoomCenterY = 0;
       this.canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-        const oldZ = this.zoom;
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        this.zoom = Math.max(0.05, Math.min(20, this.zoom * delta));
-        this.panX = mx - (mx - this.panX) * (this.zoom / oldZ);
-        this.panY = my - (my - this.panY) * (this.zoom / oldZ);
-        this.render();
+        this._zoomCenterX = e.clientX - rect.left;
+        this._zoomCenterY = e.clientY - rect.top;
+        // Accumulate target — much gentler factor
+        const raw = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 60);
+        const factor = 1 - raw * 0.001;
+        this._targetZoom = Math.max(0.02, Math.min(20, this._targetZoom * factor));
+        if (!this._animating) this._animateZoom();
       }, { passive: false });
 
       // Keyboard
@@ -166,6 +180,81 @@ function takeoffCanvas(projectId, documentId) {
         }
         if (e.key === '0') this.fitToView();
       });
+    },
+
+    // ─── Smooth zoom animation ────────────────────
+    _animateZoom() {
+      this._animating = true;
+      const step = () => {
+        const diff = this._targetZoom - this.zoom;
+        if (Math.abs(diff) < 0.0005) {
+          this.zoom = this._targetZoom;
+          this._animating = false;
+          this.render();
+          return;
+        }
+        const oldZ = this.zoom;
+        this.zoom += diff * 0.15; // Ease factor — lower = smoother
+        const mx = this._zoomCenterX, my = this._zoomCenterY;
+        this.panX = mx - (mx - this.panX) * (this.zoom / oldZ);
+        this.panY = my - (my - this.panY) * (this.zoom / oldZ);
+        this.render();
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    },
+
+    // ─── Auto scale from ratio ──────────────────────
+    confirmAutoScale() {
+      const ratioStr = this.autoScaleRatio.trim();
+      if (!ratioStr) return;
+      // Parse ratio — accept "1:50", "1 to 50", "50", etc.
+      let ratio;
+      const match = ratioStr.match(/1\s*[:to]\s*(\d+)/i) || ratioStr.match(/^(\d+)$/);
+      if (match) { ratio = parseInt(match[1]); }
+      else { this.notify('Invalid ratio format. Use e.g. 1:50 or just 50'); return; }
+
+      if (ratio <= 0 || ratio > 10000) { this.notify('Ratio out of range'); return; }
+
+      // Paper sizes in mm
+      const papers = {
+        'A0': { w: 1189, h: 841 },
+        'A1': { w: 841, h: 594 },
+        'A2': { w: 594, h: 420 },
+        'A3': { w: 420, h: 297 },
+        'A4': { w: 297, h: 210 },
+      };
+      const paper = papers[this.autoScalePaper] || papers['A1'];
+      const pw = this.autoScaleOrientation === 'landscape' ? paper.w : paper.h;
+
+      // pw mm on paper = pw * ratio mm in real life
+      // pw mm on paper is represented by imgW pixels
+      // So imgW pixels = pw * ratio mm real = (pw * ratio / 1000) metres
+      const realWidthMetres = (pw * ratio) / 1000;
+      this.scalePixelsPerMetre = this.imgW / realWidthMetres;
+      this.scaleCalibrated = true;
+      this.showAutoScale = false;
+      this.autoScaleRatio = '';
+
+      // Also save to backend
+      fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/auto-scale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scale_ratio: ratioStr,
+          paper_size: this.autoScalePaper,
+          orientation: this.autoScaleOrientation,
+        }),
+      }).then(r => r.json()).then(d => {
+        if (d.success && d.px_per_metre) {
+          this.scalePixelsPerMetre = d.px_per_metre;
+        }
+      }).catch(() => {});
+
+      this.notify(`Scale set: 1:${ratio} @ ${this.autoScalePaper} ${this.autoScaleOrientation}`);
+      this.setTool('select');
+      this.render();
+      this.autoSave();
     },
 
     // ─── Coordinate transforms ──────────────────────
