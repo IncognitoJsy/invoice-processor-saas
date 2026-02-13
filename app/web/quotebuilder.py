@@ -3448,3 +3448,51 @@ def get_takeoff_state(project_id, doc_id):
             'total_areas': len(areas),
         }
     })
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAKEOFF V8 STATE ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/takeoff-v8-state')
+@login_required
+def get_takeoff_v8_state(project_id, doc_id):
+    """Load v8 takeoff canvas state."""
+    from app.models.project import Project, ProjectDocument
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'error': 'Not found'}), 404
+
+    doc = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+
+    state = doc.takeoff_v8_state
+    if state:
+        return jsonify(state)
+    else:
+        return jsonify({'empty': True})
+
+
+@bp.route('/api/projects/<int:project_id>/documents/<int:doc_id>/takeoff-v8-state', methods=['POST'])
+@login_required
+def save_takeoff_v8_state(project_id, doc_id):
+    """Save v8 takeoff canvas state."""
+    from app.models.project import Project, ProjectDocument
+
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({'error': 'Not found'}), 404
+
+    doc = ProjectDocument.query.filter_by(id=doc_id, project_id=project_id).first()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+
+    state = request.get_json()
+    if not state:
+        return jsonify({'error': 'No data provided'}), 400
+
+    doc.takeoff_v8_state = state
+    db.session.commit()
+
+    return jsonify({'success': True})    

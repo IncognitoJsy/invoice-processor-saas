@@ -135,6 +135,8 @@ class ProjectDocument(db.Model):
     
     # Parsing status
     parsed = db.Column(db.Boolean, default=False)
+    # V8 takeoff canvas state (JSON blob)
+    takeoff_v8_state = db.Column(db.JSON, nullable=True)
     parsed_at = db.Column(db.DateTime)
     parse_error = db.Column(db.Text)
     

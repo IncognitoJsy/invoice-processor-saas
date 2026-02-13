@@ -1,1127 +1,979 @@
 /**
- * GoZappify Takeoff Canvas V7
- * Based on V1 structure + zoom/pan + QB/Xero product search
+ * GoZappify Takeoff Canvas v8
+ * Complete rebuild: tap-to-place symbols, deletable cable runs,
+ * containment lines, floor area (UFH), quick measure, eye toggles.
  */
 function takeoffCanvas(projectId, documentId) {
-    return {
-        projectId, documentId,
-        loading: true, error: null,
-        notification: null, notificationTimeout: null,
-
-        // Canvas
-        canvas: null, ctx: null,
-        drawingImage: null, drawingLoaded: false,
-
-        // Zoom/Pan
-        zoom: 1, panX: 0, panY: 0,
-        isPanning: false, panAnchorX: 0, panAnchorY: 0, panStartX: 0, panStartY: 0, didDrag: false,
-
-        // Mode
-        mode: 'select',
-
-        // Scale
-        scale: 50, scaleCalibrated: false, scalePoints: [],
-        showScaleModal: false, scaleRealDistance: '',
-        showAutoScaleModal: false, autoScaleRatio: '', autoScalePaper: 'A1', autoScaleOrientation: 'landscape',
-
-        // Symbol detection
-        symbolTemplates: [], detections: [], detecting: false, detectingTemplateId: null,
-        isDrawingBox: false, boxStart: null, currentBox: null,
-        manualPlacingTemplate: null, // Template being manually placed on drawing
-        draggingDetection: null, dragOffset: null, // Dragging a detection box
-
-        // Product search (modal after symbol box)
-        showProductModal: false, pendingBox: null,
-        productSearch: '', productResults: [], productSearching: false, selectedProduct: null,
-        // Accessories (shared by symbol and UFH flows)
-        accessories: [], // Array of selected accessory products
-        accessorySearch: '', accessoryResults: [], accessorySearching: false,
-        modalStep: 'primary', // 'primary' | 'accessories'
-
-        // Product link from sidebar
-        linkingTemplate: null,
-
-        // Accessories
-        accessories: [], // {id, template_id, symbol_type_id, part_number, description, quantity, ...}
-        showAccessoryModal: false, accessoryTemplate: null,
-        accSearch: '', accResults: [], accSearching: false, selectedAccessory: null,
-        accApplyMode: 'all', accCustomQty: 1,
-
-        // Key area
-        keyArea: null, settingKeyArea: false,
-
-        // Rooms
-        rooms: [], roomPoints: [], drawingRoom: false, highlightedRoom: null,
-
-        // Cable runs
-        cableRuns: [], cablePoints: [], cableType: 'socket',
-        cableTypes: [
-            { value: 'lighting', label: '1.5mm T&E (Lighting)', color: '#fbbf24' },
-            { value: 'socket', label: '2.5mm T&E (Sockets)', color: '#3b82f6' },
-            { value: 'cooker', label: '6.0mm T&E (Cooker)', color: '#ef4444' },
-            { value: 'shower', label: '10mm T&E (Shower)', color: '#8b5cf6' },
-            { value: 'data', label: 'Cat6 Data', color: '#10b981' },
-            { value: 'fire_alarm', label: 'Fire Alarm', color: '#f97316' },
-            { value: 'swa', label: 'SWA', color: '#6b7280' },
-        ],
-
-        // Areas (Underfloor Heating)
-        areas: [], areaPoints: [],
-        pendingUfhArea: null,
-        showUfhModal: false, ufhSearch: '', ufhResults: [], ufhSearching: false, selectedUfhProduct: null,
-        ufhStep: 'primary', // 'primary' | 'accessories'
-        ufhAccessories: [],
-
-        // Summary
-        showSummary: false,
-
-        // ── Init ─────────────────────────────────────────────────
-        async init() {
-            this.canvas = this.$refs.takeoffCanvas;
-            if (!this.canvas) { this.error = 'Canvas not found'; return; }
-            this.ctx = this.canvas.getContext('2d');
-            await this.loadDrawing();
-            await this.loadState();
-            this.setupEvents();
-            this.loading = false;
-            this.fitToScreen();
-        },
-
-        async loadDrawing() {
-            return new Promise((resolve, reject) => {
-                this.drawingImage = new Image();
-                this.drawingImage.onload = () => { this.drawingLoaded = true; resolve(); };
-                this.drawingImage.onerror = () => { this.error = 'Failed to load drawing'; reject(); };
-                this.drawingImage.src = `/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/render`;
-            });
-        },
-
-        async loadState() {
-            try {
-                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/takeoff-state`);
-                const d = await r.json();
-                if (d.success) {
-                    this.rooms = d.rooms || [];
-                    this.symbolTemplates = d.symbol_templates || [];
-                    this.detections = (d.detections || []).map(det => ({
-                        ...det,
-                        locked: det.confirmed || false,
-                    }));
-                    this.cableRuns = d.cable_runs || [];
-                    this.areas = d.areas || [];
-                    this.accessories = d.accessories || [];
-                    this.scale = d.scale || 50;
-                    if (d.scale && d.scale !== 50) this.scaleCalibrated = true;
-                    // Debug: log template linking status
-                    this.symbolTemplates.forEach(t => {
-                        console.log(`Template "${t.label}": part=${t.default_part_number || 'NONE'}, cost=${t.default_unit_cost}, sell=${t.default_unit_sell}`);
-                    });
-                }
-            } catch (e) { console.error('Load state error:', e); }
-        },
-
-        // ── Events ───────────────────────────────────────────────
-        setupEvents() {
-            this.canvas.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                const rect = this.canvas.getBoundingClientRect();
-                const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-                // Trackpad-friendly: use actual deltaY magnitude, clamped and scaled down
-                // Trackpads send small deltas frequently; mice send large deltas rarely
-                const raw = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 50);
-                const factor = 1 - raw * 0.0015; // ~0.15% per pixel of scroll
-                const minZoom = this.getMinZoom();
-                const nz = Math.max(minZoom, Math.min(10, this.zoom * factor));
-                if (nz === this.zoom) return;
-                const s = nz / this.zoom;
-                this.panX = mx - (mx - this.panX) * s;
-                this.panY = my - (my - this.panY) * s;
-                this.zoom = nz;
-                this.constrainPan();
-                this.redraw();
-            }, { passive: false });
-
-            document.addEventListener('keydown', (e) => {
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-                if (e.key === 'Escape') this.setMode('select');
-                if (e.key === '0') this.fitToScreen();
-            });
-
-            window.addEventListener('resize', () => this.redraw());
-        },
-
-        // ── Zoom ─────────────────────────────────────────────────
-        getMinZoom() {
-            if (!this.drawingImage || !this.canvas) return 0.1;
-            const c = this.canvas.parentElement;
-            const sx = c.clientWidth / this.drawingImage.width;
-            const sy = c.clientHeight / this.drawingImage.height;
-            return Math.min(sx, sy) * 0.95;
-        },
-
-        constrainPan() {
-            // Drawing edges never go past canvas edges — image stays fully within the box
-            if (!this.drawingImage || !this.canvas) return;
-            const c = this.canvas.parentElement;
-            const cw = c.clientWidth, ch = c.clientHeight;
-            const dw = this.drawingImage.width * this.zoom;
-            const dh = this.drawingImage.height * this.zoom;
-
-            // If image fits inside canvas, centre it
-            if (dw <= cw) {
-                this.panX = (cw - dw) / 2;
-            } else {
-                // Don't let left edge go right of canvas left, or right edge go left of canvas right
-                this.panX = Math.max(cw - dw, Math.min(0, this.panX));
-            }
-            if (dh <= ch) {
-                this.panY = (ch - dh) / 2;
-            } else {
-                this.panY = Math.max(ch - dh, Math.min(0, this.panY));
-            }
-        },
-
-        fitToScreen() {
-            if (!this.drawingImage || !this.canvas) return;
-            const c = this.canvas.parentElement;
-            this.zoom = this.getMinZoom();
-            this.panX = (c.clientWidth - this.drawingImage.width * this.zoom) / 2;
-            this.panY = (c.clientHeight - this.drawingImage.height * this.zoom) / 2;
-            this.redraw();
-        },
-
-        zoomIn() { const min = this.getMinZoom(); this.zoom = Math.min(10, this.zoom * 1.3); this.constrainPan(); this.redraw(); },
-        zoomOut() { const min = this.getMinZoom(); this.zoom = Math.max(min, this.zoom * 0.77); this.constrainPan(); this.redraw(); },
-
-        screenToImage(sx, sy) {
-            return { x: (sx - this.panX) / this.zoom, y: (sy - this.panY) / this.zoom };
-        },
-
-        zoomToRoom(room) {
-            const pts = room.boundary_points || room.points || [];
-            if (pts.length < 3) return;
-            const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
-            const c = this.canvas.parentElement;
-            const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-            this.zoom = Math.min(c.clientWidth/(maxX-minX+200), c.clientHeight/(maxY-minY+200), 8);
-            this.panX = c.clientWidth/2 - ((minX+maxX)/2)*this.zoom;
-            this.panY = c.clientHeight/2 - ((minY+maxY)/2)*this.zoom;
-            this.redraw();
-        },
-
-        // ── Mouse ────────────────────────────────────────────────
-        onMouseDown(e) {
-            const rect = this.canvas.getBoundingClientRect();
-            const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-            const img = this.screenToImage(sx, sy);
-            this.didDrag = false;
-
-            // Manual placement mode — don't pan, let click handler deal with it
-            if (this.manualPlacingTemplate) return;
-
-            // In select mode, check if clicking on an unlocked detection box to drag it
-            if (this.mode === 'select' && !this.settingKeyArea) {
-                const hitDet = this.findDetectionBodyAt(img.x, img.y);
-                if (hitDet && !hitDet.locked) {
-                    this.draggingDetection = hitDet;
-                    this.dragOffset = { x: img.x - hitDet.x, y: img.y - hitDet.y };
-                    this.canvas.style.cursor = 'move';
-                    return;
-                }
-
-                // Otherwise pan
-                this.isPanning = true;
-                this.panAnchorX = e.clientX; this.panAnchorY = e.clientY;
-                this.panStartX = this.panX; this.panStartY = this.panY;
-                this.canvas.style.cursor = 'grabbing';
-                return;
-            }
-
-            // Drawing box for symbol or key area
-            if (this.mode === 'symbol' || this.settingKeyArea) {
-                this.isDrawingBox = true;
-                this.boxStart = img;
-                this.currentBox = { x: img.x, y: img.y, w: 0, h: 0 };
-                return;
-            }
-        },
-
-        onMouseMove(e) {
-            const rect = this.canvas.getBoundingClientRect();
-            const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-
-            // Dragging a detection box
-            if (this.draggingDetection) {
-                const img = this.screenToImage(sx, sy);
-                this.draggingDetection.x = img.x - this.dragOffset.x;
-                this.draggingDetection.y = img.y - this.dragOffset.y;
-                this.didDrag = true;
-                this.redraw();
-                return;
-            }
-
-            if (this.isPanning) {
-                const dx = e.clientX - this.panAnchorX, dy = e.clientY - this.panAnchorY;
-                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.didDrag = true;
-                this.panX = this.panStartX + dx; this.panY = this.panStartY + dy;
-                this.constrainPan();
-                this.redraw();
-                return;
-            }
-
-            if (this.isDrawingBox && this.boxStart) {
-                const img = this.screenToImage(sx, sy);
-                this.currentBox = {
-                    x: Math.min(this.boxStart.x, img.x), y: Math.min(this.boxStart.y, img.y),
-                    w: Math.abs(img.x - this.boxStart.x), h: Math.abs(img.y - this.boxStart.y),
-                };
-                this.redraw();
-            }
-        },
-
-        onMouseUp(e) {
-            // Finished dragging a detection
-            if (this.draggingDetection) {
-                if (this.didDrag) {
-                    this.saveDetectionPosition(this.draggingDetection);
-                }
-                this.draggingDetection = null;
-                this.dragOffset = null;
-                this.canvas.style.cursor = this.getCursor();
-                return;
-            }
-
-            if (this.isPanning) {
-                this.isPanning = false;
-                this.canvas.style.cursor = this.getCursor();
-                return;
-            }
-
-            if (this.isDrawingBox && this.currentBox && this.currentBox.w > 10 && this.currentBox.h > 10) {
-                if (this.settingKeyArea) {
-                    this.keyArea = { ...this.currentBox };
-                    this.settingKeyArea = false;
-                    this.notify('Key area set — excluded from detection');
-                } else if (this.mode === 'symbol') {
-                    this.onSymbolBoxDrawn(this.currentBox);
-                }
-            }
-            this.isDrawingBox = false; this.boxStart = null; this.currentBox = null; this.redraw();
-        },
-
-        onClick(e) {
-            if (this.isPanning || this.isDrawingBox) return;
-            const rect = this.canvas.getBoundingClientRect();
-            const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
-
-            // Manual placement mode
-            if (this.manualPlacingTemplate) {
-                this.placeManualDetection(img);
-                return;
-            }
-
-            if (this.mode === 'room' && this.drawingRoom) { this.roomPoints.push(img); this.redraw(); }
-            if (this.mode === 'cable') { this.cablePoints.push(img); this.redraw(); }
-            if (this.mode === 'area') { this.areaPoints.push(img); this.redraw(); }
-            if (this.mode === 'scale') {
-                this.scalePoints.push(img);
-                if (this.scalePoints.length === 2) { this.showScaleModal = true; }
-                this.redraw();
-            }
-        },
-
-        // Attach click via canvas mouseup when not dragging
-        handleCanvasClick(e) {
-            if (this.didDrag) return;
-            // In select mode after a non-drag click, check detection button hits
-            if (this.mode === 'select' && !this.manualPlacingTemplate) {
-                const rect = this.canvas.getBoundingClientRect();
-                const img = this.screenToImage(e.clientX - rect.left, e.clientY - rect.top);
-                const hit = this.findDetectionAt(img.x, img.y);
-                if (hit) {
-                    if (hit.action === 'delete') {
-                        if (confirm(`Remove this ${hit.det.symbol_label || 'detection'}?`)) {
-                            this.deleteDetection(hit.det);
-                        }
-                    } else if (hit.action === 'lock') {
-                        this.toggleDetectionLock(hit.det);
-                    }
-                    return;
-                }
-            }
-            this.onClick(e);
-        },
-
-        onDoubleClick(e) {
-            if (this.mode === 'room' && this.drawingRoom && this.roomPoints.length >= 3) this.finishRoom();
-        },
-
-        // ── Symbol Detection ─────────────────────────────────────
-        onSymbolBoxDrawn(box) {
-            this.pendingBox = { ...box };
-            this.showProductModal = true;
-            this.modalStep = 'primary';
-            this.productSearch = ''; this.productResults = []; this.selectedProduct = null;
-            this.accessories = []; this.accessorySearch = ''; this.accessoryResults = [];
-            this.$nextTick(() => { const el = document.getElementById('productSearchInput'); if (el) el.focus(); });
-        },
-
-        goToAccessories() {
-            if (!this.selectedProduct) return;
-            this.modalStep = 'accessories';
-            this.accessorySearch = ''; this.accessoryResults = [];
-            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
-        },
-
-        async searchAccessories() {
-            if (this.accessorySearch.length < 2) { this.accessoryResults = []; return; }
-            this.accessorySearching = true;
-            try {
-                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.accessorySearch)}`);
-                const d = await r.json();
-                this.accessoryResults = d.products || [];
-            } catch(e) { console.error(e); }
-            this.accessorySearching = false;
-        },
-
-        addAccessory(product) {
-            // Don't add duplicates
-            if (this.accessories.find(a => a.id === product.id)) return;
-            this.accessories.push({...product, qty: 1});
-            this.accessorySearch = ''; this.accessoryResults = [];
-            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
-        },
-
-        removeAccessory(index) {
-            this.accessories.splice(index, 1);
-        },
-
-        async confirmSymbolWithProduct() {
-            if (!this.selectedProduct || !this.pendingBox) return;
-            const box = this.pendingBox, product = this.selectedProduct;
-
-            // Crop image
-            const cc = document.createElement('canvas');
-            cc.width = box.w; cc.height = box.h;
-            cc.getContext('2d').drawImage(this.drawingImage, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
-            const cropB64 = cc.toDataURL('image/png');
-
-            this.showProductModal = false;
-            this.notify(`Creating "${product.name}"...`);
-
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/symbol-templates`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ label: product.name, crop_x: Math.round(box.x), crop_y: Math.round(box.y), crop_w: Math.round(box.w), crop_h: Math.round(box.h), crop_image: cropB64 })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    const tmpl = data.template;
-                    this.symbolTemplates.push(tmpl);
-
-                    // Link primary product
-                    const linkResp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
-                        method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ template_id: tmpl.id, product })
-                    });
-                    const linkData = await linkResp.json();
-                    if (!linkData.success) {
-                        console.error('Link product failed:', linkData);
-                        this.notify('Product link failed: ' + (linkData.error || ''), 'error');
-                    }
-
-                    // Auto-detect symbols on drawing
-                    this.notify(`Scanning for "${product.name}"...`);
-                    await this.runDetection(tmpl);
-
-                    // Re-link product AFTER detection to create materials with correct counts
-                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
-                        method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ template_id: tmpl.id, product })
-                    });
-
-                    // Reload to get updated template with linked product info
-                    await this.loadState();
-                    this.redraw();
-                }
-            } catch (e) { this.notify('Error: ' + e.message, 'error'); }
-            this.pendingBox = null;
-            this.accessories = [];
-        },
-
-        cancelProductModal() {
-            this.showProductModal = false; this.pendingBox = null;
-            this.productSearch = ''; this.productResults = []; this.selectedProduct = null;
-        },
-
-        async runDetection(template) {
-            this.detecting = true;
-            this.detectingTemplateId = template.id;
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/detect-symbols`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ template_id: template.id, exclude_area: this.keyArea, confidence_threshold: 0.65 })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.detections = this.detections.filter(d => d.symbol_type_id !== template.symbol_type_id);
-                    this.detections.push(...(data.detections || []));
-                    const t = this.symbolTemplates.find(s => s.id === template.id);
-                    if (t) t.total_found = data.count;
-                    this.notify(`Found ${data.count} × ${template.label}`);
-                    this.redraw();
-                } else { this.notify('Detection failed: ' + (data.error||''), 'error'); }
-            } catch (e) { this.notify('Detection error: ' + e.message, 'error'); }
-            this.detecting = false;
-            this.detectingTemplateId = null;
-        },
-
-        // ── Product Search ───────────────────────────────────────
-
-        // ── Delete / Manual Add Detections ────────────────────────
-        async deleteDetection(det) {
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
-                    method: 'DELETE'
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.detections = this.detections.filter(d => d.id !== det.id);
-                    // Update template count
-                    const tpl = this.symbolTemplates.find(t => t.symbol_type_id === det.symbol_type_id);
-                    if (tpl) tpl.total_found = Math.max(0, (tpl.total_found || 1) - 1);
-                    this.notify(`Removed ${det.symbol_label || 'detection'}`);
-                    this.redraw();
-                }
-            } catch (e) { this.notify('Delete error: ' + e.message, 'error'); }
-        },
-
-        async deleteSymbolTemplate(tpl) {
-            if (!confirm(`Delete "${tpl.label}" and all its detections from this drawing?`)) return;
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/symbol-templates/${tpl.id}`, {
-                    method: 'DELETE'
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.detections = this.detections.filter(d => d.symbol_type_id !== tpl.symbol_type_id);
-                    this.symbolTemplates = this.symbolTemplates.filter(t => t.id !== tpl.id);
-                    this.notify(`Removed "${tpl.label}" and all detections`);
-                    this.redraw();
-                }
-            } catch (e) { this.notify('Delete error: ' + e.message, 'error'); }
-        },
-
-        startManualPlace(tpl) {
-            this.manualPlacingTemplate = tpl;
-            this.mode = 'select'; // Stay in select mode but track we're placing
-            this.notify(`Click on the drawing to place "${tpl.label}"`);
-        },
-
-        cancelManualPlace() {
-            this.manualPlacingTemplate = null;
-            this.notify('Manual placement cancelled');
-        },
-
-        async placeManualDetection(imgCoords) {
-            const tpl = this.manualPlacingTemplate;
-            if (!tpl) return;
-
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/detections`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({
-                        symbol_type_id: tpl.symbol_type_id,
-                        symbol_label: tpl.label,
-                        x: Math.round(imgCoords.x),
-                        y: Math.round(imgCoords.y),
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.detections.push(data.detection);
-                    // Update template count
-                    const t = this.symbolTemplates.find(s => s.symbol_type_id === tpl.symbol_type_id);
-                    if (t) t.total_found = (t.total_found || 0) + 1;
-                    this.notify(`Placed ${tpl.label} manually`);
-                    this.redraw();
-                    // Don't clear manualPlacingTemplate — allow placing multiple
-                }
-            } catch (e) { this.notify('Place error: ' + e.message, 'error'); }
-        },
-
-        // ── Detection hit test (for clicking X to delete) ─────────
-        findDetectionAt(imgX, imgY) {
-            for (const d of this.detections) {
-                if (d.rejected) continue;
-                const tpl = this.symbolTemplates.find(t => t.symbol_type_id === d.symbol_type_id);
-                const w = tpl?.crop?.w || 40, h = tpl?.crop?.h || 40;
-                // Check if click is on the X button (top-right corner of detection box)
-                const xBtnX = d.x + w/2;
-                const xBtnY = d.y - h/2;
-                const xBtnRadius = Math.max(12, w * 0.2);
-                const dist = Math.sqrt((imgX - xBtnX)**2 + (imgY - xBtnY)**2);
-                if (dist < xBtnRadius / this.zoom + 5) return { det: d, action: 'delete' };
-                // Check if click is on the lock button (top-left corner)
-                const lBtnX = d.x - w/2;
-                const lBtnY = d.y - h/2;
-                const lDist = Math.sqrt((imgX - lBtnX)**2 + (imgY - lBtnY)**2);
-                if (lDist < xBtnRadius / this.zoom + 5) return { det: d, action: 'lock' };
-            }
-            return null;
-        },
-
-        // Hit test for detection body (for dragging)
-        findDetectionBodyAt(imgX, imgY) {
-            for (const d of this.detections) {
-                if (d.rejected) continue;
-                const tpl = this.symbolTemplates.find(t => t.symbol_type_id === d.symbol_type_id);
-                const w = tpl?.crop?.w || 40, h = tpl?.crop?.h || 40;
-                if (imgX >= d.x - w/2 && imgX <= d.x + w/2 &&
-                    imgY >= d.y - h/2 && imgY <= d.y + h/2) {
-                    return d;
-                }
-            }
-            return null;
-        },
-
-        async saveDetectionPosition(det) {
-            try {
-                await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ x: Math.round(det.x), y: Math.round(det.y) })
-                });
-            } catch (e) { console.error('Save position error:', e); }
-        },
-
-        async toggleDetectionLock(det) {
-            det.locked = !det.locked;
-            try {
-                await fetch(`/quotebuilder/api/projects/${this.projectId}/detections/${det.id}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ confirmed: det.locked })
-                });
-                this.notify(det.locked ? '🔒 Locked' : '🔓 Unlocked');
-            } catch (e) { console.error('Lock error:', e); }
-            this.redraw();
-        },
-        async searchProducts() {
-            if (this.productSearch.length < 2) { this.productResults = []; return; }
-            this.productSearching = true;
-            try {
-                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.productSearch)}`);
-                const d = await r.json();
-                this.productResults = d.products || [];
-            } catch (e) { this.productResults = []; }
-            this.productSearching = false;
-        },
-
-        // Link from sidebar (existing template)
-        openLinkProduct(tpl) {
-            this.linkingTemplate = tpl;
-            this.productSearch = ''; this.productResults = [];
-        },
-
-        async linkProduct(tpl, product) {
-            try {
-                const resp = await fetch(`/quotebuilder/api/projects/${this.projectId}/link-product`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ template_id: tpl.id, product })
-                });
-                const data = await resp.json();
-                if (data.success) {
-                    this.notify(`Linked ${product.sku || product.name} to ${tpl.label}`);
-                } else {
-                    this.notify('Link failed: ' + (data.error || 'Unknown error'), 'error');
-                    console.error('Link product failed:', data);
-                }
-                this.linkingTemplate = null;
-                this.productSearch = '';
-                this.productResults = [];
-                await this.loadState();
-                this.redraw();
-            } catch (e) {
-                this.notify('Link error: ' + e.message, 'error');
-                console.error('Link product exception:', e);
-            }
-        },
-
-        // ── Scale ────────────────────────────────────────────────
-        async saveScale() {
-            const dist = parseFloat(this.scaleRealDistance);
-            if (!dist || dist <= 0 || this.scalePoints.length !== 2) return;
-            const [p1,p2] = this.scalePoints;
-            // These are already in image pixel coords (zoom-independent)
-            const pxDist = Math.sqrt(Math.pow(p2.x-p1.x,2)+Math.pow(p2.y-p1.y,2));
-            this.scale = pxDist / dist;
-            try {
-                await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/scale`, {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({pixel_distance: pxDist, real_distance: dist})
-                });
-                this.scaleCalibrated = true; this.notify('Scale calibrated: ' + Math.round(this.scale) + ' px/m');
-            } catch(e) { this.notify('Failed to save scale','error'); }
-            this.showScaleModal = false; this.scalePoints = []; this.scaleRealDistance = ''; this.redraw();
-        },
-
-        async autoScale(scaleRatio, paperSize, orientation) {
-            // Calculate scale from drawing notation like "1:35 @ A1"
-            try {
-                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/auto-scale`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({scale_ratio: scaleRatio, paper_size: paperSize, orientation: orientation || 'landscape'})
-                });
-                const d = await r.json();
-                if (d.success) {
-                    this.scale = d.px_per_metre;
-                    this.scaleCalibrated = true;
-                    this.showAutoScaleModal = false;
-                    this.notify(`Scale set: ${d.description} (${d.px_per_metre} px/m)`);
-                    this.redraw();
-                } else {
-                    this.notify(d.error || 'Auto-scale failed', 'error');
-                }
-            } catch(e) { this.notify('Auto-scale error: ' + e.message, 'error'); }
-        },
-
-        // ── Rooms ────────────────────────────────────────────────
-        startDrawingRoom() { this.mode = 'room'; this.drawingRoom = true; this.roomPoints = []; },
-
-        async finishRoom() {
-            if (this.roomPoints.length < 3) return;
-            const name = prompt('Name this room (e.g. "Kitchen", "Bedroom 1"):');
-            if (!name) { this.roomPoints = []; this.drawingRoom = false; return; }
-            try {
-                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/rooms`, {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({name, boundary_points: this.roomPoints})
-                });
-                const d = await r.json();
-                if (d.success) { this.rooms.push(d.room); this.notify(`Room "${name}" created`); await this.loadState(); }
-            } catch(e) { this.notify('Error: '+e.message,'error'); }
-            this.roomPoints = []; this.drawingRoom = false; this.redraw();
-        },
-
-        cancelRoom() { this.roomPoints = []; this.drawingRoom = false; this.redraw(); },
-
-        async deleteRoom(roomId) {
-            if (!confirm('Delete this room?')) return;
-            try {
-                await fetch(`/quotebuilder/api/projects/${this.projectId}/rooms/${roomId}`, {method:'DELETE'});
-                this.rooms = this.rooms.filter(r=>r.id!==roomId);
-                await this.loadState(); this.redraw(); this.notify('Room deleted');
-            } catch(e) { this.notify('Error','error'); }
-        },
-
-        getRoomDetectionCount(room) { return this.detections.filter(d=>d.room_id===room.id).length; },
-
-        // ── Cables ───────────────────────────────────────────────
-        async finishCableRun() {
-            if (this.cablePoints.length < 2) return;
-            const label = this.cableTypes.find(c=>c.value===this.cableType)?.label || this.cableType;
-            try {
-                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/cable-runs`, {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({cable_type: this.cableType, cable_label: label, route_points: this.cablePoints, waste_percent: 10})
-                });
-                const d = await r.json();
-                if (d.success) { this.cableRuns.push(d.cable_run); this.notify(`Cable: ${d.cable_run.length_metres||0}m ${label}`); }
-            } catch(e) { this.notify('Error','error'); }
-            this.cablePoints = []; this.redraw();
-        },
-
-        undoLastCablePoint() { this.cablePoints.pop(); this.redraw(); },
-
-        // ── Areas (Underfloor Heating) ─────────────────────────
-        async finishArea() {
-            if (this.areaPoints.length < 3) return;
-            try {
-                const r = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/areas`, {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({points: this.areaPoints, label: `UFH Zone ${this.areas.length+1}`})
-                });
-                const d = await r.json();
-                if (d.success) {
-                    this.areas.push(d.area);
-                    this.pendingUfhArea = d.area;
-                    this.showUfhModal = true;
-                    this.ufhStep = 'primary';
-                    this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null;
-                    this.ufhAccessories = [];
-                    this.notify(`UFH Area: ${d.area.area_sqm}m²`);
-                    this.$nextTick(() => { const el = document.getElementById('ufhSearchInput'); if (el) el.focus(); });
-                }
-            } catch(e) { this.notify('Error','error'); }
-            this.areaPoints = []; this.redraw();
-        },
-
-        async searchUfhProducts() {
-            if (this.ufhSearch.length < 2) { this.ufhResults = []; return; }
-            this.ufhSearching = true;
-            try {
-                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.ufhSearch)}`);
-                const d = await r.json();
-                this.ufhResults = d.products || [];
-            } catch(e) { console.error(e); }
-            this.ufhSearching = false;
-        },
-
-        goToUfhAccessories() {
-            if (!this.selectedUfhProduct) return;
-            this.ufhStep = 'accessories';
-            this.accessorySearch = ''; this.accessoryResults = [];
-            this.$nextTick(() => { const el = document.getElementById('ufhAccessorySearchInput'); if (el) el.focus(); });
-        },
-
-        addUfhAccessory(product) {
-            if (this.ufhAccessories.find(a => a.id === product.id)) return;
-            this.ufhAccessories.push({...product, qty: 1});
-            this.accessorySearch = ''; this.accessoryResults = [];
-        },
-
-        removeUfhAccessory(index) {
-            this.ufhAccessories.splice(index, 1);
-        },
-
-        async confirmUfhProduct() {
-            if (!this.selectedUfhProduct || !this.pendingUfhArea) return;
-            const area = this.pendingUfhArea;
-            const product = this.selectedUfhProduct;
-            const accs = [...this.ufhAccessories];
-            const areaSqm = parseFloat(area.area_sqm);
-
-            const matSizes = [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-            let remaining = areaSqm;
-            const matsNeeded = [];
-            while (remaining > 0.5) {
-                let bestSize = matSizes.find(s => s <= remaining + 0.5) || 1;
-                matsNeeded.push(bestSize);
-                remaining -= bestSize;
-            }
-
-            this.showUfhModal = false;
-
-            try {
-                for (const matSize of matsNeeded) {
-                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-ufh`, {
-                        method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ area_id: area.id, product, mat_size_sqm: matSize, total_area_sqm: areaSqm })
-                    });
-                }
-                for (const acc of accs) {
-                    await fetch(`/quotebuilder/api/projects/${this.projectId}/link-ufh`, {
-                        method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ area_id: area.id, product: acc, mat_size_sqm: 0, total_area_sqm: areaSqm, is_accessory: true })
-                    });
-                }
-                const accText = accs.length > 0 ? ` + ${accs.length} accessories` : '';
-                this.notify(`UFH: ${matsNeeded.length} mat(s) for ${areaSqm}m²${accText}`);
-            } catch(e) { this.notify('UFH link error: ' + e.message, 'error'); }
-
-            this.pendingUfhArea = null; this.selectedUfhProduct = null; this.ufhAccessories = [];
-        },
-
-        cancelUfhModal() {
-            this.showUfhModal = false; this.pendingUfhArea = null;
-            this.ufhSearch = ''; this.ufhResults = []; this.selectedUfhProduct = null; this.ufhAccessories = [];
-        },
-
-        // ── Accessories ──────────────────────────────────────────
-        getAccessories(tpl) {
-            return this.accessories.filter(a => a.template_id === tpl.id);
-        },
-
-        openAccessoryModal(tpl) {
-            this.accessoryTemplate = tpl;
-            this.showAccessoryModal = true;
-            this.accSearch = ''; this.accResults = []; this.selectedAccessory = null;
-            this.accApplyMode = 'all'; this.accCustomQty = 1;
-            this.$nextTick(() => { const el = document.getElementById('accessorySearchInput'); if (el) el.focus(); });
-        },
-
-        cancelAccessoryModal() {
-            this.showAccessoryModal = false; this.accessoryTemplate = null;
-            this.accSearch = ''; this.accResults = []; this.selectedAccessory = null;
-        },
-
-        async searchAccessoryProducts() {
-            if (this.accSearch.length < 2) { this.accResults = []; return; }
-            this.accSearching = true;
-            try {
-                const r = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.accSearch)}`);
-                const d = await r.json();
-                this.accResults = d.products || [];
-            } catch(e) { console.error(e); }
-            this.accSearching = false;
-        },
-
-        async confirmAccessory() {
-            if (!this.selectedAccessory || !this.accessoryTemplate) return;
-            const tpl = this.accessoryTemplate;
-            const product = this.selectedAccessory;
-            const qty = this.accApplyMode === 'all' ? (tpl.total_found || 1) : (this.accCustomQty || 1);
-
-            this.showAccessoryModal = false;
-
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/accessories`, {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({
-                        template_id: tpl.id,
-                        symbol_type_id: tpl.symbol_type_id,
-                        product: product,
-                        quantity: qty,
-                        parent_label: tpl.label,
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.accessories.push(data.accessory);
-                    this.notify(`Added ${product.sku || product.name} ×${qty}`);
-                } else {
-                    this.notify('Error: ' + (data.error || ''), 'error');
-                }
-            } catch(e) { this.notify('Error: ' + e.message, 'error'); }
-
-            this.accessoryTemplate = null; this.selectedAccessory = null;
-        },
-
-        async removeAccessory(acc) {
-            try {
-                const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/accessories/${acc.id}`, {
-                    method: 'DELETE'
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.accessories = this.accessories.filter(a => a.id !== acc.id);
-                    this.notify('Accessory removed');
-                }
-            } catch(e) { this.notify('Error: ' + e.message, 'error'); }
-        },
-
-        // ── Helpers ──────────────────────────────────────────────
-        notify(msg, type) {
-            this.notification = {msg, type: type||'success'};
-            clearTimeout(this.notificationTimeout);
-            this.notificationTimeout = setTimeout(()=>this.notification=null, 4000);
-        },
-
-        setMode(m) {
-            // Require scale calibration before measurement modes
-            if (['room', 'cable', 'area'].includes(m) && !this.scaleCalibrated) {
-                this.notify('⚠️ Please calibrate the scale first (Manual or Auto-scale) before measuring', 'error');
-                return;
-            }
-            this.mode = m; this.cablePoints = []; this.areaPoints = []; this.roomPoints = [];
-            this.scalePoints = []; this.drawingRoom = false; this.isDrawingBox = false;
-            this.settingKeyArea = false; this.manualPlacingTemplate = null; this.redraw();
-        },
-
-        getCursor() {
-            if (this.manualPlacingTemplate) return 'crosshair';
-            if (this.mode === 'symbol' || this.settingKeyArea) return 'crosshair';
-            if (this.mode === 'room' && this.drawingRoom) return 'crosshair';
-            if (this.mode === 'cable' || this.mode === 'area' || this.mode === 'scale') return 'crosshair';
-            return this.isPanning ? 'grabbing' : 'grab';
-        },
-
-        getDetectionsByRoom() {
-            const g = {};
-            this.rooms.forEach(r => { g[r.id] = {room: r, detections: this.detections.filter(d=>d.room_id===r.id)}; });
-            const u = this.detections.filter(d=>!d.room_id);
-            if (u.length > 0) g['unassigned'] = {room:{id:null,name:'Unassigned'}, detections: u};
-            return g;
-        },
-
-        groupDetections(dets) {
-            const g = {};
-            dets.forEach(d => {
-                if (!g[d.symbol_type_id]) {
-                    const tpl = this.symbolTemplates.find(t=>t.symbol_type_id===d.symbol_type_id);
-                    g[d.symbol_type_id] = {label:d.symbol_label, part_number:tpl?.default_part_number||'-', unit_cost:tpl?.default_unit_cost||0, unit_sell:tpl?.default_unit_sell||0, count:0};
-                }
-                g[d.symbol_type_id].count++;
-            });
-            return Object.values(g);
-        },
-
-        getCableRunSummary() {
-            const s = {};
-            this.cableTypes.forEach(ct => {
-                const runs = this.cableRuns.filter(r=>r.cable_type===ct.value);
-                if (runs.length > 0) s[ct.value] = {label:ct.label, color:ct.color, runs:runs.length, totalMetres:runs.reduce((a,r)=>a+(r.total_metres||r.length_metres||0),0)};
-            });
-            return s;
-        },
-
-        // ── Render ───────────────────────────────────────────────
-        redraw() {
-            if (!this.ctx || !this.drawingLoaded) return;
-            const c = this.canvas.parentElement;
-            const cw = c.clientWidth, ch = c.clientHeight;
-            this.canvas.width = cw; this.canvas.height = ch;
-            const ctx = this.ctx;
-
-            ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, cw, ch);
-            ctx.save();
-            ctx.translate(this.panX, this.panY);
-            ctx.scale(this.zoom, this.zoom);
-
-            // Drawing image
-            ctx.drawImage(this.drawingImage, 0, 0);
-            const lw = (v) => v / this.zoom;
-
-            // Rooms
-            for (const room of this.rooms) {
-                const pts = room.boundary_points || room.points || [];
-                if (pts.length < 3) continue;
-                const hl = this.highlightedRoom === room.id;
-                ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-                pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y)); ctx.closePath();
-                ctx.fillStyle = hl ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.05)';
-                ctx.fill();
-                ctx.strokeStyle = hl ? '#818cf8' : '#6366f1';
-                ctx.lineWidth = lw(hl?3:1.5); ctx.stroke();
-                const cx = pts.reduce((s,p)=>s+p.x,0)/pts.length;
-                const cy = pts.reduce((s,p)=>s+p.y,0)/pts.length;
-                ctx.fillStyle = '#fff'; ctx.font = `bold ${lw(12)}px system-ui`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(room.name, cx, cy);
-            }
-
-            // Room points being drawn
-            if (this.roomPoints.length) {
-                ctx.strokeStyle = '#6366f1'; ctx.lineWidth = lw(2);
-                ctx.setLineDash([lw(4),lw(4)]);
-                ctx.beginPath(); ctx.moveTo(this.roomPoints[0].x, this.roomPoints[0].y);
-                this.roomPoints.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
-                if (this.roomPoints.length > 2) { ctx.lineTo(this.roomPoints[0].x,this.roomPoints[0].y); ctx.fillStyle='rgba(99,102,241,0.08)'; ctx.fill(); }
-                ctx.stroke(); ctx.setLineDash([]);
-                this.roomPoints.forEach(p=>{ctx.fillStyle='#6366f1';ctx.beginPath();ctx.arc(p.x,p.y,lw(4),0,Math.PI*2);ctx.fill();});
-            }
-
-            // Detections
-            for (const d of this.detections) {
-                if (d.rejected) continue;
-                const tpl = this.symbolTemplates.find(t=>t.symbol_type_id===d.symbol_type_id);
-                const w = tpl?.crop?.w || d.w || 40;
-                const h = tpl?.crop?.h || d.h || 40;
-                const col = d.locked ? '#22c55e' : (tpl?.color || '#4ade80');
-                // Box outline (thicker if locked)
-                ctx.strokeStyle = col; ctx.lineWidth = lw(d.locked ? 4 : 3);
-                if (d.locked) ctx.setLineDash([]);
-                else ctx.setLineDash([lw(6), lw(3)]);
-                ctx.strokeRect(d.x-w/2, d.y-h/2, w, h);
-                ctx.setLineDash([]);
-                // Semi-transparent fill
-                ctx.fillStyle = col.slice(0,7) + (d.locked ? '15' : '30');
-                ctx.fillRect(d.x-w/2, d.y-h/2, w, h);
-                // Label badge
-                const label = d.symbol_label || '?';
-                ctx.font = `bold ${lw(11)}px system-ui`;
-                const tw2 = ctx.measureText(label).width + lw(10);
-                ctx.fillStyle = col;
-                ctx.fillRect(d.x-w/2, d.y-h/2-lw(16), tw2, lw(15));
-                ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-                ctx.fillText(label, d.x-w/2+lw(5), d.y-h/2-lw(15));
-                // X delete button (top-right corner)
-                const btnR = lw(8);
-                const xCx = d.x + w/2, xCy = d.y - h/2;
-                ctx.fillStyle = '#ef4444';
-                ctx.beginPath(); ctx.arc(xCx, xCy, btnR, 0, Math.PI*2); ctx.fill();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = lw(2);
-                ctx.beginPath(); ctx.moveTo(xCx-btnR*0.5, xCy-btnR*0.5); ctx.lineTo(xCx+btnR*0.5, xCy+btnR*0.5); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(xCx+btnR*0.5, xCy-btnR*0.5); ctx.lineTo(xCx-btnR*0.5, xCy+btnR*0.5); ctx.stroke();
-                // Lock button (top-left corner)
-                const lCx = d.x - w/2, lCy = d.y - h/2;
-                ctx.fillStyle = d.locked ? '#22c55e' : '#6b7280';
-                ctx.beginPath(); ctx.arc(lCx, lCy, btnR, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.font = `${lw(10)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(d.locked ? '🔒' : '🔓', lCx, lCy);
-            }
-
-            // Cable runs
-            for (const run of this.cableRuns) {
-                const pts = run.route_points || run.points || [];
-                if (pts.length < 2) continue;
-                const col = this.cableTypes.find(t=>t.value===run.cable_type)?.color || '#3b82f6';
-                ctx.strokeStyle = col; ctx.lineWidth = lw(3);
-                ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
-                pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y)); ctx.stroke();
-                pts.forEach(p=>{ctx.fillStyle=col;ctx.beginPath();ctx.arc(p.x,p.y,lw(3),0,Math.PI*2);ctx.fill();});
-            }
-
-            // Cable points being drawn
-            if (this.cablePoints.length) {
-                const col = this.cableTypes.find(t=>t.value===this.cableType)?.color || '#3b82f6';
-                ctx.strokeStyle = col; ctx.lineWidth = lw(2);
-                ctx.setLineDash([lw(4),lw(4)]);
-                ctx.beginPath(); ctx.moveTo(this.cablePoints[0].x,this.cablePoints[0].y);
-                this.cablePoints.slice(1).forEach(p=>ctx.lineTo(p.x,p.y)); ctx.stroke(); ctx.setLineDash([]);
-                this.cablePoints.forEach(p=>{ctx.fillStyle=col;ctx.beginPath();ctx.arc(p.x,p.y,lw(4),0,Math.PI*2);ctx.fill();});
-            }
-
-            // Areas
-            for (const area of this.areas) {
-                const pts = area.points; if (!pts || pts.length < 3) continue;
-                ctx.fillStyle = 'rgba(139,92,246,0.06)'; ctx.strokeStyle = 'rgba(139,92,246,0.4)'; ctx.lineWidth = lw(1);
-                ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y); pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
-                ctx.closePath(); ctx.fill(); ctx.stroke();
-                if (area.area_sqm) {
-                    const cx = pts.reduce((s,p)=>s+p.x,0)/pts.length, cy = pts.reduce((s,p)=>s+p.y,0)/pts.length;
-                    const lb = `${area.area_sqm}m²`;
-                    ctx.font = `bold ${lw(12)}px system-ui`;
-                    const tw2 = ctx.measureText(lb).width + lw(10);
-                    ctx.fillStyle = 'rgba(139,92,246,0.85)'; ctx.fillRect(cx-tw2/2,cy-lw(9),tw2,lw(20));
-                    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(lb,cx,cy+lw(1));
-                }
-            }
-
-            // Area points being drawn
-            if (this.areaPoints.length) {
-                ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = lw(2); ctx.setLineDash([lw(4),lw(4)]);
-                ctx.beginPath(); ctx.moveTo(this.areaPoints[0].x,this.areaPoints[0].y);
-                this.areaPoints.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
-                if (this.areaPoints.length > 2) { ctx.lineTo(this.areaPoints[0].x,this.areaPoints[0].y); ctx.fillStyle='rgba(139,92,246,0.08)'; ctx.fill(); }
-                ctx.stroke(); ctx.setLineDash([]);
-                this.areaPoints.forEach(p=>{ctx.fillStyle='#8b5cf6';ctx.beginPath();ctx.arc(p.x,p.y,lw(4),0,Math.PI*2);ctx.fill();});
-            }
-
-            // Key area
-            if (this.keyArea) {
-                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = lw(2); ctx.setLineDash([lw(8),lw(4)]);
-                ctx.strokeRect(this.keyArea.x,this.keyArea.y,this.keyArea.w,this.keyArea.h);
-                ctx.setLineDash([]); ctx.fillStyle = 'rgba(239,68,68,0.05)';
-                ctx.fillRect(this.keyArea.x,this.keyArea.y,this.keyArea.w,this.keyArea.h);
-                ctx.fillStyle = '#ef4444'; ctx.font = `bold ${lw(11)}px system-ui`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-                ctx.fillText('KEY (excluded)', this.keyArea.x+this.keyArea.w/2, this.keyArea.y-lw(4));
-            }
-
-            // Current box
-            if (this.currentBox) {
-                ctx.strokeStyle = this.settingKeyArea ? '#ef4444' : '#6366f1';
-                ctx.lineWidth = lw(2); ctx.setLineDash([lw(6),lw(3)]);
-                ctx.strokeRect(this.currentBox.x,this.currentBox.y,this.currentBox.w,this.currentBox.h);
-                ctx.setLineDash([]);
-                ctx.fillStyle = this.settingKeyArea ? 'rgba(239,68,68,0.08)' : 'rgba(99,102,241,0.08)';
-                ctx.fillRect(this.currentBox.x,this.currentBox.y,this.currentBox.w,this.currentBox.h);
-            }
-
-            // Scale points
-            for (const p of this.scalePoints) {
-                ctx.fillStyle='#10b981'; ctx.beginPath(); ctx.arc(p.x,p.y,lw(6),0,Math.PI*2); ctx.fill();
-                ctx.strokeStyle='#fff'; ctx.lineWidth=lw(2); ctx.stroke();
-            }
-            if (this.scalePoints.length===2) {
-                ctx.strokeStyle='#10b981'; ctx.lineWidth=lw(2); ctx.setLineDash([lw(4),lw(4)]);
-                ctx.beginPath(); ctx.moveTo(this.scalePoints[0].x,this.scalePoints[0].y);
-                ctx.lineTo(this.scalePoints[1].x,this.scalePoints[1].y); ctx.stroke(); ctx.setLineDash([]);
-            }
-
-            ctx.restore();
-        },
-    };
+  return {
+    projectId, documentId,
+    loading: true, saving: false,
+
+    // Canvas state
+    canvas: null, ctx: null,
+    img: null, imgW: 0, imgH: 0,
+    zoom: 1, panX: 0, panY: 0,
+    isPanning: false, panStartX: 0, panStartY: 0,
+    panStartPanX: 0, panStartPanY: 0,
+
+    // Current tool: select | symbol | room | cable | containment | area | measure | scale
+    tool: 'select',
+    notification: '',
+    notifTimeout: null,
+
+    // Scale calibration
+    scalePixelsPerMetre: 50,
+    scaleCalibrated: false,
+    scalePoints: [],
+    scaleInputVisible: false,
+    scaleRealMetres: '',
+
+    // Symbol types & placed markers
+    symbolTypes: [],
+    // Each: { id, name, color, productId, productName, productSku, purchasePrice, salePrice, visible }
+    activeSymbolTypeId: null,
+    markers: [],
+    // Each: { id, typeId, x, y, visible }
+    nextMarkerId: 1,
+
+    // Rooms
+    rooms: [],
+    // Each: { id, name, points:[], color, visible }
+    roomDrawing: false,
+    roomPoints: [],
+    roomNameInput: '',
+    nextRoomId: 1,
+
+    // Cable runs
+    cableTypes: [
+      { value: 'twin_earth_1.5', label: '1.5mm T&E (Lighting)', color: '#facc15' },
+      { value: 'twin_earth_2.5', label: '2.5mm T&E (Sockets)', color: '#3b82f6' },
+      { value: 'twin_earth_4.0', label: '4.0mm T&E (Ring/Radial)', color: '#22d3ee' },
+      { value: 'twin_earth_6.0', label: '6.0mm T&E (Cooker)', color: '#ef4444' },
+      { value: 'twin_earth_10', label: '10mm T&E (Shower)', color: '#a855f7' },
+      { value: 'cat6', label: 'Cat6 Data', color: '#10b981' },
+      { value: 'fire_alarm', label: 'Fire Alarm', color: '#f97316' },
+      { value: 'swa', label: 'SWA', color: '#6b7280' },
+    ],
+    activeCableType: 'twin_earth_2.5',
+    cableRuns: [],
+    // Each: { id, type, points:[], metres, visible, label }
+    cableDrawing: false,
+    cablePoints: [],
+    nextCableId: 1,
+
+    // Containment
+    containmentTypes: [
+      { value: 'trunking_mini', label: 'Mini Trunking', color: '#fb923c' },
+      { value: 'trunking_maxi', label: 'Maxi Trunking', color: '#e879f9' },
+      { value: 'conduit_20mm', label: '20mm Conduit', color: '#fbbf24' },
+      { value: 'conduit_25mm', label: '25mm Conduit', color: '#a3e635' },
+      { value: 'basket_tray', label: 'Basket Tray', color: '#67e8f9' },
+      { value: 'ladder_rack', label: 'Ladder Rack', color: '#c084fc' },
+    ],
+    activeContainmentType: 'trunking_mini',
+    containmentRuns: [],
+    containmentDrawing: false,
+    containmentPoints: [],
+    nextContainmentId: 1,
+
+    // Floor areas
+    areas: [],
+    // Each: { id, name, points:[], sqm, visible }
+    areaDrawing: false,
+    areaPoints: [],
+    areaNameInput: '',
+    nextAreaId: 1,
+
+    // Quick measure (temporary)
+    measurePoints: [],
+    measureResult: null,
+
+    // Selection
+    selectedItem: null, // { type: 'marker'|'cable'|'containment'|'room'|'area', id }
+
+    // Product search
+    showProductSearch: false,
+    productSearchQuery: '',
+    productSearchResults: [],
+    productSearching: false,
+    productSearchFor: null, // symbolType id we're linking
+
+    // ─── Init ───────────────────────────────────────
+    init() {
+      this.canvas = this.$refs.canvas;
+      this.ctx = this.canvas.getContext('2d');
+      this.loadDrawing();
+      this.setupEvents();
+      this.loadState();
+    },
+
+    loadDrawing() {
+      this.img = new Image();
+      this.img.crossOrigin = 'anonymous';
+      this.img.onload = () => {
+        this.imgW = this.img.naturalWidth;
+        this.imgH = this.img.naturalHeight;
+        this.fitToView();
+        this.loading = false;
+        this.render();
+      };
+      this.img.onerror = () => { this.loading = false; this.notify('Failed to load drawing', 'error'); };
+      this.img.src = `/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/render`;
+    },
+
+    fitToView() {
+      if (!this.imgW) return;
+      const cw = this.canvas.parentElement.clientWidth;
+      const ch = this.canvas.parentElement.clientHeight;
+      this.canvas.width = cw;
+      this.canvas.height = ch;
+      const sx = cw / this.imgW, sy = ch / this.imgH;
+      this.zoom = Math.min(sx, sy) * 0.95;
+      this.panX = (cw - this.imgW * this.zoom) / 2;
+      this.panY = (ch - this.imgH * this.zoom) / 2;
+      this.render();
+    },
+
+    setupEvents() {
+      // Resize
+      const ro = new ResizeObserver(() => { if (this.img && this.imgW) { this.canvas.width = this.canvas.parentElement.clientWidth; this.canvas.height = this.canvas.parentElement.clientHeight; this.render(); } });
+      ro.observe(this.canvas.parentElement);
+
+      // Wheel zoom
+      this.canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const oldZ = this.zoom;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        this.zoom = Math.max(0.05, Math.min(20, this.zoom * delta));
+        this.panX = mx - (mx - this.panX) * (this.zoom / oldZ);
+        this.panY = my - (my - this.panY) * (this.zoom / oldZ);
+        this.render();
+      }, { passive: false });
+
+      // Keyboard
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (this.selectedItem && !e.target.closest('input')) { e.preventDefault(); this.deleteSelected(); }
+        }
+        if (e.key === 'Escape') {
+          this.cancelDrawing();
+          this.selectedItem = null;
+          this.measurePoints = [];
+          this.measureResult = null;
+          this.render();
+        }
+        if (e.key === '0') this.fitToView();
+      });
+    },
+
+    // ─── Coordinate transforms ──────────────────────
+    screenToCanvas(sx, sy) {
+      return { x: (sx - this.panX) / this.zoom, y: (sy - this.panY) / this.zoom };
+    },
+    canvasToScreen(cx, cy) {
+      return { x: cx * this.zoom + this.panX, y: cy * this.zoom + this.panY };
+    },
+    getCanvasPos(e) {
+      const rect = this.canvas.getBoundingClientRect();
+      return this.screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
+    },
+
+    // ─── Mouse handlers ─────────────────────────────
+    onMouseDown(e) {
+      if (e.button === 1 || (e.button === 0 && this.tool === 'select' && !e.shiftKey)) {
+        this.isPanning = true;
+        this.panStartX = e.clientX;
+        this.panStartY = e.clientY;
+        this.panStartPanX = this.panX;
+        this.panStartPanY = this.panY;
+        this.canvas.style.cursor = 'grabbing';
+      }
+    },
+
+    onMouseMove(e) {
+      if (this.isPanning) {
+        this.panX = this.panStartPanX + (e.clientX - this.panStartX);
+        this.panY = this.panStartPanY + (e.clientY - this.panStartY);
+        this.render();
+      }
+    },
+
+    onMouseUp(e) {
+      if (this.isPanning) {
+        const dx = Math.abs(e.clientX - this.panStartX);
+        const dy = Math.abs(e.clientY - this.panStartY);
+        this.isPanning = false;
+        this.canvas.style.cursor = '';
+        if (dx > 3 || dy > 3) return; // Was a drag, not a click
+      }
+      // It was a click
+      const pos = this.getCanvasPos(e);
+      this.handleClick(pos);
+    },
+
+    handleClick(pos) {
+      switch (this.tool) {
+        case 'select': this.handleSelectClick(pos); break;
+        case 'symbol': this.handleSymbolClick(pos); break;
+        case 'room': this.handleRoomClick(pos); break;
+        case 'cable': this.handleCableClick(pos); break;
+        case 'containment': this.handleContainmentClick(pos); break;
+        case 'area': this.handleAreaClick(pos); break;
+        case 'measure': this.handleMeasureClick(pos); break;
+        case 'scale': this.handleScaleClick(pos); break;
+      }
+    },
+
+    handleSelectClick(pos) {
+      // Try to select nearest item
+      let best = null, bestDist = 20 / this.zoom;
+
+      // Check markers
+      for (const m of this.markers) {
+        const d = Math.hypot(m.x - pos.x, m.y - pos.y);
+        if (d < bestDist) { bestDist = d; best = { type: 'marker', id: m.id }; }
+      }
+      // Check cable run points
+      for (const c of this.cableRuns) {
+        for (let i = 0; i < c.points.length - 1; i++) {
+          const d = this.distToSegment(pos, c.points[i], c.points[i + 1]);
+          if (d < bestDist) { bestDist = d; best = { type: 'cable', id: c.id }; }
+        }
+      }
+      // Check containment
+      for (const c of this.containmentRuns) {
+        for (let i = 0; i < c.points.length - 1; i++) {
+          const d = this.distToSegment(pos, c.points[i], c.points[i + 1]);
+          if (d < bestDist) { bestDist = d; best = { type: 'containment', id: c.id }; }
+        }
+      }
+      this.selectedItem = best;
+      this.render();
+    },
+
+    handleSymbolClick(pos) {
+      if (!this.activeSymbolTypeId) { this.notify('Select a symbol type first'); return; }
+      const id = this.nextMarkerId++;
+      this.markers.push({ id, typeId: this.activeSymbolTypeId, x: pos.x, y: pos.y, visible: true });
+      this.render();
+      this.autoSave();
+    },
+
+    handleRoomClick(pos) {
+      this.roomPoints.push(pos);
+      this.roomDrawing = true;
+      this.render();
+    },
+
+    handleCableClick(pos) {
+      this.cablePoints.push(pos);
+      this.cableDrawing = true;
+      this.render();
+    },
+
+    handleContainmentClick(pos) {
+      this.containmentPoints.push(pos);
+      this.containmentDrawing = true;
+      this.render();
+    },
+
+    handleAreaClick(pos) {
+      this.areaPoints.push(pos);
+      this.areaDrawing = true;
+      this.render();
+    },
+
+    handleMeasureClick(pos) {
+      this.measurePoints.push(pos);
+      if (this.measurePoints.length >= 2) {
+        const totalPx = this.calcPolylineLength(this.measurePoints);
+        const metres = totalPx / this.scalePixelsPerMetre;
+        this.measureResult = metres.toFixed(2) + 'm';
+        this.notify(`Measurement: ${metres.toFixed(2)}m`);
+        // Don't clear immediately — let user see it, Escape or new click clears
+      }
+      this.render();
+    },
+
+    handleScaleClick(pos) {
+      this.scalePoints.push(pos);
+      if (this.scalePoints.length === 2) {
+        this.scaleInputVisible = true;
+      }
+      this.render();
+    },
+
+    confirmScale() {
+      const metres = parseFloat(this.scaleRealMetres);
+      if (!metres || metres <= 0) return;
+      const px = Math.hypot(this.scalePoints[1].x - this.scalePoints[0].x, this.scalePoints[1].y - this.scalePoints[0].y);
+      this.scalePixelsPerMetre = px / metres;
+      this.scaleCalibrated = true;
+      this.scaleInputVisible = false;
+      this.scalePoints = [];
+      this.scaleRealMetres = '';
+      this.setTool('select');
+      this.notify(`Scale set: ${metres}m`);
+      this.render();
+      this.autoSave();
+    },
+
+    // ─── Finish drawing operations ──────────────────
+    finishRoom() {
+      if (this.roomPoints.length < 3) { this.notify('Need at least 3 points'); return; }
+      const name = this.roomNameInput.trim() || `Room ${this.nextRoomId}`;
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+      const color = colors[(this.nextRoomId - 1) % colors.length];
+      this.rooms.push({ id: this.nextRoomId++, name, points: [...this.roomPoints], color, visible: true });
+      this.roomPoints = [];
+      this.roomDrawing = false;
+      this.roomNameInput = '';
+      this.render();
+      this.autoSave();
+      this.notify(`Room "${name}" added`);
+    },
+
+    finishCable() {
+      if (this.cablePoints.length < 2) { this.notify('Need at least 2 points'); return; }
+      const type = this.cableTypes.find(t => t.value === this.activeCableType);
+      const totalPx = this.calcPolylineLength(this.cablePoints);
+      const metres = totalPx / this.scalePixelsPerMetre;
+      const wasteMetres = metres * 1.1; // 10% waste
+      this.cableRuns.push({
+        id: this.nextCableId++,
+        type: this.activeCableType,
+        label: type ? type.label : this.activeCableType,
+        color: type ? type.color : '#888',
+        points: [...this.cablePoints],
+        metres: parseFloat(metres.toFixed(2)),
+        metresWithWaste: parseFloat(wasteMetres.toFixed(2)),
+        visible: true,
+      });
+      this.cablePoints = [];
+      this.cableDrawing = false;
+      this.render();
+      this.autoSave();
+      this.notify(`Cable run: ${metres.toFixed(1)}m (+10% waste = ${wasteMetres.toFixed(1)}m)`);
+    },
+
+    finishContainment() {
+      if (this.containmentPoints.length < 2) { this.notify('Need at least 2 points'); return; }
+      const type = this.containmentTypes.find(t => t.value === this.activeContainmentType);
+      const totalPx = this.calcPolylineLength(this.containmentPoints);
+      const metres = totalPx / this.scalePixelsPerMetre;
+      this.containmentRuns.push({
+        id: this.nextContainmentId++,
+        type: this.activeContainmentType,
+        label: type ? type.label : this.activeContainmentType,
+        color: type ? type.color : '#888',
+        points: [...this.containmentPoints],
+        metres: parseFloat(metres.toFixed(2)),
+        visible: true,
+      });
+      this.containmentPoints = [];
+      this.containmentDrawing = false;
+      this.render();
+      this.autoSave();
+      this.notify(`Containment: ${metres.toFixed(1)}m`);
+    },
+
+    finishArea() {
+      if (this.areaPoints.length < 3) { this.notify('Need at least 3 points'); return; }
+      const name = this.areaNameInput.trim() || `Area ${this.nextAreaId}`;
+      const sqm = this.calcPolygonArea(this.areaPoints) / (this.scalePixelsPerMetre ** 2);
+      this.areas.push({
+        id: this.nextAreaId++,
+        name,
+        points: [...this.areaPoints],
+        sqm: parseFloat(sqm.toFixed(2)),
+        visible: true,
+      });
+      this.areaPoints = [];
+      this.areaDrawing = false;
+      this.areaNameInput = '';
+      this.render();
+      this.autoSave();
+      this.notify(`${name}: ${sqm.toFixed(2)} m²`);
+    },
+
+    undoLastPoint() {
+      if (this.tool === 'cable' && this.cablePoints.length > 0) this.cablePoints.pop();
+      else if (this.tool === 'containment' && this.containmentPoints.length > 0) this.containmentPoints.pop();
+      else if (this.tool === 'room' && this.roomPoints.length > 0) this.roomPoints.pop();
+      else if (this.tool === 'area' && this.areaPoints.length > 0) this.areaPoints.pop();
+      else if (this.tool === 'measure' && this.measurePoints.length > 0) { this.measurePoints.pop(); this.measureResult = null; }
+      this.render();
+    },
+
+    cancelDrawing() {
+      this.cablePoints = []; this.cableDrawing = false;
+      this.containmentPoints = []; this.containmentDrawing = false;
+      this.roomPoints = []; this.roomDrawing = false;
+      this.areaPoints = []; this.areaDrawing = false;
+      this.measurePoints = []; this.measureResult = null;
+      this.scalePoints = []; this.scaleInputVisible = false;
+      this.render();
+    },
+
+    // ─── Tool switching ─────────────────────────────
+    setTool(t) {
+      this.cancelDrawing();
+      this.selectedItem = null;
+      this.tool = t;
+      const hints = {
+        select: 'Click & drag to pan. Scroll to zoom. Click items to select.',
+        symbol: 'Tap on the drawing to place markers.',
+        room: 'Click points to draw room boundary. Click "Finish Room" when done.',
+        cable: 'Click points along cable route. Click "Finish Run" when done.',
+        containment: 'Click points along containment route. Click "Finish" when done.',
+        area: 'Click points around perimeter for floor area. Click "Finish Area" when done.',
+        measure: 'Click points to measure. Press Escape to clear.',
+        scale: 'Click two points of a known distance.',
+      };
+      this.notify(hints[t] || '');
+      this.render();
+    },
+
+    // ─── Delete ─────────────────────────────────────
+    deleteSelected() {
+      if (!this.selectedItem) return;
+      const { type, id } = this.selectedItem;
+      if (type === 'marker') this.markers = this.markers.filter(m => m.id !== id);
+      else if (type === 'cable') this.cableRuns = this.cableRuns.filter(c => c.id !== id);
+      else if (type === 'containment') this.containmentRuns = this.containmentRuns.filter(c => c.id !== id);
+      else if (type === 'room') this.rooms = this.rooms.filter(r => r.id !== id);
+      else if (type === 'area') this.areas = this.areas.filter(a => a.id !== id);
+      this.selectedItem = null;
+      this.render();
+      this.autoSave();
+    },
+
+    deleteItem(type, id) {
+      if (type === 'marker') this.markers = this.markers.filter(m => m.id !== id);
+      else if (type === 'cable') this.cableRuns = this.cableRuns.filter(c => c.id !== id);
+      else if (type === 'containment') this.containmentRuns = this.containmentRuns.filter(c => c.id !== id);
+      else if (type === 'room') this.rooms = this.rooms.filter(r => r.id !== id);
+      else if (type === 'area') this.areas = this.areas.filter(a => a.id !== id);
+      else if (type === 'symbolType') {
+        this.symbolTypes = this.symbolTypes.filter(s => s.id !== id);
+        this.markers = this.markers.filter(m => m.typeId !== id);
+        if (this.activeSymbolTypeId === id) this.activeSymbolTypeId = null;
+      }
+      if (this.selectedItem && this.selectedItem.type === type && this.selectedItem.id === id) this.selectedItem = null;
+      this.render();
+      this.autoSave();
+    },
+
+    // ─── Eye toggle ─────────────────────────────────
+    toggleVisibility(type, id) {
+      let item;
+      if (type === 'marker') item = this.markers.find(m => m.id === id);
+      else if (type === 'cable') item = this.cableRuns.find(c => c.id === id);
+      else if (type === 'containment') item = this.containmentRuns.find(c => c.id === id);
+      else if (type === 'room') item = this.rooms.find(r => r.id === id);
+      else if (type === 'area') item = this.areas.find(a => a.id === id);
+      else if (type === 'symbolType') {
+        item = this.symbolTypes.find(s => s.id === id);
+        if (item) {
+          item.visible = !item.visible;
+          // Toggle all markers of this type too
+          this.markers.filter(m => m.typeId === id).forEach(m => m.visible = item.visible);
+        }
+        this.render();
+        return;
+      }
+      if (item) item.visible = !item.visible;
+      this.render();
+    },
+
+    toggleAllVisibility(type, visible) {
+      if (type === 'symbols') { this.symbolTypes.forEach(s => s.visible = visible); this.markers.forEach(m => m.visible = visible); }
+      else if (type === 'rooms') this.rooms.forEach(r => r.visible = visible);
+      else if (type === 'cables') this.cableRuns.forEach(c => c.visible = visible);
+      else if (type === 'containment') this.containmentRuns.forEach(c => c.visible = visible);
+      else if (type === 'areas') this.areas.forEach(a => a.visible = visible);
+      this.render();
+    },
+
+    // ─── Symbol type management ─────────────────────
+    addSymbolType() {
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+      const id = Date.now();
+      this.symbolTypes.push({
+        id, name: 'New Symbol', color: colors[this.symbolTypes.length % colors.length],
+        productId: null, productName: null, productSku: null,
+        purchasePrice: 0, salePrice: 0, visible: true,
+      });
+      this.activeSymbolTypeId = id;
+      // Immediately open rename
+      this.$nextTick(() => {
+        const input = document.querySelector(`[data-symbol-name="${id}"]`);
+        if (input) { input.focus(); input.select(); }
+      });
+    },
+
+    getSymbolType(id) { return this.symbolTypes.find(s => s.id === id); },
+    getMarkerCount(typeId) { return this.markers.filter(m => m.typeId === typeId).length; },
+
+    // ─── Product search ─────────────────────────────
+    openProductSearch(symbolTypeId) {
+      this.productSearchFor = symbolTypeId;
+      this.productSearchQuery = '';
+      this.productSearchResults = [];
+      this.showProductSearch = true;
+      this.$nextTick(() => { document.getElementById('product-search-input')?.focus(); });
+    },
+
+    async searchProducts() {
+      if (this.productSearchQuery.length < 2) return;
+      this.productSearching = true;
+      try {
+        const res = await fetch(`/quotebuilder/api/products/search?q=${encodeURIComponent(this.productSearchQuery)}`);
+        const data = await res.json();
+        this.productSearchResults = data.products || [];
+      } catch (e) { console.error('Search error:', e); }
+      this.productSearching = false;
+    },
+
+    linkProduct(product) {
+      const st = this.symbolTypes.find(s => s.id === this.productSearchFor);
+      if (st) {
+        st.productId = product.id;
+        st.productName = product.name;
+        st.productSku = product.sku || '';
+        st.purchasePrice = product.purchase_price || 0;
+        st.salePrice = product.sale_price || 0;
+        if (st.name === 'New Symbol') st.name = product.name;
+      }
+      this.showProductSearch = false;
+      this.autoSave();
+    },
+
+    // ─── Utility calculations ───────────────────────
+    calcPolylineLength(points) {
+      let len = 0;
+      for (let i = 1; i < points.length; i++) {
+        len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+      }
+      return len;
+    },
+
+    calcPolygonArea(points) {
+      // Shoelace formula
+      let area = 0;
+      const n = points.length;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += points[i].x * points[j].y;
+        area -= points[j].x * points[i].y;
+      }
+      return Math.abs(area) / 2;
+    },
+
+    distToSegment(p, a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+      let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    },
+
+    pointInPolygon(point, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].x, yi = polygon[i].y;
+        const xj = polygon[j].x, yj = polygon[j].y;
+        if (((yi > point.y) !== (yj > point.y)) && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    },
+
+    getMarkerRoom(marker) {
+      for (const room of this.rooms) {
+        if (this.pointInPolygon(marker, room.points)) return room;
+      }
+      return null;
+    },
+
+    // ─── Summary calculations ───────────────────────
+    get symbolSummary() {
+      return this.symbolTypes.map(st => {
+        const count = this.getMarkerCount(st.id);
+        return {
+          ...st, count,
+          totalPurchase: count * (st.purchasePrice || 0),
+          totalSale: count * (st.salePrice || 0),
+        };
+      });
+    },
+
+    get cableSummary() {
+      const grouped = {};
+      for (const run of this.cableRuns) {
+        if (!grouped[run.type]) grouped[run.type] = { label: run.label, color: run.color, metres: 0, runs: 0 };
+        grouped[run.type].metres += run.metresWithWaste || run.metres;
+        grouped[run.type].runs++;
+      }
+      return Object.values(grouped);
+    },
+
+    get containmentSummary() {
+      const grouped = {};
+      for (const run of this.containmentRuns) {
+        if (!grouped[run.type]) grouped[run.type] = { label: run.label, color: run.color, metres: 0, runs: 0 };
+        grouped[run.type].metres += run.metres;
+        grouped[run.type].runs++;
+      }
+      return Object.values(grouped);
+    },
+
+    get totalSymbolPurchase() { return this.symbolSummary.reduce((sum, s) => sum + s.totalPurchase, 0); },
+    get totalSymbolSale() { return this.symbolSummary.reduce((sum, s) => sum + s.totalSale, 0); },
+    get totalAreaSqm() { return this.areas.reduce((sum, a) => sum + a.sqm, 0); },
+
+    // ─── Notify ─────────────────────────────────────
+    notify(msg, type = 'info') {
+      this.notification = msg;
+      clearTimeout(this.notifTimeout);
+      if (msg) this.notifTimeout = setTimeout(() => this.notification = '', 5000);
+    },
+
+    // ─── Rendering ──────────────────────────────────
+    render() {
+      if (!this.ctx || !this.canvas) return;
+      const ctx = this.ctx;
+      const cw = this.canvas.width, ch = this.canvas.height;
+
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, cw, ch);
+
+      ctx.save();
+      ctx.translate(this.panX, this.panY);
+      ctx.scale(this.zoom, this.zoom);
+
+      // Drawing image
+      if (this.img && this.imgW) {
+        ctx.drawImage(this.img, 0, 0, this.imgW, this.imgH);
+      }
+
+      const lw = (px) => px / this.zoom; // Scale-independent line widths
+
+      // ── Rooms ──
+      for (const room of this.rooms) {
+        if (!room.visible) continue;
+        if (room.points.length < 3) continue;
+        ctx.beginPath();
+        ctx.moveTo(room.points[0].x, room.points[0].y);
+        for (let i = 1; i < room.points.length; i++) ctx.lineTo(room.points[i].x, room.points[i].y);
+        ctx.closePath();
+        ctx.fillStyle = room.color + '18';
+        ctx.fill();
+        ctx.strokeStyle = room.color;
+        ctx.lineWidth = lw(this.selectedItem?.type === 'room' && this.selectedItem.id === room.id ? 4 : 2);
+        ctx.stroke();
+        // Label
+        const cx = room.points.reduce((s, p) => s + p.x, 0) / room.points.length;
+        const cy = room.points.reduce((s, p) => s + p.y, 0) / room.points.length;
+        ctx.font = `bold ${lw(13)}px sans-serif`;
+        ctx.fillStyle = room.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(room.name, cx, cy);
+      }
+
+      // ── Floor areas ──
+      for (const area of this.areas) {
+        if (!area.visible) continue;
+        if (area.points.length < 3) continue;
+        ctx.beginPath();
+        ctx.moveTo(area.points[0].x, area.points[0].y);
+        for (let i = 1; i < area.points.length; i++) ctx.lineTo(area.points[i].x, area.points[i].y);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(251,191,36,0.12)';
+        ctx.fill();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = lw(this.selectedItem?.type === 'area' && this.selectedItem.id === area.id ? 4 : 2);
+        ctx.setLineDash([lw(8), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const cx = area.points.reduce((s, p) => s + p.x, 0) / area.points.length;
+        const cy = area.points.reduce((s, p) => s + p.y, 0) / area.points.length;
+        ctx.font = `bold ${lw(12)}px sans-serif`;
+        ctx.fillStyle = '#fbbf24';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${area.name}: ${area.sqm} m²`, cx, cy);
+      }
+
+      // ── Cable runs ──
+      for (const run of this.cableRuns) {
+        if (!run.visible) continue;
+        if (run.points.length < 2) continue;
+        const selected = this.selectedItem?.type === 'cable' && this.selectedItem.id === run.id;
+        ctx.beginPath();
+        ctx.moveTo(run.points[0].x, run.points[0].y);
+        for (let i = 1; i < run.points.length; i++) ctx.lineTo(run.points[i].x, run.points[i].y);
+        ctx.strokeStyle = run.color;
+        ctx.lineWidth = lw(selected ? 5 : 3);
+        ctx.stroke();
+        // Metres label at midpoint
+        const mid = Math.floor(run.points.length / 2);
+        const mp = run.points[mid];
+        ctx.font = `bold ${lw(10)}px sans-serif`;
+        ctx.fillStyle = run.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${run.metres}m`, mp.x, mp.y - lw(8));
+        // Dots at each point
+        for (const p of run.points) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(3), 0, Math.PI * 2);
+          ctx.fillStyle = run.color; ctx.fill();
+        }
+      }
+
+      // ── Containment runs ──
+      for (const run of this.containmentRuns) {
+        if (!run.visible) continue;
+        if (run.points.length < 2) continue;
+        const selected = this.selectedItem?.type === 'containment' && this.selectedItem.id === run.id;
+        ctx.beginPath();
+        ctx.moveTo(run.points[0].x, run.points[0].y);
+        for (let i = 1; i < run.points.length; i++) ctx.lineTo(run.points[i].x, run.points[i].y);
+        ctx.strokeStyle = run.color;
+        ctx.lineWidth = lw(selected ? 7 : 5);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        // Double-line effect
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = lw(selected ? 3 : 1.5);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        // Label
+        const mid = Math.floor(run.points.length / 2);
+        const mp = run.points[mid];
+        ctx.font = `bold ${lw(10)}px sans-serif`;
+        ctx.fillStyle = run.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${run.label} ${run.metres}m`, mp.x, mp.y - lw(10));
+      }
+
+      // ── Symbol markers ──
+      for (const marker of this.markers) {
+        if (!marker.visible) continue;
+        const st = this.getSymbolType(marker.typeId);
+        if (!st || !st.visible) continue;
+        const selected = this.selectedItem?.type === 'marker' && this.selectedItem.id === marker.id;
+        const r = lw(selected ? 10 : 7);
+        ctx.beginPath();
+        ctx.arc(marker.x, marker.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = st.color;
+        ctx.fill();
+        ctx.strokeStyle = selected ? '#fff' : '#000';
+        ctx.lineWidth = lw(selected ? 2.5 : 1);
+        ctx.stroke();
+      }
+
+      // ── Drawing in progress ──
+      // Room points
+      if (this.roomPoints.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(this.roomPoints[0].x, this.roomPoints[0].y);
+        for (let i = 1; i < this.roomPoints.length; i++) ctx.lineTo(this.roomPoints[i].x, this.roomPoints[i].y);
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = lw(2);
+        ctx.setLineDash([lw(6), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const p of this.roomPoints) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(5), 0, Math.PI * 2);
+          ctx.fillStyle = '#6366f1'; ctx.fill();
+        }
+      }
+
+      // Cable points in progress
+      if (this.cablePoints.length > 0) {
+        const type = this.cableTypes.find(t => t.value === this.activeCableType);
+        const color = type ? type.color : '#888';
+        ctx.beginPath();
+        ctx.moveTo(this.cablePoints[0].x, this.cablePoints[0].y);
+        for (let i = 1; i < this.cablePoints.length; i++) ctx.lineTo(this.cablePoints[i].x, this.cablePoints[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw(3);
+        ctx.setLineDash([lw(6), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const p of this.cablePoints) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(4), 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+        }
+        // Show running total
+        if (this.cablePoints.length >= 2) {
+          const totalPx = this.calcPolylineLength(this.cablePoints);
+          const metres = (totalPx / this.scalePixelsPerMetre).toFixed(1);
+          const last = this.cablePoints[this.cablePoints.length - 1];
+          ctx.font = `bold ${lw(11)}px sans-serif`;
+          ctx.fillStyle = color;
+          ctx.textAlign = 'left';
+          ctx.fillText(`${metres}m`, last.x + lw(8), last.y - lw(5));
+        }
+      }
+
+      // Containment points in progress
+      if (this.containmentPoints.length > 0) {
+        const type = this.containmentTypes.find(t => t.value === this.activeContainmentType);
+        const color = type ? type.color : '#888';
+        ctx.beginPath();
+        ctx.moveTo(this.containmentPoints[0].x, this.containmentPoints[0].y);
+        for (let i = 1; i < this.containmentPoints.length; i++) ctx.lineTo(this.containmentPoints[i].x, this.containmentPoints[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw(5);
+        ctx.setLineDash([lw(8), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const p of this.containmentPoints) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(4), 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+        }
+        if (this.containmentPoints.length >= 2) {
+          const totalPx = this.calcPolylineLength(this.containmentPoints);
+          const metres = (totalPx / this.scalePixelsPerMetre).toFixed(1);
+          const last = this.containmentPoints[this.containmentPoints.length - 1];
+          ctx.font = `bold ${lw(11)}px sans-serif`;
+          ctx.fillStyle = color;
+          ctx.textAlign = 'left';
+          ctx.fillText(`${metres}m`, last.x + lw(8), last.y - lw(5));
+        }
+      }
+
+      // Area points in progress
+      if (this.areaPoints.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(this.areaPoints[0].x, this.areaPoints[0].y);
+        for (let i = 1; i < this.areaPoints.length; i++) ctx.lineTo(this.areaPoints[i].x, this.areaPoints[i].y);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = lw(2);
+        ctx.setLineDash([lw(6), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const p of this.areaPoints) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(5), 0, Math.PI * 2);
+          ctx.fillStyle = '#fbbf24'; ctx.fill();
+        }
+      }
+
+      // Measure points (temporary)
+      if (this.measurePoints.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(this.measurePoints[0].x, this.measurePoints[0].y);
+        for (let i = 1; i < this.measurePoints.length; i++) ctx.lineTo(this.measurePoints[i].x, this.measurePoints[i].y);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = lw(2);
+        ctx.setLineDash([lw(4), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const p of this.measurePoints) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, lw(4), 0, Math.PI * 2);
+          ctx.fillStyle = '#94a3b8'; ctx.fill();
+        }
+        if (this.measureResult) {
+          const last = this.measurePoints[this.measurePoints.length - 1];
+          ctx.font = `bold ${lw(14)}px sans-serif`;
+          ctx.fillStyle = '#fff';
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = lw(3);
+          ctx.textAlign = 'left';
+          ctx.strokeText(this.measureResult, last.x + lw(10), last.y - lw(8));
+          ctx.fillText(this.measureResult, last.x + lw(10), last.y - lw(8));
+        }
+      }
+
+      // Scale calibration points
+      for (const p of this.scalePoints) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, lw(6), 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = lw(2); ctx.stroke();
+      }
+      if (this.scalePoints.length === 2) {
+        ctx.beginPath();
+        ctx.moveTo(this.scalePoints[0].x, this.scalePoints[0].y);
+        ctx.lineTo(this.scalePoints[1].x, this.scalePoints[1].y);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = lw(2);
+        ctx.setLineDash([lw(6), lw(4)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
+
+      // Zoom badge
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(8, ch - 28, 56, 22);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${Math.round(this.zoom * 100)}%`, 14, ch - 13);
+    },
+
+    // ─── Save / Load state ──────────────────────────
+    autoSave() {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => this.saveState(), 1000);
+    },
+
+    async saveState() {
+      this.saving = true;
+      const state = {
+        scalePixelsPerMetre: this.scalePixelsPerMetre,
+        scaleCalibrated: this.scaleCalibrated,
+        symbolTypes: this.symbolTypes,
+        markers: this.markers,
+        rooms: this.rooms,
+        cableRuns: this.cableRuns,
+        containmentRuns: this.containmentRuns,
+        areas: this.areas,
+        nextMarkerId: this.nextMarkerId,
+        nextRoomId: this.nextRoomId,
+        nextCableId: this.nextCableId,
+        nextContainmentId: this.nextContainmentId,
+        nextAreaId: this.nextAreaId,
+      };
+      try {
+        await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/takeoff-v8-state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state),
+        });
+      } catch (e) { console.error('Save error:', e); }
+      this.saving = false;
+    },
+
+    async loadState() {
+      try {
+        const res = await fetch(`/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/takeoff-v8-state`);
+        if (res.ok) {
+          const state = await res.json();
+          if (state && !state.empty && state.symbolTypes) {
+            this.scalePixelsPerMetre = state.scalePixelsPerMetre || 50;
+            this.scaleCalibrated = state.scaleCalibrated || false;
+            this.symbolTypes = state.symbolTypes || [];
+            this.markers = state.markers || [];
+            this.rooms = state.rooms || [];
+            this.cableRuns = state.cableRuns || [];
+            this.containmentRuns = state.containmentRuns || [];
+            this.areas = state.areas || [];
+            this.nextMarkerId = state.nextMarkerId || (this.markers.length > 0 ? Math.max(...this.markers.map(m => m.id)) + 1 : 1);
+            this.nextRoomId = state.nextRoomId || (this.rooms.length > 0 ? Math.max(...this.rooms.map(r => r.id)) + 1 : 1);
+            this.nextCableId = state.nextCableId || (this.cableRuns.length > 0 ? Math.max(...this.cableRuns.map(c => c.id)) + 1 : 1);
+            this.nextContainmentId = state.nextContainmentId || (this.containmentRuns.length > 0 ? Math.max(...this.containmentRuns.map(c => c.id)) + 1 : 1);
+            this.nextAreaId = state.nextAreaId || (this.areas.length > 0 ? Math.max(...this.areas.map(a => a.id)) + 1 : 1);
+            this.render();
+          }
+        }
+      } catch (e) { console.error('Load error:', e); }
+    },
+  };
 }

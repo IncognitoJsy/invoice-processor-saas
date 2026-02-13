@@ -2,605 +2,369 @@
 {% block title %}Takeoff - {{ project.name }} - GoZappify{% endblock %}
 
 {% block content %}
-<div class="max-w-full mx-auto px-4 py-4"
-     x-data="takeoffCanvas({{ project.id }}, {{ document.id }})"
-     x-init="init()">
+<div class="h-[calc(100vh-64px)] flex flex-col bg-gray-950"
+     x-data="takeoffCanvas({{ project.id }}, {{ document.id }})" x-init="init()">
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-3">
-            <a href="{{ url_for('quotebuilder.project_detail', project_id=project.id) }}"
-               class="text-gray-400 hover:text-gray-200 transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
-            </a>
-            <div>
-                <h1 class="text-xl font-bold text-gray-900 dark:text-white">{{ project.name }}</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400">{{ document.original_filename }} — Drawing Takeoff</p>
-            </div>
-        </div>
-        <div class="flex items-center gap-2">
-            <span x-show="scaleCalibrated" class="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded">✓ Scale calibrated</span>
-            <span x-show="!scaleCalibrated" class="text-xs text-amber-400 bg-amber-400/10 px-2 py-1 rounded cursor-pointer" @click="setMode('scale')">⚠ Manual scale</span>
-            <span x-show="!scaleCalibrated" class="text-xs text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded cursor-pointer" @click="showAutoScaleModal = true">📐 Auto-scale (1:XX)</span>
-            <button @click="showSummary = !showSummary"
-                    class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
-                    :class="showSummary ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'">
-                Summary
-            </button>
-        </div>
+  <!-- Toolbar -->
+  <div class="flex-shrink-0 bg-gray-900 border-b border-gray-800 px-3 py-2 flex items-center gap-2 overflow-x-auto">
+    <a href="{{ url_for('quotebuilder.project', project_id=project.id) }}"
+       class="text-gray-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-gray-800 whitespace-nowrap">← Back</a>
+    <div class="w-px h-6 bg-gray-700"></div>
+
+    <!-- Scale -->
+    <button @click="setTool('scale')"
+            class="text-xs px-2.5 py-1.5 rounded font-medium whitespace-nowrap transition"
+            :class="scaleCalibrated ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-yellow-900/40 text-yellow-400 border border-yellow-800'">
+      📏 <span x-text="scaleCalibrated ? 'Scale ✓' : 'Set Scale'"></span>
+    </button>
+    <div class="w-px h-6 bg-gray-700"></div>
+
+    <!-- Tools -->
+    <button @click="setTool('select')" class="tool-btn" :class="tool==='select' && 'active'">
+      <span>🖱</span> Select</button>
+    <button @click="setTool('symbol')" class="tool-btn" :class="tool==='symbol' && 'active'">
+      <span>⚡</span> Symbol</button>
+    <button @click="setTool('room')" class="tool-btn" :class="tool==='room' && 'active'">
+      <span>🏠</span> Room</button>
+    <button @click="setTool('cable')" class="tool-btn" :class="tool==='cable' && 'active'">
+      <span>🔌</span> Cable</button>
+    <button @click="setTool('containment')" class="tool-btn" :class="tool==='containment' && 'active'">
+      <span>📦</span> Containment</button>
+    <button @click="setTool('area')" class="tool-btn" :class="tool==='area' && 'active'">
+      <span>📐</span> Area</button>
+    <button @click="setTool('measure')" class="tool-btn" :class="tool==='measure' && 'active'">
+      <span>📏</span> Measure</button>
+
+    <div class="w-px h-6 bg-gray-700"></div>
+
+    <!-- Context actions -->
+    <template x-if="cableDrawing || containmentDrawing || roomDrawing || areaDrawing || measurePoints.length > 0">
+      <div class="flex items-center gap-1">
+        <button @click="undoLastPoint()" class="text-xs px-2 py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">Undo Point</button>
+        <template x-if="roomDrawing">
+          <div class="flex items-center gap-1">
+            <input type="text" x-model="roomNameInput" placeholder="Room name" class="w-28 text-xs px-2 py-1 rounded bg-gray-800 border border-gray-700 text-white placeholder-gray-500">
+            <button @click="finishRoom()" class="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500 font-medium">Finish Room</button>
+          </div>
+        </template>
+        <template x-if="cableDrawing">
+          <button @click="finishCable()" class="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 font-medium">Finish Run</button>
+        </template>
+        <template x-if="containmentDrawing">
+          <button @click="finishContainment()" class="text-xs px-2 py-1 rounded bg-orange-600 text-white hover:bg-orange-500 font-medium">Finish</button>
+        </template>
+        <template x-if="areaDrawing">
+          <div class="flex items-center gap-1">
+            <input type="text" x-model="areaNameInput" placeholder="Area name (e.g. UFH Zone 1)" class="w-36 text-xs px-2 py-1 rounded bg-gray-800 border border-gray-700 text-white placeholder-gray-500">
+            <button @click="finishArea()" class="text-xs px-2 py-1 rounded bg-yellow-600 text-white hover:bg-yellow-500 font-medium">Finish Area</button>
+          </div>
+        </template>
+        <template x-if="measurePoints.length > 0">
+          <button @click="measurePoints=[]; measureResult=null; render()" class="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">Clear</button>
+        </template>
+        <button @click="cancelDrawing()" class="text-xs px-2 py-1 rounded bg-red-900/50 text-red-400 hover:bg-red-900">Cancel</button>
+      </div>
+    </template>
+
+    <!-- Delete selected -->
+    <template x-if="selectedItem">
+      <button @click="deleteSelected()" class="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-500 font-medium ml-auto">
+        🗑 Delete Selected
+      </button>
+    </template>
+
+    <div class="ml-auto flex items-center gap-2">
+      <button @click="fitToView()" class="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">Fit</button>
+      <span class="text-xs text-gray-500" x-show="saving">Saving...</span>
+      <span class="text-xs text-green-500" x-show="scaleCalibrated" x-text="'Scale: ' + (1/scalePixelsPerMetre*100).toFixed(1) + ' cm/px'"></span>
+    </div>
+  </div>
+
+  <!-- Scale input popup -->
+  <div x-show="scaleInputVisible" x-transition class="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-2xl">
+    <p class="text-sm text-gray-300 mb-2">Enter the real-world distance between the two points:</p>
+    <div class="flex items-center gap-2">
+      <input type="number" x-model="scaleRealMetres" step="0.1" placeholder="e.g. 5.0"
+             class="w-28 text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white" @keydown.enter="confirmScale()">
+      <span class="text-gray-400 text-sm">metres</span>
+      <button @click="confirmScale()" class="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 font-medium">Set Scale</button>
+      <button @click="scaleInputVisible=false; scalePoints=[]; render()" class="px-3 py-2 text-sm bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Notification bar -->
+  <div x-show="notification" x-transition class="flex-shrink-0 bg-gray-800/90 text-gray-300 text-xs text-center py-1.5 px-4 border-b border-gray-800">
+    <span x-text="notification"></span>
+  </div>
+
+  <!-- Main content: canvas + sidebar -->
+  <div class="flex-1 flex min-h-0 relative">
+    <!-- Canvas -->
+    <div class="flex-1 relative overflow-hidden">
+      <canvas x-ref="canvas"
+              @mousedown="onMouseDown($event)"
+              @mousemove="onMouseMove($event)"
+              @mouseup="onMouseUp($event)"
+              class="w-full h-full cursor-crosshair"></canvas>
+      <div x-show="loading" class="absolute inset-0 flex items-center justify-center bg-gray-950/80">
+        <div class="text-gray-400 text-sm">Loading drawing...</div>
+      </div>
     </div>
 
-    <!-- Notification -->
-    <div x-show="notification" x-transition
-         class="fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium"
-         :class="notification?.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'">
-        <span x-text="notification?.msg"></span>
-    </div>
+    <!-- Right Sidebar -->
+    <div class="w-80 flex-shrink-0 bg-gray-900 border-l border-gray-800 flex flex-col overflow-y-auto">
 
-    <!-- Loading -->
-    <div x-show="loading" class="flex items-center justify-center h-96">
-        <div class="text-center">
-            <div class="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p class="text-gray-400" x-text="detecting ? 'Scanning for symbols...' : 'Loading drawing...'"></p>
+      <!-- Cable type selector (shown when cable tool active) -->
+      <div x-show="tool === 'cable'" class="p-3 border-b border-gray-800">
+        <label class="text-xs font-medium text-gray-400 mb-1.5 block">Cable Type</label>
+        <select x-model="activeCableType" class="w-full text-xs px-2 py-1.5 rounded bg-gray-800 border border-gray-700 text-white">
+          <template x-for="ct in cableTypes" :key="ct.value">
+            <option :value="ct.value" x-text="ct.label"></option>
+          </template>
+        </select>
+      </div>
+
+      <!-- Containment type selector -->
+      <div x-show="tool === 'containment'" class="p-3 border-b border-gray-800">
+        <label class="text-xs font-medium text-gray-400 mb-1.5 block">Containment Type</label>
+        <select x-model="activeContainmentType" class="w-full text-xs px-2 py-1.5 rounded bg-gray-800 border border-gray-700 text-white">
+          <template x-for="ct in containmentTypes" :key="ct.value">
+            <option :value="ct.value" x-text="ct.label"></option>
+          </template>
+        </select>
+      </div>
+
+      <!-- ═══ SYMBOLS PANEL ═══ -->
+      <div class="p-3 border-b border-gray-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Symbols</h3>
+          <div class="flex items-center gap-1">
+            <button @click="toggleAllVisibility('symbols', true)" class="text-gray-500 hover:text-gray-300" title="Show all">👁</button>
+            <button @click="toggleAllVisibility('symbols', false)" class="text-gray-500 hover:text-gray-300" title="Hide all">🚫</button>
+            <button @click="addSymbolType()" class="text-xs px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-500">+ Add</button>
+          </div>
         </div>
-    </div>
-
-    <!-- Error -->
-    <div x-show="error" class="bg-red-900/20 border border-red-600/30 rounded-lg p-4 text-red-400" x-text="error"></div>
-
-    <!-- Main Content -->
-    <div x-show="!loading && !error" class="flex gap-4" style="min-height: calc(100vh - 140px);">
-
-        <!-- Left: Canvas Area -->
-        <div class="flex-1 min-w-0">
-
-            <!-- Toolbar -->
-            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                <span class="text-xs text-gray-500 font-semibold mr-1">MODE:</span>
-                <template x-for="m in [
-                    {id: 'select', label: 'Select', icon: '👆'},
-                    {id: 'symbol', label: 'Mark Symbol', icon: '🔍'},
-                    {id: 'room', label: 'Draw Room', icon: '🏠'},
-                    {id: 'cable', label: 'Cable Run', icon: '📏'},
-                    {id: 'area', label: 'UFH Area', icon: '🔥'},
-                    {id: 'scale', label: 'Calibrate', icon: '📐'},
-                ]">
-                    <button @click="setMode(m.id)"
-                            class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition"
-                            :class="mode === m.id
-                                ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
-                                : 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700'">
-                        <span x-text="m.icon"></span> <span x-text="m.label"></span>
-                    </button>
-                </template>
-
-                <button @click="settingKeyArea = true; mode = 'select'"
-                        class="ml-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition"
-                        :class="keyArea ? 'border-red-600 bg-red-600/10 text-red-400' : 'border-gray-700 bg-gray-800 text-gray-400'">
-                    🗝️ <span x-text="keyArea ? 'Key Area Set' : 'Mark Key Area'"></span>
-                </button>
-
-                <div class="ml-auto flex items-center gap-1">
-                    <button @click="zoomIn()" class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700">+</button>
-                    <span class="text-xs text-gray-500 w-10 text-center" x-text="Math.round(zoom * 100) + '%'"></span>
-                    <button @click="zoomOut()" class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700">−</button>
-                    <button @click="fitToScreen()" class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700">Fit</button>
-                </div>
+        <div class="space-y-1.5">
+          <template x-for="st in symbolTypes" :key="st.id">
+            <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg transition"
+                 :class="activeSymbolTypeId === st.id ? 'bg-gray-800 ring-1 ring-indigo-500' : 'hover:bg-gray-800/50'"
+                 @click="activeSymbolTypeId = st.id; if(tool !== 'symbol') setTool('symbol')">
+              <div class="w-3 h-3 rounded-full flex-shrink-0" :style="'background:' + st.color"></div>
+              <input type="text" x-model="st.name" :data-symbol-name="st.id"
+                     class="flex-1 text-xs bg-transparent text-white border-none outline-none min-w-0 focus:ring-0 p-0"
+                     @click.stop @change="autoSave()">
+              <span class="text-xs text-gray-500 font-mono" x-text="getMarkerCount(st.id)"></span>
+              <button @click.stop="toggleVisibility('symbolType', st.id)"
+                      class="text-gray-600 hover:text-gray-300 text-xs" :class="st.visible ? 'text-gray-400' : 'text-gray-700'">
+                <span x-text="st.visible ? '👁' : '👁‍🗨'"></span>
+              </button>
+              <button @click.stop="openProductSearch(st.id)"
+                      class="text-gray-600 hover:text-blue-400 text-xs" title="Link product">🔗</button>
+              <button @click.stop="deleteItem('symbolType', st.id)"
+                      class="text-gray-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100">✕</button>
             </div>
-
-            <!-- Mode instructions -->
-            <div x-show="manualPlacingTemplate" class="mb-2 p-3 rounded-lg bg-blue-900/20 border border-blue-600/20 text-xs text-blue-300">
-                ➕ <strong>Click on the drawing</strong> to place "<span x-text="manualPlacingTemplate?.label"></span>". Click multiple times to add more.
-                <button @click="cancelManualPlace()" class="ml-2 px-2 py-0.5 bg-red-600 text-white rounded text-xs font-semibold">Done</button>
-            </div>
-            <div x-show="mode === 'symbol' && !manualPlacingTemplate" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
-                🔍 <strong>Drag a box</strong> around a symbol on the drawing key. You'll then search for the matching product.
-            </div>
-            <div x-show="mode === 'room' && !drawingRoom" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300">
-                🏠 Click <strong>"Start Drawing"</strong> then click around the room perimeter. <strong>Double-click</strong> to finish.
-                <button @click="startDrawingRoom()" class="ml-2 px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-semibold">Start Drawing</button>
-            </div>
-            <div x-show="mode === 'room' && drawingRoom" class="mb-2 p-3 rounded-lg bg-indigo-900/20 border border-indigo-600/20 text-xs text-indigo-300 flex items-center gap-2">
-                🏠 Click points around room. <strong>Double-click</strong> to finish (<span x-text="roomPoints.length"></span> points).
-                <button @click="finishRoom()" :disabled="roomPoints.length < 3" class="px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Finish ✓</button>
-                <button @click="cancelRoom()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-            </div>
-            <div x-show="mode === 'cable'" class="mb-2 p-3 rounded-lg bg-orange-900/20 border border-orange-600/20 text-xs text-orange-300 flex items-center gap-2 flex-wrap">
-                📏 Click points along cable route.
-                <select x-model="cableType" class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1">
-                    <template x-for="ct in cableTypes"><option :value="ct.value" x-text="ct.label"></option></template>
-                </select>
-                <button @click="finishCableRun()" :disabled="cablePoints.length < 2" class="ml-auto px-2 py-0.5 bg-orange-600 text-white rounded text-xs font-semibold disabled:opacity-50">Finish ✓</button>
-                <button @click="undoLastCablePoint()" :disabled="cablePoints.length === 0" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs disabled:opacity-50">Undo</button>
-                <button @click="cablePoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
-            </div>
-            <div x-show="mode === 'area'" class="mb-2 p-3 rounded-lg bg-purple-900/20 border border-purple-600/20 text-xs text-purple-300 flex items-center gap-2">
-                🔥 Click around the room perimeter to measure <strong>Underfloor Heating</strong> area. You'll then link a UFH mat product.
-                <button @click="finishArea()" :disabled="areaPoints.length < 3" class="ml-auto px-2 py-0.5 bg-purple-600 text-white rounded text-xs font-semibold disabled:opacity-50">Calculate ✓</button>
-                <button @click="areaPoints = []; redraw()" class="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">Clear</button>
-            </div>
-            <div x-show="mode === 'scale'" class="mb-2 p-3 rounded-lg bg-green-900/20 border border-green-600/20 text-xs text-green-300">
-                📐 Click <strong>two points</strong> of a known distance. <span x-text="scalePoints.length + '/2 points'"></span>
-            </div>
-            <div x-show="settingKeyArea" class="mb-2 p-3 rounded-lg bg-red-900/20 border border-red-600/20 text-xs text-red-300">
-                🗝️ <strong>Draw a box</strong> around the key/legend area to exclude from detection.
-            </div>
-
-            <!-- Canvas container -->
-            <div class="border border-gray-700 rounded-lg overflow-hidden bg-gray-900 relative" style="height: calc(100vh - 300px); min-height: 400px;">
-                <canvas x-ref="takeoffCanvas"
-                        :style="'cursor: ' + getCursor()"
-                        @mousedown="onMouseDown($event)"
-                        @mousemove="onMouseMove($event)"
-                        @mouseup="onMouseUp($event)"
-                        @click="handleCanvasClick($event)"
-                        @dblclick="onDoubleClick($event)"
-                        class="block w-full h-full"></canvas>
-            </div>
+          </template>
+          <div x-show="symbolTypes.length === 0" class="text-xs text-gray-600 text-center py-3">
+            Click "+ Add" to create symbol types, then tap on the drawing to place them.
+          </div>
         </div>
+      </div>
 
-        <!-- Right: Side Panel -->
-        <div class="w-80 flex-shrink-0 space-y-4 overflow-y-auto" style="max-height: calc(100vh - 140px);">
-
-            <!-- Symbol Templates -->
-            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
-                    🔍 Detected Symbols
-                    <span class="text-xs text-gray-500 font-normal" x-text="symbolTemplates.length + ' types'"></span>
-                </h3>
-                <template x-if="symbolTemplates.length === 0">
-                    <p class="text-xs text-gray-500">No symbols detected yet. Switch to "Mark Symbol" and draw a box over a symbol.</p>
-                </template>
-                <template x-for="tpl in symbolTemplates" :key="tpl.id">
-                    <div class="mb-3 p-3 rounded-lg bg-gray-900/50 border border-gray-700">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-semibold text-gray-200" x-text="tpl.label"></span>
-                            <div class="flex items-center gap-1">
-                                <span x-show="tpl.default_part_number" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-600/20 text-green-400">✓ Linked</span>
-                                <span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-600/20 text-indigo-400" x-text="'×' + (tpl.total_found || 0)"></span>
-                                <button @click="deleteSymbolTemplate(tpl)" class="ml-1 text-gray-500 hover:text-red-400 transition" title="Remove symbol type">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                            </div>
-                        </div>
-                        <!-- Linked product info -->
-                        <div x-show="tpl.default_part_number" class="text-xs">
-                            <span class="text-green-400 font-semibold" x-text="tpl.default_part_number"></span>
-                            <span class="text-gray-500 ml-1" x-text="tpl.default_product_description"></span>
-                            <div class="mt-1 text-gray-400">
-                                Cost: <span class="text-red-400" x-text="'£' + (tpl.default_unit_cost || 0).toFixed(2)"></span>
-                                → Sale: <span class="text-green-400" x-text="'£' + (tpl.default_unit_sell || 0).toFixed(2)"></span>
-                            </div>
-                            <button @click="openLinkProduct(tpl)" class="mt-1 text-xs text-indigo-400 hover:text-indigo-300">✏️ Change product</button>
-                        </div>
-                        <!-- Unlinked - show link button -->
-                        <button x-show="!tpl.default_part_number" @click="openLinkProduct(tpl)" class="w-full mt-1 px-3 py-1.5 border border-dashed border-indigo-600/40 rounded text-xs text-indigo-400 hover:bg-indigo-600/10 transition">+ Link Product</button>
-                        <!-- Action buttons -->
-                        <div class="flex gap-1 mt-2">
-                            <!-- Re-scan (per template) -->
-                            <button @click="runDetection(tpl)" :disabled="detecting" class="flex-1 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition disabled:opacity-50">
-                                <span x-show="detectingTemplateId !== tpl.id">🔄 Re-scan</span>
-                                <span x-show="detectingTemplateId === tpl.id">Scanning...</span>
-                            </button>
-                            <!-- Manual add -->
-                            <button x-show="manualPlacingTemplate?.id !== tpl.id" @click="startManualPlace(tpl)" class="flex-1 px-2 py-1 bg-blue-700/50 text-blue-300 rounded text-xs hover:bg-blue-700/70 transition">
-                                ➕ Add
-                            </button>
-                            <button x-show="manualPlacingTemplate?.id === tpl.id" @click="cancelManualPlace()" class="flex-1 px-2 py-1 bg-red-700/50 text-red-300 rounded text-xs hover:bg-red-700/70 transition animate-pulse">
-                                ✕ Cancel placing
-                            </button>
-                        </div>
-                        <!-- Accessories -->
-                        <div x-show="tpl.default_part_number" class="mt-2 border-t border-gray-700 pt-2">
-                            <div class="flex items-center justify-between mb-1">
-                                <span class="text-[10px] font-semibold text-gray-400 uppercase">Accessories</span>
-                                <button @click="openAccessoryModal(tpl)" class="text-[10px] text-orange-400 hover:text-orange-300">+ Add accessory</button>
-                            </div>
-                            <template x-for="acc in getAccessories(tpl)" :key="acc.id">
-                                <div class="flex items-center justify-between py-0.5">
-                                    <div class="text-[10px] text-gray-400">
-                                        <span class="text-orange-400" x-text="acc.part_number"></span>
-                                        <span class="ml-1" x-text="acc.description?.substring(0, 30)"></span>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <span class="text-[10px] text-gray-500" x-text="'×' + acc.quantity"></span>
-                                        <button @click="removeAccessory(acc)" class="text-gray-600 hover:text-red-400">
-                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </template>
-            </div>
-
-            <!-- Inline Product Search (for relinking from sidebar) -->
-            <div x-show="linkingTemplate" x-transition class="bg-gray-800 border border-indigo-600/30 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-bold text-gray-200">Link to "<span x-text="linkingTemplate?.label"></span>"</h3>
-                    <button @click="linkingTemplate = null" class="text-gray-500 hover:text-gray-300">✕</button>
-                </div>
-                <input type="text" x-model="productSearch" @input.debounce.300ms="searchProducts()"
-                       placeholder="Search SKU or description..."
-                       class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
-                <div class="mt-2 max-h-48 overflow-y-auto">
-                    <template x-for="product in productResults" :key="product.id">
-                        <div @click="linkProduct(linkingTemplate, product)" class="p-2 rounded cursor-pointer hover:bg-indigo-600/10 border-b border-gray-700/50">
-                            <div class="flex justify-between">
-                                <span class="text-xs font-bold text-indigo-400" x-text="product.sku"></span>
-                                <span class="text-xs text-amber-400" x-text="'£' + product.purchase_cost.toFixed(2) + ' → £' + product.unit_price.toFixed(2)"></span>
-                            </div>
-                            <div class="text-xs text-gray-400" x-text="product.name || product.description"></div>
-                        </div>
-                    </template>
-                    <div x-show="productSearching" class="text-xs text-gray-500 py-2 text-center">Searching...</div>
-                    <p x-show="productSearch.length >= 2 && !productSearching && productResults.length === 0" class="text-xs text-gray-500 py-2">No products found</p>
-                </div>
-            </div>
-
-            <!-- Rooms -->
-            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">🏠 Rooms <span class="text-xs text-gray-500 font-normal" x-text="rooms.length + ' rooms'"></span></h3>
-                <template x-for="room in rooms" :key="room.id">
-                    <div class="flex items-center justify-between py-1.5 border-b border-gray-700/50" @mouseenter="highlightedRoom = room.id; redraw()" @mouseleave="highlightedRoom = null; redraw()">
-                        <span class="text-xs text-gray-300 font-medium cursor-pointer hover:text-indigo-400" x-text="room.name" @click="zoomToRoom(room)"></span>
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-indigo-400" x-text="getRoomDetectionCount(room) + ' items'"></span>
-                            <button @click="deleteRoom(room.id)" class="text-xs text-red-400 hover:text-red-300">✕</button>
-                        </div>
-                    </div>
-                </template>
-                <p x-show="rooms.length === 0" class="text-xs text-gray-500">No rooms drawn yet.</p>
-            </div>
-
-            <!-- Cable Runs -->
-            <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <h3 class="text-sm font-bold text-gray-200 mb-3">📏 Cable Runs</h3>
-                <template x-for="(summary, type) in getCableRunSummary()" :key="type">
-                    <div class="flex items-center justify-between py-1.5 border-b border-gray-700/50">
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-2 rounded-full" :style="'background:' + summary.color"></div>
-                            <span class="text-xs text-gray-300" x-text="summary.label"></span>
-                        </div>
-                        <span class="text-xs font-bold" :style="'color:' + summary.color" x-text="summary.totalMetres.toFixed(1) + 'm'"></span>
-                    </div>
-                </template>
-                <p x-show="cableRuns.length === 0" class="text-xs text-gray-500">No cable runs measured yet.</p>
-            </div>
-
-            <!-- Areas -->
-            <div x-show="areas.length > 0" class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-                <h3 class="text-sm font-bold text-gray-200 mb-3">🔥 Underfloor Heating</h3>
-                <template x-for="area in areas" :key="area.id">
-                    <div class="flex items-center justify-between py-1.5">
-                        <span class="text-xs text-gray-300" x-text="area.label"></span>
-                        <span class="text-xs font-bold text-purple-400" x-text="area.area_sqm + ' m²'"></span>
-                    </div>
-                </template>
-            </div>
+      <!-- ═══ ROOMS PANEL ═══ -->
+      <div class="p-3 border-b border-gray-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Rooms</h3>
+          <div class="flex items-center gap-1">
+            <button @click="toggleAllVisibility('rooms', true)" class="text-gray-500 hover:text-gray-300">👁</button>
+            <button @click="toggleAllVisibility('rooms', false)" class="text-gray-500 hover:text-gray-300">🚫</button>
+          </div>
         </div>
-    </div>
-
-    <!-- Accessory Modal -->
-    <div x-show="showAccessoryModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelAccessoryModal()">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-bold text-white">🔧 Add Accessory</h3>
-                <button @click="cancelAccessoryModal()" class="text-gray-400 hover:text-white">✕</button>
+        <div class="space-y-1">
+          <template x-for="room in rooms" :key="room.id">
+            <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50">
+              <div class="w-2.5 h-2.5 rounded-sm flex-shrink-0" :style="'background:' + room.color"></div>
+              <span class="text-xs text-gray-300 flex-1" x-text="room.name"></span>
+              <button @click="toggleVisibility('room', room.id)" class="text-xs" :class="room.visible ? 'text-gray-400' : 'text-gray-700'">
+                <span x-text="room.visible ? '👁' : '👁‍🗨'"></span>
+              </button>
+              <button @click="deleteItem('room', room.id)" class="text-gray-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100">✕</button>
             </div>
-            <div class="mb-3 p-3 bg-orange-900/20 border border-orange-600/20 rounded-lg">
-                <p class="text-sm text-orange-300">
-                    For: <strong x-text="accessoryTemplate?.label"></strong>
-                    (<span x-text="accessoryTemplate?.total_found || 0"></span> found)
-                </p>
-            </div>
-            <!-- Product search -->
-            <input id="accessorySearchInput" type="text" x-model="accSearch" @input.debounce.300ms="searchAccessoryProducts()"
-                   placeholder="Search accessory product..."
-                   class="w-full px-4 py-2 mb-3 rounded-lg border border-gray-600 bg-gray-800 text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-            <div class="max-h-40 overflow-y-auto space-y-1 mb-3">
-                <template x-for="p in accResults" :key="p.id || p.sku">
-                    <div @click="selectedAccessory = p"
-                         :class="selectedAccessory?.id === p.id ? 'bg-orange-600/30 border-orange-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
-                         class="p-2 rounded border cursor-pointer transition">
-                        <div class="text-xs font-bold text-orange-400" x-text="p.sku || p.name"></div>
-                        <div class="text-[10px] text-gray-400" x-text="p.name || p.description"></div>
-                        <div class="text-[10px] text-gray-500">
-                            Cost: <span class="text-red-400" x-text="'£' + (p.purchase_cost || 0).toFixed(2)"></span>
-                            → Sell: <span class="text-green-400" x-text="'£' + (p.unit_price || 0).toFixed(2)"></span>
-                        </div>
-                    </div>
-                </template>
-                <p x-show="accSearch.length >= 2 && !accSearching && accResults.length === 0" class="text-xs text-gray-500 text-center py-4">No products found</p>
-            </div>
-            <!-- Apply to options -->
-            <div x-show="selectedAccessory" class="mb-3 p-3 bg-gray-800 rounded-lg">
-                <p class="text-xs text-gray-400 mb-2">Apply to:</p>
-                <div class="flex gap-2">
-                    <button @click="accApplyMode = 'all'"
-                            :class="accApplyMode === 'all' ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300'"
-                            class="flex-1 px-2 py-1.5 rounded text-xs font-semibold transition">
-                        All ×<span x-text="accessoryTemplate?.total_found || 0"></span>
-                    </button>
-                    <button @click="accApplyMode = 'custom'"
-                            :class="accApplyMode === 'custom' ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300'"
-                            class="flex-1 px-2 py-1.5 rounded text-xs font-semibold transition">
-                        Custom qty
-                    </button>
-                </div>
-                <div x-show="accApplyMode === 'custom'" class="mt-2">
-                    <input type="number" x-model.number="accCustomQty" min="1" :max="accessoryTemplate?.total_found || 999"
-                           class="w-full px-3 py-1.5 rounded border border-gray-600 bg-gray-700 text-white text-xs">
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <button @click="cancelAccessoryModal()" class="flex-1 px-3 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600">Cancel</button>
-                <button @click="confirmAccessory()" :disabled="!selectedAccessory"
-                        class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
-                    Add Accessory
-                </button>
-            </div>
+          </template>
+          <div x-show="rooms.length === 0" class="text-xs text-gray-600 text-center py-2">No rooms drawn yet.</div>
         </div>
-    </div>
+      </div>
 
-    <!-- UFH Product Modal -->
-    <div x-show="showUfhModal" x-transition class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="cancelUfhModal()">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
-            <div class="p-5 border-b border-gray-700">
-                <h3 class="text-base font-bold text-white">🔥 <span x-text="ufhStep === 'primary' ? 'Link UFH Mat Product' : 'Add UFH Accessories'"></span></h3>
-                <div class="mt-2 p-2 bg-purple-900/20 border border-purple-600/20 rounded">
-                    <p class="text-sm text-purple-300">Area: <strong x-text="pendingUfhArea?.area_sqm + ' m²'"></strong></p>
-                    <p class="text-xs text-gray-400 mt-0.5" x-show="pendingUfhArea?.area_sqm > 15">⚠ Multiple mats will be calculated automatically</p>
-                </div>
-            </div>
-            <!-- Step 1: UFH mat product -->
-            <div x-show="ufhStep === 'primary'" class="p-5 overflow-y-auto flex-1">
-                <input id="ufhSearchInput" type="text" x-model="ufhSearch" @input.debounce.300ms="searchUfhProducts()"
-                       placeholder="Search UFH mat product..."
-                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-purple-500 outline-none">
-                <div class="mt-2 max-h-40 overflow-y-auto space-y-1">
-                    <template x-for="p in ufhResults" :key="p.id || p.sku">
-                        <div @click="selectedUfhProduct = p"
-                             :class="selectedUfhProduct?.id === p.id ? 'bg-purple-600/30 border-purple-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'"
-                             class="p-2 rounded border cursor-pointer transition">
-                            <div class="text-xs font-bold text-purple-400" x-text="p.sku || p.name"></div>
-                            <div class="text-[10px] text-gray-400" x-text="p.name || p.description"></div>
-                            <div class="text-[10px]">Cost: <span class="text-red-400" x-text="'£' + (p.purchase_cost || 0).toFixed(2)"></span> → Sell: <span class="text-green-400" x-text="'£' + (p.unit_price || 0).toFixed(2)"></span></div>
-                        </div>
-                    </template>
-                </div>
-                <p x-show="ufhSearch.length >= 2 && !ufhSearching && ufhResults.length === 0" class="text-xs text-gray-500 text-center py-3">No products found</p>
-            </div>
-            <!-- Step 2: UFH accessories -->
-            <div x-show="ufhStep === 'accessories'" class="p-5 overflow-y-auto flex-1">
-                <div class="mb-3 p-2 bg-purple-600/10 border border-purple-600/30 rounded text-xs text-purple-300">
-                    Mat: <strong x-text="selectedUfhProduct?.name"></strong>
-                </div>
-                <input type="text" id="ufhAccessorySearchInput" x-model="accessorySearch" @input.debounce.300ms="searchAccessories()"
-                       placeholder="Search accessories (neostat, thermostat cable...)"
-                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-purple-500 outline-none">
-                <div class="mt-2 max-h-32 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="accessoryResults.length > 0 || accessorySearching">
-                    <template x-for="p in accessoryResults" :key="p.id">
-                        <div @click="addUfhAccessory(p)" class="p-2 cursor-pointer border-b border-gray-800 hover:bg-gray-800 transition">
-                            <div class="flex justify-between">
-                                <span class="text-xs font-bold text-green-400" x-text="p.sku || p.name"></span>
-                                <span class="text-xs text-amber-400" x-text="'£' + (p.purchase_cost||0).toFixed(2)"></span>
-                            </div>
-                            <div class="text-[10px] text-gray-400" x-text="p.name"></div>
-                        </div>
-                    </template>
-                    <div x-show="accessorySearching" class="text-xs text-gray-500 py-3 text-center">Searching...</div>
-                </div>
-                <div x-show="ufhAccessories.length > 0" class="mt-3">
-                    <div class="text-[10px] uppercase text-green-400 font-bold mb-1">Accessories added:</div>
-                    <template x-for="(acc, i) in ufhAccessories" :key="acc.id">
-                        <div class="flex items-center justify-between p-2 bg-green-900/20 border border-green-700/30 rounded mb-1">
-                            <div>
-                                <span class="text-xs font-semibold text-green-400" x-text="acc.sku || acc.name"></span>
-                                <span class="text-[10px] text-gray-400 ml-1" x-text="acc.name"></span>
-                            </div>
-                            <button @click="removeUfhAccessory(i)" class="text-red-400 hover:text-red-300 text-xs">✕</button>
-                        </div>
-                    </template>
-                </div>
-                <p x-show="ufhAccessories.length === 0" class="text-xs text-gray-500 mt-3 text-center">No accessories added yet — search above or skip</p>
-            </div>
-            <div class="p-4 border-t border-gray-700 flex justify-end gap-2">
-                <button @click="cancelUfhModal()" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-                <template x-if="ufhStep === 'primary'">
-                    <button @click="goToUfhAccessories()" :disabled="!selectedUfhProduct" class="px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-semibold disabled:opacity-50">Next → Accessories</button>
-                </template>
-                <template x-if="ufhStep === 'accessories'">
-                    <div class="flex gap-2">
-                        <button @click="ufhStep = 'primary'" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">← Back</button>
-                        <button @click="confirmUfhProduct()" class="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-semibold">
-                            ✓ Confirm <span x-show="ufhAccessories.length > 0" x-text="'(' + (1 + ufhAccessories.length) + ' products)'"></span>
-                        </button>
-                    </div>
-                </template>
-            </div>
+      <!-- ═══ CABLE RUNS PANEL ═══ -->
+      <div class="p-3 border-b border-gray-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Cable Runs</h3>
+          <div class="flex items-center gap-1">
+            <button @click="toggleAllVisibility('cables', true)" class="text-gray-500 hover:text-gray-300">👁</button>
+            <button @click="toggleAllVisibility('cables', false)" class="text-gray-500 hover:text-gray-300">🚫</button>
+          </div>
         </div>
-    </div>
-
-    <!-- Summary Overlay -->
-    <div x-show="showSummary" x-transition class="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-8" @click.self="showSummary = false">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-bold text-white">Takeoff Summary — {{ project.name }}</h2>
-                <button @click="showSummary = false" class="text-gray-400 hover:text-white text-lg">✕</button>
+        <div class="space-y-1">
+          <template x-for="run in cableRuns" :key="run.id">
+            <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50"
+                 :class="selectedItem?.type==='cable' && selectedItem.id===run.id && 'bg-gray-800 ring-1 ring-blue-500'"
+                 @click="selectedItem = {type:'cable', id:run.id}; render()">
+              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="'background:' + run.color"></div>
+              <span class="text-xs text-gray-300 flex-1 truncate" x-text="run.label"></span>
+              <span class="text-xs text-gray-500 font-mono" x-text="run.metres + 'm'"></span>
+              <button @click.stop="toggleVisibility('cable', run.id)" class="text-xs" :class="run.visible ? 'text-gray-400' : 'text-gray-700'">
+                <span x-text="run.visible ? '👁' : '👁‍🗨'"></span>
+              </button>
+              <button @click.stop="deleteItem('cable', run.id)" class="text-gray-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100">✕</button>
             </div>
-            <template x-for="(data, key) in getDetectionsByRoom()" :key="key">
-                <div class="mb-4 border border-gray-700 rounded-lg overflow-hidden">
-                    <div class="px-4 py-2 bg-gray-800 flex items-center justify-between">
-                        <span class="font-semibold text-sm text-gray-200" x-text="data.room.name"></span>
-                        <span class="text-xs text-gray-500" x-text="data.detections.length + ' items'"></span>
-                    </div>
-                    <table class="w-full text-xs">
-                        <thead><tr class="border-b border-gray-700 text-gray-500"><th class="text-left px-4 py-2">Symbol</th><th class="text-left px-4 py-2">Product</th><th class="text-right px-4 py-2">Qty</th><th class="text-right px-4 py-2">Cost</th><th class="text-right px-4 py-2">Sale</th><th class="text-right px-4 py-2">Profit</th></tr></thead>
-                        <tbody>
-                            <template x-for="sd in groupDetections(data.detections)">
-                                <tr class="border-b border-gray-800">
-                                    <td class="px-4 py-2 text-gray-300" x-text="sd.label"></td>
-                                    <td class="px-4 py-2"><span class="text-indigo-400 font-semibold" x-text="sd.part_number"></span></td>
-                                    <td class="px-4 py-2 text-right text-indigo-400 font-bold" x-text="sd.count"></td>
-                                    <td class="px-4 py-2 text-right text-red-400" x-text="'£' + (sd.unit_cost * sd.count).toFixed(2)"></td>
-                                    <td class="px-4 py-2 text-right text-green-400" x-text="'£' + (sd.unit_sell * sd.count).toFixed(2)"></td>
-                                    <td class="px-4 py-2 text-right text-amber-400 font-bold" x-text="'£' + ((sd.unit_sell - sd.unit_cost) * sd.count).toFixed(2)"></td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
+          </template>
+          <div x-show="cableRuns.length === 0" class="text-xs text-gray-600 text-center py-2">No cable runs yet.</div>
+          <template x-if="cableSummary.length > 0">
+            <div class="mt-2 pt-2 border-t border-gray-800 space-y-0.5">
+              <template x-for="cs in cableSummary" :key="cs.label">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-gray-400" x-text="cs.label"></span>
+                  <span class="text-gray-300 font-mono" x-text="cs.metres.toFixed(1) + 'm (' + cs.runs + ' runs)'"></span>
                 </div>
-            </template>
-        </div>
-    </div>
-
-    <!-- Scale Modal (manual - click two points) -->
-    <div x-show="showScaleModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="showScaleModal=false;scalePoints=[];">
-        <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-96">
-            <h3 class="text-base font-bold text-white mb-3">📏 Manual Scale — Two Points</h3>
-            <p class="text-xs text-gray-400 mb-3">Enter the real distance between the two marked points</p>
-            <input type="number" step="0.01" min="0.01" x-model="scaleRealDistance" @keyup.enter="saveScale()"
-                   placeholder="Distance in metres (e.g. 0.9)"
-                   class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
-            <p class="text-xs text-gray-500 mt-2">Standard door = 0.9m · Internal = 0.76m</p>
-            <div class="flex justify-end gap-2 mt-4">
-                <button @click="showScaleModal=false;scalePoints=[];" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-                <button @click="saveScale()" :disabled="!scaleRealDistance" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Save</button>
+              </template>
             </div>
+          </template>
         </div>
-    </div>
+      </div>
 
-    <!-- Auto-Scale Modal (from drawing notation like 1:35 @ A1) -->
-    <div x-show="showAutoScaleModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="showAutoScaleModal=false">
-        <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-96">
-            <h3 class="text-base font-bold text-white mb-3">📐 Auto-Scale from Drawing Title</h3>
-            <p class="text-xs text-gray-400 mb-4">Enter the scale notation from the drawing's title block (e.g. "1:35 @ A1")</p>
-            <div class="space-y-3">
+      <!-- ═══ CONTAINMENT PANEL ═══ -->
+      <div class="p-3 border-b border-gray-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Containment</h3>
+          <div class="flex items-center gap-1">
+            <button @click="toggleAllVisibility('containment', true)" class="text-gray-500 hover:text-gray-300">👁</button>
+            <button @click="toggleAllVisibility('containment', false)" class="text-gray-500 hover:text-gray-300">🚫</button>
+          </div>
+        </div>
+        <div class="space-y-1">
+          <template x-for="run in containmentRuns" :key="run.id">
+            <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50"
+                 :class="selectedItem?.type==='containment' && selectedItem.id===run.id && 'bg-gray-800 ring-1 ring-orange-500'"
+                 @click="selectedItem = {type:'containment', id:run.id}; render()">
+              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="'background:' + run.color"></div>
+              <span class="text-xs text-gray-300 flex-1 truncate" x-text="run.label"></span>
+              <span class="text-xs text-gray-500 font-mono" x-text="run.metres + 'm'"></span>
+              <button @click.stop="toggleVisibility('containment', run.id)" class="text-xs" :class="run.visible ? 'text-gray-400' : 'text-gray-700'">
+                <span x-text="run.visible ? '👁' : '👁‍🗨'"></span>
+              </button>
+              <button @click.stop="deleteItem('containment', run.id)" class="text-gray-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100">✕</button>
+            </div>
+          </template>
+          <div x-show="containmentRuns.length === 0" class="text-xs text-gray-600 text-center py-2">No containment yet.</div>
+          <template x-if="containmentSummary.length > 0">
+            <div class="mt-2 pt-2 border-t border-gray-800 space-y-0.5">
+              <template x-for="cs in containmentSummary" :key="cs.label">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-gray-400" x-text="cs.label"></span>
+                  <span class="text-gray-300 font-mono" x-text="cs.metres.toFixed(1) + 'm'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ═══ FLOOR AREAS PANEL ═══ -->
+      <div class="p-3 border-b border-gray-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Floor Areas</h3>
+          <div class="flex items-center gap-1">
+            <button @click="toggleAllVisibility('areas', true)" class="text-gray-500 hover:text-gray-300">👁</button>
+            <button @click="toggleAllVisibility('areas', false)" class="text-gray-500 hover:text-gray-300">🚫</button>
+          </div>
+        </div>
+        <div class="space-y-1">
+          <template x-for="area in areas" :key="area.id">
+            <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50">
+              <span class="text-xs text-gray-300 flex-1" x-text="area.name"></span>
+              <span class="text-xs text-yellow-400 font-mono" x-text="area.sqm + ' m²'"></span>
+              <button @click="toggleVisibility('area', area.id)" class="text-xs" :class="area.visible ? 'text-gray-400' : 'text-gray-700'">
+                <span x-text="area.visible ? '👁' : '👁‍🗨'"></span>
+              </button>
+              <button @click="deleteItem('area', area.id)" class="text-gray-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100">✕</button>
+            </div>
+          </template>
+          <div x-show="areas.length === 0" class="text-xs text-gray-600 text-center py-2">No areas measured yet.</div>
+          <div x-show="areas.length > 0" class="mt-2 pt-2 border-t border-gray-800 flex items-center justify-between text-xs">
+            <span class="text-gray-400 font-medium">Total Floor Area</span>
+            <span class="text-yellow-400 font-mono font-bold" x-text="totalAreaSqm.toFixed(2) + ' m²'"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SUMMARY ═══ -->
+      <div class="p-3">
+        <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">Quote Summary</h3>
+        <div class="space-y-1">
+          <template x-for="ss in symbolSummary.filter(s => s.count > 0)" :key="ss.id">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-1.5">
+                <div class="w-2 h-2 rounded-full" :style="'background:' + ss.color"></div>
+                <span class="text-gray-300" x-text="ss.name"></span>
+                <span class="text-gray-500" x-text="'×' + ss.count"></span>
+              </div>
+              <span class="text-green-400 font-mono" x-text="'£' + ss.totalSale.toFixed(2)"></span>
+            </div>
+          </template>
+        </div>
+        <div x-show="symbolSummary.some(s => s.count > 0)" class="mt-3 pt-3 border-t border-gray-800 space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-400">Total Purchase</span>
+            <span class="text-gray-300 font-mono" x-text="'£' + totalSymbolPurchase.toFixed(2)"></span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-400">Total Sale</span>
+            <span class="text-green-400 font-mono font-bold" x-text="'£' + totalSymbolSale.toFixed(2)"></span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-400">Profit</span>
+            <span class="text-emerald-400 font-mono font-bold" x-text="'£' + (totalSymbolSale - totalSymbolPurchase).toFixed(2)"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Search Modal -->
+  <template x-if="showProductSearch">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showProductSearch = false">
+      <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <div class="px-5 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h3 class="text-sm font-semibold text-white">Link Product</h3>
+          <button @click="showProductSearch = false" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div class="p-5">
+          <input id="product-search-input" type="text" x-model="productSearchQuery" @input.debounce.300ms="searchProducts()"
+                 placeholder="Search by name, SKU, or part number..."
+                 class="w-full text-sm px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500">
+          <div x-show="productSearching" class="text-xs text-gray-400 mt-3 text-center">Searching...</div>
+          <div class="mt-3 max-h-60 overflow-y-auto space-y-1">
+            <template x-for="prod in productSearchResults" :key="prod.id">
+              <button @click="linkProduct(prod)"
+                      class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-700 transition flex items-center justify-between">
                 <div>
-                    <label class="text-xs text-gray-500 font-semibold block mb-1">SCALE RATIO (the number after 1:)</label>
-                    <input type="number" step="1" min="1" x-model="autoScaleRatio" placeholder="e.g. 35, 50, 100"
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
+                  <div class="text-sm text-white" x-text="prod.name"></div>
+                  <div class="text-xs text-gray-400" x-text="(prod.sku || 'No SKU') + ' • Buy: £' + (prod.purchase_price||0).toFixed(2) + ' • Sell: £' + (prod.sale_price||0).toFixed(2)"></div>
                 </div>
-                <div class="flex gap-3">
-                    <div class="flex-1">
-                        <label class="text-xs text-gray-500 font-semibold block mb-1">PAPER SIZE</label>
-                        <select x-model="autoScalePaper" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none">
-                            <option value="A0">A0</option>
-                            <option value="A1">A1</option>
-                            <option value="A2">A2</option>
-                            <option value="A3">A3</option>
-                            <option value="A4">A4</option>
-                        </select>
-                    </div>
-                    <div class="flex-1">
-                        <label class="text-xs text-gray-500 font-semibold block mb-1">ORIENTATION</label>
-                        <select x-model="autoScaleOrientation" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none">
-                            <option value="landscape">Landscape</option>
-                            <option value="portrait">Portrait</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <p class="text-xs text-gray-500 mt-3">Common scales: 1:50 (house plans), 1:100 (site), 1:35 (detail)</p>
-            <div class="flex justify-end gap-2 mt-4">
-                <button @click="showAutoScaleModal=false" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-                <button @click="autoScale(parseInt(autoScaleRatio), autoScalePaper, autoScaleOrientation)" :disabled="!autoScaleRatio"
-                        class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Calculate & Save</button>
-            </div>
+                <span class="text-xs text-indigo-400 font-medium">Link</span>
+              </button>
+            </template>
+            <div x-show="productSearchResults.length === 0 && productSearchQuery.length >= 2 && !productSearching" class="text-xs text-gray-500 text-center py-4">No products found</div>
+          </div>
         </div>
+      </div>
     </div>
-
-    <!-- Product Search Modal (after drawing symbol box) -->
-    <div x-show="showProductModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" @click.self="cancelProductModal()">
-        <div class="bg-gray-900 border border-gray-700 rounded-xl w-[440px] max-h-[80vh] flex flex-col">
-            <div class="p-5 border-b border-gray-700">
-                <h3 class="text-base font-bold text-white">🔌 <span x-text="modalStep === 'primary' ? 'Link Symbol to Product' : 'Add Accessories'"></span></h3>
-                <p class="text-xs text-gray-400 mt-1" x-text="modalStep === 'primary' ? 'Search your QuickBooks / Xero products' : 'Add back boxes, fixings, etc. (optional)'"></p>
-            </div>
-            <!-- Step 1: Primary product -->
-            <div x-show="modalStep === 'primary'" class="p-5 overflow-y-auto flex-1">
-                <input type="text" id="productSearchInput" x-model="productSearch" @input.debounce.300ms="searchProducts()"
-                       placeholder="Part number, SKU, or description..."
-                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
-                <div class="mt-2 max-h-48 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="productResults.length > 0 || productSearching">
-                    <template x-for="p in productResults" :key="p.id">
-                        <div @click="selectedProduct = p" class="p-2.5 cursor-pointer border-b border-gray-800 transition"
-                             :class="selectedProduct?.id === p.id ? 'bg-indigo-600/15 border-l-2 border-l-indigo-500' : 'hover:bg-gray-800'">
-                            <div class="flex justify-between">
-                                <span class="text-xs font-bold text-indigo-400" x-text="p.sku || p.name"></span>
-                                <span class="text-xs text-amber-400" x-text="'£' + (p.purchase_cost||0).toFixed(2) + ' → £' + (p.unit_price||0).toFixed(2)"></span>
-                            </div>
-                            <div class="text-xs text-gray-400" x-text="p.name"></div>
-                        </div>
-                    </template>
-                    <div x-show="productSearching" class="text-xs text-gray-500 py-3 text-center">Searching...</div>
-                </div>
-                <p x-show="productSearch.length >= 2 && !productSearching && productResults.length === 0" class="text-xs text-gray-500 py-3 text-center">No products found</p>
-                <div x-show="selectedProduct" class="mt-3 p-3 bg-indigo-600/10 border border-indigo-600/30 rounded-lg">
-                    <div class="text-[10px] uppercase text-indigo-400 font-bold mb-1">Selected</div>
-                    <div class="text-sm text-white font-semibold" x-text="selectedProduct?.name"></div>
-                    <div class="flex justify-between mt-1">
-                        <span class="text-xs text-gray-400" x-text="selectedProduct?.sku"></span>
-                        <span class="text-xs text-green-400 font-semibold" x-text="'£' + (selectedProduct?.unit_price||0).toFixed(2)"></span>
-                    </div>
-                </div>
-            </div>
-            <!-- Step 2: Accessories -->
-            <div x-show="modalStep === 'accessories'" class="p-5 overflow-y-auto flex-1">
-                <div class="mb-3 p-2 bg-indigo-600/10 border border-indigo-600/30 rounded text-xs text-indigo-300">
-                    Primary: <strong x-text="selectedProduct?.name"></strong>
-                </div>
-                <input type="text" id="accessorySearchInput" x-model="accessorySearch" @input.debounce.300ms="searchAccessories()"
-                       placeholder="Search accessories (back box, fixings...)"
-                       class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:border-indigo-500 outline-none">
-                <div class="mt-2 max-h-36 overflow-y-auto border border-gray-700/50 rounded-lg" x-show="accessoryResults.length > 0 || accessorySearching">
-                    <template x-for="p in accessoryResults" :key="p.id">
-                        <div @click="addAccessory(p)" class="p-2 cursor-pointer border-b border-gray-800 hover:bg-gray-800 transition">
-                            <div class="flex justify-between">
-                                <span class="text-xs font-bold text-green-400" x-text="p.sku || p.name"></span>
-                                <span class="text-xs text-amber-400" x-text="'£' + (p.purchase_cost||0).toFixed(2)"></span>
-                            </div>
-                            <div class="text-[10px] text-gray-400" x-text="p.name"></div>
-                        </div>
-                    </template>
-                    <div x-show="accessorySearching" class="text-xs text-gray-500 py-3 text-center">Searching...</div>
-                </div>
-                <!-- Added accessories list -->
-                <div x-show="accessories.length > 0" class="mt-3">
-                    <div class="text-[10px] uppercase text-green-400 font-bold mb-1">Accessories added:</div>
-                    <template x-for="(acc, i) in accessories" :key="acc.id">
-                        <div class="flex items-center justify-between p-2 bg-green-900/20 border border-green-700/30 rounded mb-1">
-                            <div>
-                                <span class="text-xs font-semibold text-green-400" x-text="acc.sku || acc.name"></span>
-                                <span class="text-[10px] text-gray-400 ml-1" x-text="acc.name"></span>
-                            </div>
-                            <button @click="removeAccessory(i)" class="text-red-400 hover:text-red-300 text-xs">✕</button>
-                        </div>
-                    </template>
-                </div>
-                <p x-show="accessories.length === 0" class="text-xs text-gray-500 mt-3 text-center">No accessories added yet — search above or skip</p>
-            </div>
-            <div class="p-4 border-t border-gray-700 flex justify-end gap-2">
-                <button @click="cancelProductModal()" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">Cancel</button>
-                <template x-if="modalStep === 'primary'">
-                    <button @click="goToAccessories()" :disabled="!selectedProduct" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold disabled:opacity-50">Next → Accessories</button>
-                </template>
-                <template x-if="modalStep === 'accessories'">
-                    <div class="flex gap-2">
-                        <button @click="modalStep = 'primary'" class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-xs">← Back</button>
-                        <button @click="confirmSymbolWithProduct()" class="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-semibold">
-                            ✓ Confirm & Detect <span x-show="accessories.length > 0" x-text="'(' + (1 + accessories.length) + ' products)'"></span>
-                        </button>
-                    </div>
-                </template>
-            </div>
-        </div>
-    </div>
+  </template>
 </div>
 
-<script src="{{ url_for('serve_takeoff_js') }}?v={{ range(10000, 99999) | random }}"></script>
+<style>
+  .tool-btn { @apply text-xs px-2.5 py-1.5 rounded font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition whitespace-nowrap; }
+  .tool-btn.active { @apply bg-indigo-600 text-white; }
+</style>
+
+<script src="{{ url_for('static', filename='js/takeoff-canvas.js') }}"></script>
 {% endblock %}
