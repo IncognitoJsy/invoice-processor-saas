@@ -119,9 +119,8 @@ function takeoffCanvas(projectId, documentId) {
     init() {
       this.canvas = this.$refs.canvas;
       this.ctx = this.canvas.getContext('2d');
-      this.loadDrawing();
       this.setupEvents();
-      this.loadState();
+      this.loadDrawing();
     },
 
     loadDrawing() {
@@ -132,7 +131,8 @@ function takeoffCanvas(projectId, documentId) {
         this.imgH = this.img.naturalHeight;
         this.fitToView();
         this.loading = false;
-        this.render();
+        // Load state AFTER image is ready so scale values stick
+        this.loadState();
       };
       this.img.onerror = () => { this.loading = false; this.notify('Failed to load drawing', 'error'); };
       this.img.src = `/quotebuilder/api/projects/${this.projectId}/documents/${this.documentId}/render`;
@@ -1119,7 +1119,7 @@ function takeoffCanvas(projectId, documentId) {
             this.nextCableId = state.nextCableId || (this.cableRuns.length > 0 ? Math.max(...this.cableRuns.map(c => c.id)) + 1 : 1);
             this.nextContainmentId = state.nextContainmentId || (this.containmentRuns.length > 0 ? Math.max(...this.containmentRuns.map(c => c.id)) + 1 : 1);
             this.nextAreaId = state.nextAreaId || (this.areas.length > 0 ? Math.max(...this.areas.map(a => a.id)) + 1 : 1);
-            console.log('State loaded:', this.markers.length, 'markers,', this.cableRuns.length, 'cables,', this.symbolTypes.length, 'symbol types');
+            console.log('State loaded:', this.markers.length, 'markers,', this.cableRuns.length, 'cables,', this.symbolTypes.length, 'symbol types, scale:', this.scaleCalibrated ? this.scalePixelsPerMetre + ' px/m' : 'not set');
             this.render();
           }
         }
