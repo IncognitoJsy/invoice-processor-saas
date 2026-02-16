@@ -54,18 +54,25 @@ def fetch_xero_products(user):
 def fetch_quickbooks_products(user):
     """Fetch product/item list from QuickBooks for the connected user.
     
-    Returns list of dicts matching same format as Xero.
+    Uses the integrations QuickBooksService with pagination.
+    Returns list of dicts in normalised format.
     """
-    from app.models.connection import Connection
-    from app.services.quickbooks_service import QuickBooksService
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
     
     try:
-        conn = Connection.query.filter_by(user_id=user.id, provider='quickbooks', active=True).first()
-        if not conn:
+        qb_connection = QuickBooksConnection.query.filter_by(
+            user_id=user.id, is_active=True
+        ).first()
+        if not qb_connection:
+            logger.info(f"No active QuickBooks connection for user {user.id}")
             return []
         
-        qb = QuickBooksService(conn)
-        items = qb.get_items()
+        qb = QuickBooksService(user)
+        result = qb.get_items(qb_connection)  # Already paginated
+        
+        items = result.get('QueryResponse', {}).get('Item', [])
+        logger.info(f"Fetched {len(items)} products from QuickBooks for user {user.id}")
         
         products = []
         for item in items:
@@ -82,7 +89,7 @@ def fetch_quickbooks_products(user):
         
         return products
     except Exception as e:
-        logger.error(f"Failed to fetch QuickBooks products: {e}")
+        logger.error(f"Failed to fetch QuickBooks products: {e}", exc_info=True)
         return []
 
 

@@ -60,18 +60,13 @@ def get_user_preferences_formatted(user_id):
 
 
 def get_user_products(user_id):
-    """Pull user's product list from Xero/QuickBooks for price matching"""
+    """Pull user's product list from Xero/QuickBooks for the system prompt.
+    Uses the cached product list if available.
+    """
     try:
-        from app.models.connection import Connection
-        conn = Connection.query.filter_by(user_id=user_id, active=True).first()
-        if not conn:
-            return []
-        
-        from app.services.product_matcher import fetch_user_products
-        from flask_login import current_user
-        return fetch_user_products(current_user)
-    except ImportError:
-        logger.warning("Product matcher not available — skipping product fetch")
+        cached = ProductCache.query.filter_by(user_id=user_id).limit(200).all()
+        if cached:
+            return [{'code': p.code, 'name': p.name, 'sale_price': p.sale_price} for p in cached]
         return []
     except Exception as e:
         logger.error(f"Failed to fetch user products: {e}")
