@@ -8,26 +8,73 @@
     <!-- Header -->
     <div class="mb-8">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Voice to Quote</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">Paste your Plaud transcription and let AI build your materials list</p>
+        <div class="flex items-center gap-4 mt-1">
+            <p class="text-gray-600 dark:text-gray-400">Paste your Plaud transcription or drop a file and let AI build your materials list</p>
+            <a href="{{ url_for('voice_to_quote.teach_ai') }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Teach AI
+            </a>
+        </div>
     </div>
 
     <!-- Input Section -->
     <div id="input-section">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             
-            <!-- Transcription Input -->
+            <!-- Transcription Input (text or file drop) -->
             <div class="mb-6">
                 <label for="transcription" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Site Visit Transcription
                 </label>
-                <textarea 
-                    id="transcription" 
-                    rows="8" 
-                    class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                    placeholder="Paste your Plaud transcription here...
+                
+                <!-- File drop overlay zone (covers the textarea) -->
+                <div id="transcription-drop-zone" class="relative">
+                    <textarea 
+                        id="transcription" 
+                        rows="8" 
+                        class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="Paste or type your transcription here — or drag & drop a .txt, .pdf, .md, or .docx file...
 
 Example: 'Okay so this is for a job reference called West Grove. Family room we have got two ceiling mounted pendants, eight spotlights which are two-way switched...'"
-                ></textarea>
+                    ></textarea>
+                    
+                    <!-- Drop overlay (shown on drag) -->
+                    <div id="transcription-drop-overlay" class="hidden absolute inset-0 bg-blue-50 dark:bg-blue-900/30 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+                        <div class="text-center">
+                            <svg class="mx-auto h-10 w-10 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <p class="mt-2 text-sm font-medium text-blue-600 dark:text-blue-400">Drop your transcription file here</p>
+                            <p class="text-xs text-blue-500 dark:text-blue-500">.txt, .pdf, .md, .docx</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- File info bar (shown after file loaded) -->
+                <div id="transcription-file-info" class="hidden mt-2 flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                    <div class="flex items-center gap-2">
+                        <svg class="h-4 w-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span id="transcription-file-name" class="text-sm text-green-700 dark:text-green-300 font-medium"></span>
+                        <span id="transcription-file-size" class="text-xs text-green-600 dark:text-green-400"></span>
+                    </div>
+                    <button onclick="clearTranscriptionFile()" class="text-xs text-green-600 dark:text-green-400 hover:text-red-500 dark:hover:text-red-400">Clear</button>
+                </div>
+                
+                <!-- Or browse for file -->
+                <div class="mt-2 flex items-center gap-3">
+                    <input type="file" id="transcription-file-input" accept=".txt,.pdf,.md,.docx" class="hidden">
+                    <button onclick="document.getElementById('transcription-file-input').click()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                        </svg>
+                        Upload transcription file
+                    </button>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">(.txt, .pdf, .md, .docx)</span>
+                </div>
             </div>
 
             <!-- Floor Plan Upload (Optional) -->
@@ -140,6 +187,111 @@ const isDark = () => document.documentElement.classList.contains('dark');
 // Floor plan upload handling
 const dropZone = document.getElementById('floor-plan-drop');
 const fileInput = document.getElementById('floor-plan-input');
+
+// ─── Transcription file drop/upload handling ────────────
+const txDropZone = document.getElementById('transcription-drop-zone');
+const txOverlay = document.getElementById('transcription-drop-overlay');
+const txFileInput = document.getElementById('transcription-file-input');
+const txTextarea = document.getElementById('transcription');
+let dragCounter = 0;
+
+// Drag events on the whole drop zone
+txDropZone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    txOverlay.classList.remove('hidden');
+});
+txDropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) txOverlay.classList.add('hidden');
+});
+txDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+txDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    txOverlay.classList.add('hidden');
+    if (e.dataTransfer.files.length) {
+        handleTranscriptionFile(e.dataTransfer.files[0]);
+    }
+});
+
+// File input browse button
+txFileInput.addEventListener('change', () => {
+    if (txFileInput.files.length) handleTranscriptionFile(txFileInput.files[0]);
+});
+
+async function handleTranscriptionFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const validExts = ['txt', 'pdf', 'md', 'docx'];
+    
+    if (!validExts.includes(ext)) {
+        alert('Unsupported file type. Please use .txt, .pdf, .md, or .docx files.');
+        return;
+    }
+    
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+        alert('File too large — maximum 10MB.');
+        return;
+    }
+    
+    // Show file info bar
+    document.getElementById('transcription-file-name').textContent = file.name;
+    document.getElementById('transcription-file-size').textContent = formatFileSize(file.size);
+    document.getElementById('transcription-file-info').classList.remove('hidden');
+    
+    // For .txt and .md — read directly in browser
+    if (ext === 'txt' || ext === 'md') {
+        const text = await file.text();
+        txTextarea.value = text;
+        return;
+    }
+    
+    // For .pdf and .docx — send to server for text extraction
+    txTextarea.value = 'Extracting text from ' + file.name + '...';
+    txTextarea.disabled = true;
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/voice-to-quote/extract-text', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok || result.error) {
+            throw new Error(result.error || 'Failed to extract text');
+        }
+        
+        txTextarea.value = result.text;
+    } catch (err) {
+        txTextarea.value = '';
+        document.getElementById('transcription-file-info').classList.add('hidden');
+        alert('Failed to extract text: ' + err.message);
+    } finally {
+        txTextarea.disabled = false;
+    }
+}
+
+function clearTranscriptionFile() {
+    txTextarea.value = '';
+    txFileInput.value = '';
+    document.getElementById('transcription-file-info').classList.add('hidden');
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ─── Floor plan upload handling ─────────────────────────
 
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20'); });

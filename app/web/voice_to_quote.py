@@ -723,3 +723,76 @@ def update_item():
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/extract-text', methods=['POST'])
+@login_required
+def extract_text():
+    """Extract text from uploaded PDF or DOCX files"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        ext = file.filename.rsplit('.', 1)[-1].lower()
+        
+        if ext == 'txt' or ext == 'md':
+            # Plain text — just read it
+            text = file.read().decode('utf-8', errors='replace')
+            return jsonify({'success': True, 'text': text})
+        
+        elif ext == 'pdf':
+            # PDF extraction
+            try:
+                import pdfplumber
+            except ImportError:
+                try:
+                    from PyPDF2 import PdfReader
+                    reader = PdfReader(file)
+                    text = ""
+                    for page in reader.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
+                    if not text.strip():
+                        return jsonify({'error': 'Could not extract text from PDF — it may be image-based. Try copying the text manually.'}), 400
+                    return jsonify({'success': True, 'text': text.strip()})
+                except ImportError:
+                    return jsonify({'error': 'PDF processing not available — please paste the text manually'}), 400
+            
+            text = ""
+            with pdfplumber.open(file) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            
+            if not text.strip():
+                return jsonify({'error': 'Could not extract text from PDF — it may be image-based. Try copying the text manually.'}), 400
+            
+            return jsonify({'success': True, 'text': text.strip()})
+        
+        elif ext == 'docx':
+            try:
+                import docx
+            except ImportError:
+                return jsonify({'error': 'DOCX processing not available — please paste the text manually'}), 400
+            
+            import io
+            doc = docx.Document(io.BytesIO(file.read()))
+            text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+            
+            if not text.strip():
+                return jsonify({'error': 'Could not extract text from DOCX — the document appears empty.'}), 400
+            
+            return jsonify({'success': True, 'text': text.strip()})
+        
+        else:
+            return jsonify({'error': f'Unsupported file type: .{ext}'}), 400
+    
+    except Exception as e:
+        logger.error(f"Text extraction error: {e}", exc_info=True)
+        return jsonify({'error': f'Failed to extract text: {str(e)}'}), 500
