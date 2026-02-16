@@ -16,7 +16,7 @@ class UserPreference(db.Model):
     __tablename__ = 'user_preferences'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     category = db.Column(db.String(50), nullable=False)  # brand_default, product_swap, mounting_height, circuit_preference, general, supplier, cable_preference
     key = db.Column(db.String(200), nullable=False)       # what this preference is about
     value = db.Column(db.String(500), nullable=False)      # the preference value
@@ -72,7 +72,7 @@ class CorrectionLog(db.Model):
     __tablename__ = 'correction_logs'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     job_title = db.Column(db.String(200))                  # which job this was from
     room_name = db.Column(db.String(100))                  # which room
     field_type = db.Column(db.String(50), nullable=False)  # 'product', 'quantity', 'part_number', 'back_box', 'cable', 'flag_resolution'
