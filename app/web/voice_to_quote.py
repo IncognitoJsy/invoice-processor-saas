@@ -2,7 +2,8 @@
 from flask import Blueprint, request, jsonify, render_template, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models.user_preference import UserPreference, CorrectionLog
+from app.models.user_preference import UserPreference, CorrectionLog, ProductCache
+from datetime import datetime, timedelta
 import anthropic
 import json
 import os
@@ -11,6 +12,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('voice_to_quote', __name__, url_prefix='/voice-to-quote')
+
+PRODUCT_CACHE_TTL_HOURS = 24  # Refresh cache if older than this
 
 
 def get_knowledge_base():
@@ -812,37 +815,180 @@ def extract_text():
 
 
 # ─────────────────────────────────────────────────────────
-# PRODUCT MATCHING — Match parsed materials to Xero/QB products
+# PRODUCT CACHE & MATCHING
 # ─────────────────────────────────────────────────────────
+
+def get_cached_products(user_id, force_refresh=False):
+    """Get products from cache, refreshing from Xero/QB if stale or forced.
+    
+    Returns list of product dicts ready for matching.
+    """
+    cache_cutoff = datetime.utcnow() - timedelta(hours=PRODUCT_CACHE_TTL_HOURS)
+    
+    # Check if cache is fresh
+    if not force_refresh:
+        latest = ProductCache.query.filter_by(user_id=user_id).order_by(
+            ProductCache.synced_at.desc()
+        ).first()
+        
+        if latest and latest.synced_at and latest.synced_at > cache_cutoff:
+            # Cache is fresh — return from DB
+            cached = ProductCache.query.filter_by(user_id=user_id).all()
+            return [p.to_dict() for p in cached]
+    
+    # Cache is stale or forced — refresh from accounting system
+    try:
+        from app.services.product_matcher import fetch_user_products
+        from flask_login import current_user
+        fresh_products = fetch_user_products(current_user)
+        
+        if fresh_products:
+            # Clear old cache
+            ProductCache.query.filter_by(user_id=user_id).delete()
+            
+            # Insert new cache
+            now = datetime.utcnow()
+            for p in fresh_products:
+                cache_entry = ProductCache(
+                    user_id=user_id,
+                    product_id=p.get('id', ''),
+                    code=p.get('code', ''),
+                    name=p.get('name', ''),
+                    description=p.get('description', ''),
+                    purchase_description=p.get('purchase_description', ''),
+                    purchase_price=p.get('purchase_price', 0),
+                    sale_price=p.get('sale_price', 0),
+                    source=p.get('source', ''),
+                    synced_at=now
+                )
+                db.session.add(cache_entry)
+            
+            db.session.commit()
+            logger.info(f"Product cache refreshed for user {user_id}: {len(fresh_products)} products")
+            return fresh_products
+        else:
+            # No products from API — return existing cache if any
+            cached = ProductCache.query.filter_by(user_id=user_id).all()
+            return [p.to_dict() for p in cached]
+    
+    except ImportError:
+        logger.warning("Product matcher module not available")
+        cached = ProductCache.query.filter_by(user_id=user_id).all()
+        return [p.to_dict() for p in cached]
+    except Exception as e:
+        logger.error(f"Failed to refresh product cache: {e}")
+        cached = ProductCache.query.filter_by(user_id=user_id).all()
+        return [p.to_dict() for p in cached]
+
 
 @bp.route('/fetch-products', methods=['GET'])
 @login_required
 def fetch_products():
-    """Fetch user's product list from connected accounting system"""
+    """Fetch user's product list — from cache or fresh from accounting system.
+    
+    Query params:
+        refresh=true — force refresh from Xero/QB
+    """
     try:
-        from app.services.product_matcher import fetch_user_products
-        products = fetch_user_products(current_user)
+        force_refresh = request.args.get('refresh', '').lower() == 'true'
+        products = get_cached_products(current_user.id, force_refresh=force_refresh)
+        
+        # Get cache age
+        latest = ProductCache.query.filter_by(user_id=current_user.id).order_by(
+            ProductCache.synced_at.desc()
+        ).first()
+        cache_age = None
+        if latest and latest.synced_at:
+            cache_age = (datetime.utcnow() - latest.synced_at).total_seconds()
         
         return jsonify({
             'success': True,
             'products': products,
-            'count': len(products)
+            'count': len(products),
+            'cached': not force_refresh and cache_age is not None,
+            'cache_age_seconds': int(cache_age) if cache_age else None,
+            'cache_age_human': format_cache_age(cache_age) if cache_age else None
         })
-    except ImportError:
-        return jsonify({'success': True, 'products': [], 'count': 0,
-                        'message': 'Product matching module not available'})
     except Exception as e:
         logger.error(f"Fetch products error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
+@bp.route('/search-products', methods=['GET'])
+@login_required
+def search_products():
+    """Search cached products by code or description — for live search in match review.
+    
+    Query params:
+        q=search term (min 2 chars)
+        limit=10 (max results)
+    """
+    try:
+        query = request.args.get('q', '').strip()
+        limit = min(int(request.args.get('limit', 10)), 50)
+        
+        if len(query) < 2:
+            return jsonify({'results': []})
+        
+        search_term = f"%{query}%"
+        
+        results = ProductCache.query.filter(
+            ProductCache.user_id == current_user.id,
+            db.or_(
+                ProductCache.code.ilike(search_term),
+                ProductCache.name.ilike(search_term),
+                ProductCache.description.ilike(search_term),
+                ProductCache.purchase_description.ilike(search_term)
+            )
+        ).limit(limit).all()
+        
+        return jsonify({
+            'results': [p.to_dict() for p in results]
+        })
+    except Exception as e:
+        logger.error(f"Search products error: {e}", exc_info=True)
+        return jsonify({'results': []})
+
+
+@bp.route('/sync-products', methods=['POST'])
+@login_required
+def sync_products():
+    """Force refresh the product cache from Xero/QB"""
+    try:
+        products = get_cached_products(current_user.id, force_refresh=True)
+        return jsonify({
+            'success': True,
+            'count': len(products),
+            'message': f'Synced {len(products)} products from your accounting system'
+        })
+    except Exception as e:
+        logger.error(f"Sync products error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+def format_cache_age(seconds):
+    """Format cache age in human-readable form"""
+    if not seconds:
+        return 'just now'
+    if seconds < 60:
+        return 'just now'
+    if seconds < 3600:
+        mins = int(seconds / 60)
+        return f'{mins}m ago'
+    if seconds < 86400:
+        hours = int(seconds / 3600)
+        return f'{hours}h ago'
+    days = int(seconds / 86400)
+    return f'{days}d ago'
+
+
 @bp.route('/match-products', methods=['POST'])
 @login_required
 def match_products():
-    """Match parsed combined_materials against user's product list.
+    """Match parsed combined_materials against user's cached product list.
     
-    Expects: {combined_materials: [...], products: [...] (optional, fetched if missing)}
-    Returns: {results: [{material, matches, status, selected, clean_description}]}
+    Expects: {combined_materials: [...]}
+    Returns: {results: [{material, matches, status, selected, clean_description}], products: [...cached]}
     """
     try:
         data = request.get_json() or {}
@@ -851,17 +997,11 @@ def match_products():
         if not combined_materials:
             return jsonify({'error': 'No materials to match'}), 400
         
-        # Get products — either passed in or fetch from accounting system
-        products = data.get('products')
-        if not products:
-            try:
-                from app.services.product_matcher import fetch_user_products
-                products = fetch_user_products(current_user)
-            except ImportError:
-                products = []
+        # Always use cached products
+        products = get_cached_products(current_user.id)
         
         if not products:
-            # No products available — return all as unmatched
+            # No products available — return all as unmatched + empty product list
             results = []
             for i, item in enumerate(combined_materials):
                 results.append({
@@ -875,6 +1015,7 @@ def match_products():
             return jsonify({
                 'success': True,
                 'results': results,
+                'products': [],
                 'no_products': True,
                 'message': 'No accounting system connected — connect Xero or QuickBooks to enable product matching'
             })
@@ -921,6 +1062,7 @@ def match_products():
         return jsonify({
             'success': True,
             'results': match_results,
+            'products': products,  # Send full product list to frontend for live search
             'stats': stats,
             'product_count': len(products)
         })

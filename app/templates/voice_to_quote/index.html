@@ -184,10 +184,16 @@ Example: 'Okay so this is for a job reference called West Grove. Family room we 
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-xl font-bold text-gray-900 dark:text-white">Product Matching</h2>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Review matched products — confirm, override, or skip items</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Review matched products — confirm, override, or search for the right product</p>
                 </div>
-                <div id="match-stats" class="flex items-center gap-3">
-                    <!-- Populated by JS -->
+                <div class="flex items-center gap-3">
+                    <button onclick="syncProducts()" class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 inline-flex items-center gap-1.5" title="Re-sync products from your accounting system">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Sync Products
+                    </button>
+                    <div id="match-stats" class="flex items-center gap-2">
+                        <!-- Populated by JS -->
+                    </div>
                 </div>
             </div>
             
@@ -731,7 +737,7 @@ function exportSupplierList() {
 }
 
 let matchResults = null;
-let userProducts = null;
+let cachedProducts = null;  // Full product list for client-side searching
 
 // ─── Product Matching ────────────────────────────────────
 
@@ -754,8 +760,7 @@ async function matchProducts() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                combined_materials: parsedData.combined_materials,
-                products: userProducts
+                combined_materials: parsedData.combined_materials
             })
         });
         
@@ -766,11 +771,14 @@ async function matchProducts() {
         }
         
         matchResults = result.results;
-        userProducts = null; // Clear cached products
+        // Cache the full product list for client-side search
+        if (result.products) {
+            cachedProducts = result.products;
+        }
         
         renderMatchResults(result);
         
-        // Show match section, keep results visible above
+        // Show match section
         document.getElementById('match-section').classList.remove('hidden');
         document.getElementById('match-section').scrollIntoView({ behavior: 'smooth' });
         
@@ -780,6 +788,37 @@ async function matchProducts() {
         btn.disabled = false;
         btnText.textContent = 'Match Products & Price';
         btnLoading.classList.add('hidden');
+    }
+}
+
+async function syncProducts() {
+    const btn = event.target;
+    const origText = btn.textContent;
+    btn.textContent = 'Syncing...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/voice-to-quote/sync-products', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            // Refresh cached products
+            const fetchResp = await fetch('/voice-to-quote/fetch-products?refresh=true');
+            const fetchResult = await fetchResp.json();
+            if (fetchResult.products) {
+                cachedProducts = fetchResult.products;
+            }
+            btn.textContent = `✓ ${result.count} products synced`;
+            setTimeout(() => { btn.textContent = origText; }, 3000);
+        } else {
+            btn.textContent = 'Sync failed';
+            setTimeout(() => { btn.textContent = origText; }, 3000);
+        }
+    } catch (e) {
+        btn.textContent = 'Sync failed';
+        setTimeout(() => { btn.textContent = origText; }, 3000);
+    } finally {
+        btn.disabled = false;
     }
 }
 
@@ -827,12 +866,42 @@ function renderMatchResults(result) {
         ` : '';
         
         const matchInfo = sel ? `
-            <div>
-                <span class="font-mono text-xs text-indigo-600 dark:text-indigo-400">${sel.product?.code || '—'}</span>
+            <div class="match-display" id="match-display-${i}">
+                <div class="flex items-center gap-1.5">
+                    <span class="font-mono text-xs text-indigo-600 dark:text-indigo-400">${sel.product?.code || '—'}</span>
+                    <button onclick="startProductSearch(${i})" class="text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400" title="Change product">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                    </button>
+                </div>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate max-w-xs">${sel.product?.name || sel.product?.description || '—'}</p>
                 ${confidenceBar}
             </div>
-        ` : '<span class="text-xs text-gray-400 italic">No match found</span>';
+        ` : `
+            <div class="match-display" id="match-display-${i}">
+                <button onclick="startProductSearch(${i})" class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    Search products...
+                </button>
+            </div>
+        `;
+        
+        // Search input (hidden by default, shown on click)
+        const searchInput = `
+            <div id="product-search-${i}" class="hidden relative">
+                <input type="text" 
+                    id="product-search-input-${i}"
+                    class="w-full px-2 py-1.5 border border-indigo-400 dark:border-indigo-500 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="Type part number or description..."
+                    oninput="searchProductsLive(${i}, this.value)"
+                    onkeydown="handleSearchKey(event, ${i})"
+                    onfocus="searchProductsLive(${i}, this.value)"
+                >
+                <div id="product-search-results-${i}" class="hidden absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+                <button onclick="cancelProductSearch(${i})" class="absolute right-1.5 top-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-500">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        `;
         
         // Dropdown for alternative matches
         const altMatches = (item.matches || []).length > 1 ? `
@@ -859,6 +928,7 @@ function renderMatchResults(result) {
                         ${matchInfo}
                         ${altMatches}
                     </div>
+                    ${searchInput}
                     <div id="alternatives-${i}" class="hidden mt-2"></div>
                 </td>
                 <td class="px-4 py-3">
@@ -917,6 +987,146 @@ function selectAlternative(index, matchIndex) {
     
     // Re-render the whole table (simpler than surgical DOM update)
     renderMatchResults({ results: matchResults, stats: calculateStats() });
+}
+
+// ─── Product Search (type-ahead in match table) ──────────
+
+let searchDebounceTimer = null;
+
+function startProductSearch(index) {
+    // Hide the display, show the search input
+    const display = document.getElementById(`match-display-${index}`);
+    const search = document.getElementById(`product-search-${index}`);
+    if (display) display.classList.add('hidden');
+    if (search) {
+        search.classList.remove('hidden');
+        const input = document.getElementById(`product-search-input-${index}`);
+        if (input) {
+            // Pre-fill with current part number if available
+            const mat = matchResults[index]?.material;
+            input.value = mat?.part_number || '';
+            input.focus();
+            input.select();
+            // Trigger initial search if there's a value
+            if (input.value.length >= 2) {
+                searchProductsLive(index, input.value);
+            }
+        }
+    }
+}
+
+function cancelProductSearch(index) {
+    const display = document.getElementById(`match-display-${index}`);
+    const search = document.getElementById(`product-search-${index}`);
+    const results = document.getElementById(`product-search-results-${index}`);
+    if (display) display.classList.remove('hidden');
+    if (search) search.classList.add('hidden');
+    if (results) results.classList.add('hidden');
+}
+
+function searchProductsLive(index, query) {
+    clearTimeout(searchDebounceTimer);
+    
+    const resultsDiv = document.getElementById(`product-search-results-${index}`);
+    if (!resultsDiv) return;
+    
+    if (query.length < 2) {
+        resultsDiv.classList.add('hidden');
+        return;
+    }
+    
+    searchDebounceTimer = setTimeout(() => {
+        const q = query.toLowerCase().trim();
+        let matches = [];
+        
+        // Client-side search through cached products (instant)
+        if (cachedProducts && cachedProducts.length) {
+            matches = cachedProducts.filter(p => {
+                const code = (p.code || '').toLowerCase();
+                const name = (p.name || '').toLowerCase();
+                const desc = (p.description || '').toLowerCase();
+                const pdesc = (p.purchase_description || '').toLowerCase();
+                return code.includes(q) || name.includes(q) || desc.includes(q) || pdesc.includes(q);
+            }).slice(0, 10);
+        }
+        
+        if (matches.length > 0) {
+            renderSearchResults(index, matches);
+        } else {
+            // Fallback to server-side search if no client cache
+            fetchSearchResults(index, query);
+        }
+    }, 150);  // 150ms debounce
+}
+
+async function fetchSearchResults(index, query) {
+    try {
+        const response = await fetch(`/voice-to-quote/search-products?q=${encodeURIComponent(query)}&limit=10`);
+        const data = await response.json();
+        renderSearchResults(index, data.results || []);
+    } catch (e) {
+        console.warn('Product search failed:', e);
+    }
+}
+
+function renderSearchResults(index, products) {
+    const resultsDiv = document.getElementById(`product-search-results-${index}`);
+    if (!resultsDiv) return;
+    
+    if (!products.length) {
+        resultsDiv.innerHTML = `<div class="px-3 py-2 text-xs text-gray-400 italic">No products found</div>`;
+        resultsDiv.classList.remove('hidden');
+        return;
+    }
+    
+    resultsDiv.innerHTML = products.map((p, j) => `
+        <div class="px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0 search-result-item"
+            onclick="selectSearchProduct(${index}, ${j})"
+            data-product-index="${j}">
+            <div class="flex items-center justify-between">
+                <span class="font-mono text-xs font-medium text-indigo-600 dark:text-indigo-400">${p.code || '—'}</span>
+                ${p.sale_price ? `<span class="text-xs font-medium text-gray-700 dark:text-gray-300">£${parseFloat(p.sale_price).toFixed(2)}</span>` : ''}
+            </div>
+            <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">${p.name || p.description || ''}</p>
+        </div>
+    `).join('');
+    
+    // Store products on the div for selection
+    resultsDiv._products = products;
+    resultsDiv.classList.remove('hidden');
+}
+
+function selectSearchProduct(index, productIndex) {
+    const resultsDiv = document.getElementById(`product-search-results-${index}`);
+    const product = resultsDiv?._products?.[productIndex];
+    if (!product) return;
+    
+    // Update matchResults with the manually selected product
+    matchResults[index].selected = {
+        product: product,
+        confidence: 1.0,
+        match_type: 'manual_search'
+    };
+    matchResults[index].status = 'matched';
+    
+    // Also tick the checkbox
+    const cb = document.querySelector(`.match-checkbox[data-index="${index}"]`);
+    if (cb) cb.checked = true;
+    
+    // Re-render
+    renderMatchResults({ results: matchResults, stats: calculateStats() });
+}
+
+function handleSearchKey(event, index) {
+    if (event.key === 'Escape') {
+        cancelProductSearch(index);
+    } else if (event.key === 'Enter') {
+        // Select first result
+        const resultsDiv = document.getElementById(`product-search-results-${index}`);
+        if (resultsDiv?._products?.length) {
+            selectSearchProduct(index, 0);
+        }
+    }
 }
 
 function calculateStats() {

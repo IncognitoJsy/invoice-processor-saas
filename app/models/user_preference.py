@@ -16,7 +16,7 @@ class UserPreference(db.Model):
     __tablename__ = 'user_preferences'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     category = db.Column(db.String(50), nullable=False)  # brand_default, product_swap, mounting_height, circuit_preference, general, supplier, cable_preference
     key = db.Column(db.String(200), nullable=False)       # what this preference is about
     value = db.Column(db.String(500), nullable=False)      # the preference value
@@ -72,7 +72,7 @@ class CorrectionLog(db.Model):
     __tablename__ = 'correction_logs'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     job_title = db.Column(db.String(200))                  # which job this was from
     room_name = db.Column(db.String(100))                  # which room
     field_type = db.Column(db.String(50), nullable=False)  # 'product', 'quantity', 'part_number', 'back_box', 'cable', 'flag_resolution'
@@ -96,4 +96,44 @@ class CorrectionLog(db.Model):
             'correction_count': self.correction_count,
             'promoted': self.promoted,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ProductCache(db.Model):
+    """Cached products from Xero/QuickBooks — avoids hitting the API on every match.
+    
+    Refreshed on demand (manual sync) or when cache is stale (>24h).
+    Stores the full product list per user for fast client-side searching.
+    """
+    __tablename__ = 'product_cache'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    product_id = db.Column(db.String(200))                  # Xero ItemID or QB Item Id
+    code = db.Column(db.String(200), index=True)            # Product/SKU code
+    name = db.Column(db.String(500))                        # Product name
+    description = db.Column(db.Text)                        # Sales description
+    purchase_description = db.Column(db.Text)               # Purchase/supplier description
+    purchase_price = db.Column(db.Float, default=0)
+    sale_price = db.Column(db.Float, default=0)
+    source = db.Column(db.String(20))                       # 'xero' or 'quickbooks'
+    synced_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Index for fast code lookups per user
+    __table_args__ = (
+        db.Index('ix_product_cache_user_code', 'user_id', 'code'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'code': self.code,
+            'name': self.name,
+            'description': self.description,
+            'purchase_description': self.purchase_description,
+            'purchase_price': self.purchase_price,
+            'sale_price': self.sale_price,
+            'source': self.source,
+            'synced_at': self.synced_at.isoformat() if self.synced_at else None,
         }
