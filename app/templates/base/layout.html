@@ -157,7 +157,7 @@
                     <a href="/invoices" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'invoice' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Invoices
                     </a>
-                    <a href="/quotes" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'quote' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                    <a href="/quotes" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'quote' in request.endpoint and 'voice_to_quote' not in request.endpoint and 'quotebuilder' not in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Quotes
                     </a>
                     <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
@@ -165,6 +165,12 @@
                     </a>
                     <a href="/quotebuilder" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'quotebuilder' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Quote Builder   
+                    </a>
+                    <a href="/voice-to-quote/" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'voice_to_quote' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                        </svg>
+                        Voice to Quote
                     </a>
                     <a href="/billing" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'billing' in request.endpoint and 'topup' not in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Billing
