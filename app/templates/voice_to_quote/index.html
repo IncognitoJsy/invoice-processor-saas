@@ -6,231 +6,852 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     
     <!-- Header -->
-    <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Voice to Quote</h1>
-        <div class="flex items-center gap-4 mt-1">
-            <p class="text-gray-600 dark:text-gray-400">Paste your Plaud transcription or drop a file and let AI build your materials list</p>
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Voice to Quote</h1>
+            <p class="text-gray-600 dark:text-gray-400 text-sm mt-1">Record site visits, parse materials, build quotes</p>
+        </div>
+        <div class="flex items-center gap-3">
             <a href="{{ url_for('voice_to_quote.teach_ai') }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                 </svg>
                 Teach AI
             </a>
+            <button onclick="showCreateJob()" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Job
+            </button>
         </div>
     </div>
 
-    <!-- Input Section -->
-    <div id="input-section">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            
-            <!-- Transcription Input (text or file drop) -->
-            <div class="mb-6">
-                <label for="transcription" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Site Visit Transcription
-                </label>
-                
-                <!-- File drop overlay zone (covers the textarea) -->
-                <div id="transcription-drop-zone" class="relative">
-                    <textarea 
-                        id="transcription" 
-                        rows="8" 
-                        class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                        placeholder="Paste or type your transcription here — or drag & drop a .txt, .pdf, .md, or .docx file...
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- JOBS LIST VIEW -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="jobs-list-view">
+        
+        <!-- Create Job Card (hidden by default) -->
+        <div id="create-job-card" class="hidden mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-blue-200 dark:border-blue-800 p-6">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4">Create New Job</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Job Title *</label>
+                    <input type="text" id="new-job-title" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="e.g. West Grove Renovation">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Client Name</label>
+                    <input type="text" id="new-job-client" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="e.g. Mr & Mrs Smith">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Reference</label>
+                    <input type="text" id="new-job-ref" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="e.g. WG-2026-001">
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end gap-2">
+                <button onclick="hideCreateJob()" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+                <button onclick="createJob()" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create Job</button>
+            </div>
+        </div>
 
-Example: 'Okay so this is for a job reference called West Grove. Family room we have got two ceiling mounted pendants, eight spotlights which are two-way switched...'"
-                    ></textarea>
-                    
-                    <!-- Drop overlay (shown on drag) -->
-                    <div id="transcription-drop-overlay" class="hidden absolute inset-0 bg-blue-50 dark:bg-blue-900/30 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-lg flex items-center justify-center z-10 pointer-events-none">
-                        <div class="text-center">
-                            <svg class="mx-auto h-10 w-10 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                            </svg>
-                            <p class="mt-2 text-sm font-medium text-blue-600 dark:text-blue-400">Drop your transcription file here</p>
-                            <p class="text-xs text-blue-500 dark:text-blue-500">.txt, .pdf, .md, .docx</p>
-                        </div>
+        <!-- Jobs Grid -->
+        <div id="jobs-grid" class="grid gap-4">
+            <!-- Populated by JS -->
+        </div>
+        
+        <!-- Empty State -->
+        <div id="jobs-empty" class="hidden text-center py-16">
+            <svg class="mx-auto h-16 w-16 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+            </svg>
+            <h3 class="mt-4 text-lg font-medium text-gray-700 dark:text-gray-300">No jobs yet</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create your first job to start adding transcriptions</p>
+            <button onclick="showCreateJob()" class="mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Create Your First Job</button>
+        </div>
+
+        <!-- Loading -->
+        <div id="jobs-loading" class="text-center py-12">
+            <svg class="animate-spin mx-auto h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">Loading jobs...</p>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- JOB WORKSPACE VIEW -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="job-workspace" class="hidden">
+        
+        <!-- Back + Job Header -->
+        <div class="mb-6">
+            <button onclick="backToJobsList()" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-3 inline-flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                All Jobs
+            </button>
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 id="ws-job-title" class="text-xl font-bold text-gray-900 dark:text-white"></h2>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span id="ws-job-client" class="text-sm text-gray-500 dark:text-gray-400"></span>
+                        <span id="ws-job-status" class="text-xs font-medium px-2 py-0.5 rounded-full"></span>
                     </div>
                 </div>
-                
-                <!-- File info bar (shown after file loaded) -->
-                <div id="transcription-file-info" class="hidden mt-2 flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-                    <div class="flex items-center gap-2">
-                        <svg class="h-4 w-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        <span id="transcription-file-name" class="text-sm text-green-700 dark:text-green-300 font-medium"></span>
-                        <span id="transcription-file-size" class="text-xs text-green-600 dark:text-green-400"></span>
-                    </div>
-                    <button onclick="clearTranscriptionFile()" class="text-xs text-green-600 dark:text-green-400 hover:text-red-500 dark:hover:text-red-400">Clear</button>
-                </div>
-                
-                <!-- Or browse for file -->
-                <div class="mt-2 flex items-center gap-3">
-                    <input type="file" id="transcription-file-input" accept=".txt,.pdf,.md,.docx" class="hidden">
-                    <button onclick="document.getElementById('transcription-file-input').click()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-                        </svg>
-                        Upload transcription file
+                <div class="flex items-center gap-2">
+                    <button onclick="deleteCurrentJob()" class="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" title="Delete job">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">(.txt, .pdf, .md, .docx)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step Progress -->
+        <div class="mb-8">
+            <div class="flex items-center gap-2">
+                <div id="step-1" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 cursor-pointer" onclick="showStep('transcriptions')">
+                    <span class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">1</span>
+                    Transcriptions
+                </div>
+                <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <div id="step-2" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-pointer" onclick="showStep('parsed')">
+                    <span class="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-xs">2</span>
+                    Parsed Materials
+                </div>
+                <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <div id="step-3" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-pointer" onclick="showStep('matching')">
+                    <span class="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-xs">3</span>
+                    Match & Price
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Step 1: Transcriptions ─── -->
+        <div id="step-transcriptions" class="space-y-4">
+            
+            <!-- Add Transcription Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Add Transcription</h3>
+                <div class="mb-3">
+                    <input type="text" id="trans-title" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="Label (optional) — e.g. Kitchen & Utility, First Floor Bedrooms">
+                </div>
+                <div id="ws-drop-zone" class="relative">
+                    <textarea id="trans-text" rows="6" class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500"
+                        placeholder="Paste your transcription here or drag & drop a file (.txt, .pdf, .md, .docx)..."></textarea>
+                    <div id="ws-drop-overlay" class="hidden absolute inset-0 bg-blue-50 dark:bg-blue-900/30 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+                        <p class="text-sm font-medium text-blue-600 dark:text-blue-400">Drop file here</p>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between">
+                    <label class="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        Browse file
+                        <input type="file" class="hidden" accept=".txt,.pdf,.md,.docx" onchange="loadFileToTextarea(this)">
+                    </label>
+                    <button onclick="addTranscription()" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        Add to Job
+                    </button>
                 </div>
             </div>
 
-            <!-- Floor Plan Upload (Optional) -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Floor Plan <span class="text-gray-400 dark:text-gray-500 font-normal">(optional — for validation only)</span>
-                </label>
-                <div id="floor-plan-drop" class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer bg-white dark:bg-gray-700">
-                    <input type="file" id="floor-plan-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
-                    <svg class="mx-auto h-10 w-10 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" id="floor-plan-label">
-                        Drop floor plan here or <span class="text-blue-600 dark:text-blue-400">browse</span>
-                    </p>
-                </div>
+            <!-- Saved Transcriptions List -->
+            <div id="transcriptions-list" class="space-y-3">
+                <!-- Populated by JS -->
             </div>
 
             <!-- Parse Button -->
-            <div class="flex items-center justify-between">
-                <p class="text-xs text-gray-400 dark:text-gray-500">AI will parse your transcription using UK electrical standards (BS 7671)</p>
-                <button 
-                    id="parse-btn"
-                    onclick="parseTranscription()"
-                    class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <span id="parse-btn-text">Generate Quote</span>
-                    <span id="parse-btn-loading" class="hidden">
-                        <svg class="animate-spin inline h-5 w-5 ml-1" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                        </svg>
-                        Parsing...
+            <div id="parse-section" class="hidden">
+                <div class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                    <div>
+                        <span id="trans-count-label" class="text-sm font-medium text-gray-700 dark:text-gray-300"></span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">All transcriptions will be parsed together</span>
+                    </div>
+                    <button onclick="parseJob()" id="parse-btn" class="px-5 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                        <span id="parse-btn-text">Parse All Transcriptions</span>
+                        <span id="parse-btn-loading" class="hidden"><svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Step 2: Parsed Results ─── -->
+        <div id="step-parsed" class="hidden">
+            
+            <!-- Job Header with defaults -->
+            <div id="parsed-header" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 id="parsed-job-title" class="text-lg font-bold text-gray-900 dark:text-white"></h3>
+                        <p id="parsed-job-scope" class="text-gray-500 dark:text-gray-400 text-sm mt-1"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="parsed-flag-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300"></span>
+                        <span id="parsed-room-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"></span>
+                    </div>
+                </div>
+                <div id="parsed-defaults" class="mt-4 flex flex-wrap gap-3 text-xs"></div>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="flex gap-2 mb-6">
+                <button onclick="showResultView('rooms')" id="tab-rooms" class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">Per Room</button>
+                <button onclick="showResultView('combined')" id="tab-combined" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Supplier List</button>
+                <button onclick="showResultView('flags')" id="tab-flags" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Flags</button>
+            </div>
+
+            <div id="view-rooms"></div>
+            <div id="view-combined" class="hidden"></div>
+            <div id="view-flags" class="hidden"></div>
+
+            <!-- Actions -->
+            <div class="mt-8 flex justify-between">
+                <button onclick="showStep('transcriptions')" class="px-4 py-2.5 text-gray-600 dark:text-gray-400 font-medium text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">← Back to Transcriptions</button>
+                <div class="flex gap-3">
+                    <button onclick="exportSupplierList()" class="px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Export CSV</button>
+                    <button onclick="goToMatching()" class="px-5 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                        Match Products & Price →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Step 3: Product Matching ─── -->
+        <div id="step-matching" class="hidden">
+            <!-- Reuses the match panel from previous build — rendered by JS -->
+            <div id="match-content"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+let currentJob = null;
+let parsedData = null;
+let matchResults = null;
+let cachedProducts = null;
+
+// ─── Page Load ───────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadJobs();
+    setupDropZone();
+});
+
+// ─── Jobs List ───────────────────────────────────────────
+
+async function loadJobs() {
+    document.getElementById('jobs-loading').classList.remove('hidden');
+    document.getElementById('jobs-grid').innerHTML = '';
+    document.getElementById('jobs-empty').classList.add('hidden');
+    
+    try {
+        const response = await fetch('/voice-to-quote/jobs');
+        const result = await response.json();
+        
+        document.getElementById('jobs-loading').classList.add('hidden');
+        
+        if (!result.jobs?.length) {
+            document.getElementById('jobs-empty').classList.remove('hidden');
+            return;
+        }
+        
+        renderJobsList(result.jobs);
+    } catch (e) {
+        document.getElementById('jobs-loading').innerHTML = '<p class="text-sm text-red-500">Failed to load jobs</p>';
+    }
+}
+
+function renderJobsList(jobs) {
+    const grid = document.getElementById('jobs-grid');
+    
+    grid.innerHTML = jobs.map(job => {
+        const statusColors = {
+            'draft': 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
+            'parsed': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+            'matched': 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+            'quoted': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+            'approved': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+            'archived': 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500',
+        };
+        const statusColor = statusColors[job.status] || statusColors['draft'];
+        const transCount = job.transcription_count || 0;
+        const timeAgo = formatTimeAgo(job.updated_at);
+        
+        return `
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5 hover:border-blue-300 dark:hover:border-blue-600 cursor-pointer transition-colors" onclick="openJob(${job.id})">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-gray-900 dark:text-white truncate">${job.title}</h3>
+                        <div class="flex items-center gap-3 mt-1.5">
+                            ${job.client_name ? `<span class="text-sm text-gray-500 dark:text-gray-400">${job.client_name}</span>` : ''}
+                            ${job.reference ? `<span class="text-xs text-gray-400 dark:text-gray-500 font-mono">${job.reference}</span>` : ''}
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor} ml-3 flex-shrink-0">${job.status}</span>
+                </div>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-400 dark:text-gray-500">
+                    <span class="inline-flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                        ${transCount} transcription${transCount !== 1 ? 's' : ''}
                     </span>
-                </button>
+                    <span>${timeAgo}</span>
+                    ${job.parsed_at ? '<span class="text-blue-400">✓ Parsed</span>' : ''}
+                    ${job.matched_at ? '<span class="text-indigo-400">✓ Matched</span>' : ''}
+                </div>
             </div>
-        </div>
-    </div>
+        `;
+    }).join('');
+}
 
-    <!-- Results Section (hidden until parse completes) -->
-    <div id="results-section" class="hidden mt-8">
+function showCreateJob() {
+    document.getElementById('create-job-card').classList.remove('hidden');
+    document.getElementById('new-job-title').focus();
+}
+
+function hideCreateJob() {
+    document.getElementById('create-job-card').classList.add('hidden');
+    document.getElementById('new-job-title').value = '';
+    document.getElementById('new-job-client').value = '';
+    document.getElementById('new-job-ref').value = '';
+}
+
+async function createJob() {
+    const title = document.getElementById('new-job-title').value.trim();
+    if (!title) { document.getElementById('new-job-title').focus(); return; }
+    
+    try {
+        const response = await fetch('/voice-to-quote/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                client_name: document.getElementById('new-job-client').value.trim(),
+                reference: document.getElementById('new-job-ref').value.trim()
+            })
+        });
         
-        <!-- Job Header -->
-        <div id="job-header" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
-            <div class="flex items-center justify-between">
+        const result = await response.json();
+        if (result.success) {
+            hideCreateJob();
+            openJob(result.job.id);
+        } else {
+            alert(result.error || 'Failed to create job');
+        }
+    } catch (e) {
+        alert('Failed to create job');
+    }
+}
+
+// ─── Job Workspace ───────────────────────────────────────
+
+async function openJob(jobId) {
+    try {
+        const response = await fetch(`/voice-to-quote/jobs/${jobId}`);
+        const result = await response.json();
+        
+        if (!result.success) { alert(result.error); return; }
+        
+        currentJob = result.job;
+        parsedData = result.job.parsed_data || null;
+        
+        // Update header
+        document.getElementById('ws-job-title').textContent = currentJob.title;
+        document.getElementById('ws-job-client').textContent = currentJob.client_name || '';
+        
+        const statusEl = document.getElementById('ws-job-status');
+        statusEl.textContent = currentJob.status;
+        statusEl.className = `text-xs font-medium px-2 py-0.5 rounded-full ${getStatusColor(currentJob.status)}`;
+        
+        // Show workspace
+        document.getElementById('jobs-list-view').classList.add('hidden');
+        document.getElementById('job-workspace').classList.remove('hidden');
+        
+        // Render transcriptions
+        renderTranscriptions(currentJob.transcriptions || []);
+        
+        // If already parsed, load results
+        if (parsedData) {
+            renderParsedResults(parsedData);
+            showStep(currentJob.status === 'matched' ? 'matching' : 'parsed');
+        } else {
+            showStep('transcriptions');
+        }
+        
+    } catch (e) {
+        alert('Failed to load job');
+    }
+}
+
+function backToJobsList() {
+    document.getElementById('job-workspace').classList.add('hidden');
+    document.getElementById('jobs-list-view').classList.remove('hidden');
+    currentJob = null;
+    parsedData = null;
+    matchResults = null;
+    loadJobs();
+}
+
+async function deleteCurrentJob() {
+    if (!currentJob) return;
+    if (!confirm(`Delete "${currentJob.title}" and all its transcriptions?`)) return;
+    
+    try {
+        await fetch(`/voice-to-quote/jobs/${currentJob.id}`, { method: 'DELETE' });
+        backToJobsList();
+    } catch (e) {
+        alert('Failed to delete job');
+    }
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'draft': 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
+        'parsed': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+        'matched': 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+        'quoted': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+    };
+    return colors[status] || colors['draft'];
+}
+
+// ─── Step Navigation ─────────────────────────────────────
+
+function showStep(step) {
+    ['transcriptions', 'parsed', 'matching'].forEach(s => {
+        document.getElementById(`step-${s}`).classList.toggle('hidden', s !== step);
+    });
+    
+    // Update step indicators
+    const steps = { transcriptions: 1, parsed: 2, matching: 3 };
+    const activeIdx = steps[step] || 1;
+    
+    for (let i = 1; i <= 3; i++) {
+        const el = document.getElementById(`step-${i}`);
+        const circle = el.querySelector('span');
+        if (i <= activeIdx) {
+            el.className = el.className.replace(/bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400/g, 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300');
+            circle.className = circle.className.replace(/bg-gray-300 dark:bg-gray-600/g, 'bg-blue-600');
+        } else {
+            el.className = el.className.replace(/bg-blue-100 dark:bg-blue-900\/30 text-blue-700 dark:text-blue-300/g, 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400');
+            circle.className = circle.className.replace(/bg-blue-600/g, 'bg-gray-300 dark:bg-gray-600');
+        }
+    }
+}
+
+// ─── Transcriptions ──────────────────────────────────────
+
+function renderTranscriptions(transcriptions) {
+    const list = document.getElementById('transcriptions-list');
+    const parseSection = document.getElementById('parse-section');
+    
+    if (!transcriptions.length) {
+        list.innerHTML = '';
+        parseSection.classList.add('hidden');
+        return;
+    }
+    
+    parseSection.classList.remove('hidden');
+    document.getElementById('trans-count-label').textContent = `${transcriptions.length} transcription${transcriptions.length !== 1 ? 's' : ''} saved`;
+    
+    list.innerHTML = transcriptions.map((t, i) => `
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">${t.title || `Recording ${i + 1}`}</span>
+                        ${t.is_parsed ? '<span class="text-xs text-green-600 dark:text-green-400">✓ Parsed</span>' : ''}
+                        <span class="text-xs text-gray-400">${formatCharCount(t.char_count)}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">${truncate(t.text, 200)}</p>
+                </div>
+                <div class="flex items-center gap-1 ml-3">
+                    <button onclick="toggleTranscript(${t.id})" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded" title="Expand">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <button onclick="deleteTranscription(${t.id})" class="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Delete">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="transcript-full-${t.id}" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-750 rounded text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">${escapeHtml(t.text)}</div>
+        </div>
+    `).join('');
+}
+
+async function addTranscription() {
+    if (!currentJob) return;
+    
+    const text = document.getElementById('trans-text').value.trim();
+    const title = document.getElementById('trans-title').value.trim();
+    
+    if (!text || text.length < 20) {
+        alert('Please enter a longer transcription (at least 20 characters)');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/voice-to-quote/jobs/${currentJob.id}/transcriptions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, title, source_filename: window._lastDroppedFilename || null })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            document.getElementById('trans-text').value = '';
+            document.getElementById('trans-title').value = '';
+            window._lastDroppedFilename = null;
+            currentJob = result.job;
+            renderTranscriptions(currentJob.transcriptions || []);
+        } else {
+            alert(result.error || 'Failed to add transcription');
+        }
+    } catch (e) {
+        alert('Failed to add transcription');
+    }
+}
+
+async function deleteTranscription(transId) {
+    if (!currentJob) return;
+    if (!confirm('Delete this transcription?')) return;
+    
+    try {
+        const response = await fetch(`/voice-to-quote/jobs/${currentJob.id}/transcriptions/${transId}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (result.success) {
+            currentJob = result.job;
+            renderTranscriptions(currentJob.transcriptions || []);
+        }
+    } catch (e) {
+        alert('Failed to delete');
+    }
+}
+
+function toggleTranscript(transId) {
+    const el = document.getElementById(`transcript-full-${transId}`);
+    if (el) el.classList.toggle('hidden');
+}
+
+// ─── File Drop ───────────────────────────────────────────
+
+function setupDropZone() {
+    const zone = document.getElementById('ws-drop-zone');
+    const overlay = document.getElementById('ws-drop-overlay');
+    const textarea = document.getElementById('trans-text');
+    if (!zone) return;
+    
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); overlay.classList.remove('hidden'); });
+    zone.addEventListener('dragleave', () => { overlay.classList.add('hidden'); });
+    zone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        overlay.classList.add('hidden');
+        const file = e.dataTransfer.files[0];
+        if (file) await loadFile(file, textarea);
+    });
+}
+
+async function loadFileToTextarea(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const textarea = document.getElementById('trans-text');
+    await loadFile(file, textarea);
+    input.value = '';
+}
+
+async function loadFile(file, textarea) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    
+    if (ext === 'txt' || ext === 'md') {
+        const text = await file.text();
+        textarea.value = text;
+        window._lastDroppedFilename = file.name;
+        return;
+    }
+    
+    // PDF/DOCX — send to server for extraction
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/voice-to-quote/extract-text', { method: 'POST', body: formData });
+        const result = await response.json();
+        if (result.success) {
+            textarea.value = result.text;
+            window._lastDroppedFilename = file.name;
+        } else {
+            alert(result.error || 'Failed to extract text');
+        }
+    } catch (e) {
+        alert('Failed to process file');
+    }
+}
+
+// ─── Parse Job ───────────────────────────────────────────
+
+async function parseJob() {
+    if (!currentJob) return;
+    
+    const btn = document.getElementById('parse-btn');
+    const btnText = document.getElementById('parse-btn-text');
+    const btnLoading = document.getElementById('parse-btn-loading');
+    
+    btn.disabled = true;
+    btnText.textContent = 'Parsing...';
+    btnLoading.classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`/voice-to-quote/jobs/${currentJob.id}/parse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parse_all: true })
+        });
+        
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Parse failed');
+        
+        parsedData = result.data;
+        currentJob = result.job;
+        
+        renderParsedResults(parsedData);
+        showStep('parsed');
+        
+    } catch (e) {
+        alert('Parse failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Parse All Transcriptions';
+        btnLoading.classList.add('hidden');
+    }
+}
+
+// ─── Render Parsed Results ───────────────────────────────
+// (reuses the existing rendering logic from the original build)
+
+function renderParsedResults(data) {
+    if (!data) return;
+    
+    // Header
+    const job = data.job || {};
+    document.getElementById('parsed-job-title').textContent = job.title || currentJob.title;
+    document.getElementById('parsed-job-scope').textContent = job.scope || '';
+    
+    // Counts
+    const rooms = data.rooms || [];
+    const allFlags = (data.global_flags || []).concat(rooms.flatMap(r => r.flags || []));
+    document.getElementById('parsed-room-count').textContent = `${rooms.length} room${rooms.length !== 1 ? 's' : ''}`;
+    document.getElementById('parsed-flag-count').textContent = allFlags.length ? `${allFlags.length} flag${allFlags.length !== 1 ? 's' : ''}` : '';
+    document.getElementById('parsed-flag-count').classList.toggle('hidden', !allFlags.length);
+    
+    // Defaults
+    const defaults = document.getElementById('parsed-defaults');
+    defaults.innerHTML = '';
+    if (job.default_wall_type) defaults.innerHTML += `<span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">Wall: ${job.default_wall_type}</span>`;
+    if (job.default_finish) defaults.innerHTML += `<span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">Finish: ${job.default_finish}</span>`;
+    if (job.default_back_box_depth) defaults.innerHTML += `<span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">Back box: ${job.default_back_box_depth}</span>`;
+    
+    // Render views
+    renderRooms(rooms);
+    renderCombined(data.combined_materials || []);
+    renderFlags(data);
+}
+
+function renderRooms(rooms) {
+    const container = document.getElementById('view-rooms');
+    if (!rooms.length) { container.innerHTML = '<p class="text-gray-500 text-sm">No rooms parsed</p>'; return; }
+    
+    container.innerHTML = rooms.map((room, ri) => {
+        const accs = room.accessories || [];
+        const switching = room.switching || [];
+        
+        return `
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-4">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between cursor-pointer" onclick="toggleSection('room-${ri}')">
                 <div>
-                    <h2 id="job-title" class="text-xl font-bold text-gray-900 dark:text-white"></h2>
-                    <p id="job-client" class="text-gray-500 dark:text-gray-400 text-sm mt-1"></p>
+                    <h3 class="font-semibold text-gray-900 dark:text-white">${room.name}</h3>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">${accs.length} accessories${switching.length ? `, ${switching.length} switch positions` : ''}</span>
                 </div>
-                <div class="flex items-center gap-3">
-                    <span id="flag-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300"></span>
-                    <span id="room-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"></span>
+                <svg class="w-5 h-5 text-gray-400 transition-transform" id="chevron-room-${ri}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div id="room-${ri}" class="px-5 py-4">
+                <table class="w-full text-sm">
+                    <thead><tr class="text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                        <th class="pb-2 pr-3">Qty</th><th class="pb-2 pr-3">Description</th><th class="pb-2 pr-3">Part No.</th><th class="pb-2 pr-3">Back Box</th><th class="pb-2">Info</th>
+                    </tr></thead>
+                    <tbody>${accs.map((a, ai) => `
+                        <tr class="border-t border-gray-50 dark:border-gray-700/50">
+                            <td class="py-2 pr-3"><span class="editable font-bold text-gray-900 dark:text-white" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].quantity', 'quantity', ${ri}, ${ai})">${a.quantity}</span></td>
+                            <td class="py-2 pr-3"><span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].description', 'description', ${ri}, ${ai})">${a.description}</span></td>
+                            <td class="py-2 pr-3"><span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].part_number', 'part_number', ${ri}, ${ai})">${a.part_number || '<span class=\\"text-amber-600 dark:text-amber-400\\">TBC</span>'}</span></td>
+                            <td class="py-2 pr-3 text-xs text-gray-500 dark:text-gray-400">${a.back_box || '—'}</td>
+                            <td class="py-2 text-xs text-gray-400">${a.notes ? `<span title="${escapeHtml(a.notes)}" class="cursor-help">ℹ</span>` : ''}</td>
+                        </tr>
+                    `).join('')}</tbody>
+                </table>
+                ${switching.length ? `
+                <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mt-4 mb-2">Switching</h4>
+                ${switching.map(sw => `
+                    <div class="text-sm mb-2">
+                        <span class="text-gray-600 dark:text-gray-400">${sw.location}</span>
+                        <span class="text-xs text-gray-400 ml-1">(${sw.system})</span>
+                        <div class="ml-4 text-xs text-gray-500">${(sw.components || []).map(c => `${c.quantity}× ${c.part_number} ${c.description}`).join(', ')}</div>
+                    </div>
+                `).join('')}` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderCombined(materials) {
+    const container = document.getElementById('view-combined');
+    if (!materials.length) { container.innerHTML = '<p class="text-gray-500 text-sm">No materials</p>'; return; }
+    
+    container.innerHTML = `
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-750"><tr class="text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                <th class="px-4 py-3">Part No.</th><th class="px-4 py-3">Description</th><th class="px-4 py-3 text-right">Qty</th><th class="px-4 py-3">Unit</th>
+            </tr></thead>
+            <tbody>${materials.map((m, i) => `
+                <tr class="border-t border-gray-100 dark:border-gray-700/50">
+                    <td class="px-4 py-2.5"><span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].part_number', 'part_number')">${m.part_number || '—'}</span></td>
+                    <td class="px-4 py-2.5"><span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].description', 'description')">${m.description}</span></td>
+                    <td class="px-4 py-2.5 text-right"><span class="editable font-bold text-gray-900 dark:text-white" onclick="makeEditable(this, 'combined_materials[${i}].total_quantity', 'quantity')">${m.total_quantity}</span></td>
+                    <td class="px-4 py-2.5 text-xs text-gray-400">${m.unit || 'each'}</td>
+                </tr>
+            `).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
+function renderFlags(data) {
+    const container = document.getElementById('view-flags');
+    const rooms = data.rooms || [];
+    const globalFlags = data.global_flags || [];
+    const roomFlags = rooms.flatMap(r => (r.flags || []).map(f => ({ ...f, room: r.name })));
+    const allFlags = [...globalFlags.map(f => ({ ...f, room: 'Global' })), ...roomFlags];
+    
+    if (!allFlags.length) { container.innerHTML = '<p class="text-gray-500 text-sm">No flags — everything parsed cleanly</p>'; return; }
+    
+    container.innerHTML = allFlags.map(f => `
+        <div class="bg-white dark:bg-gray-800 rounded-lg border ${f.severity === 'red' ? 'border-red-200 dark:border-red-800' : 'border-amber-200 dark:border-amber-800'} p-4 mb-3">
+            <div class="flex items-start gap-3">
+                <span class="${f.severity === 'red' ? 'text-red-500' : 'text-amber-500'} text-lg">⚠</span>
+                <div>
+                    <span class="text-xs font-medium ${f.severity === 'red' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${f.room}</span>
+                    <p class="text-sm text-gray-700 dark:text-gray-300 mt-0.5">${f.message}</p>
+                    ${f.default_value ? `<p class="text-xs text-gray-400 mt-1">Default: ${f.default_value}</p>` : ''}
                 </div>
             </div>
-            <div id="job-defaults" class="mt-4 flex flex-wrap gap-3 text-xs">
-                <!-- Populated by JS -->
-            </div>
         </div>
+    `).join('');
+}
 
-        <!-- View Toggle -->
-        <div class="flex gap-2 mb-6">
-            <button onclick="showView('rooms')" id="tab-rooms" class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">
-                Per Room
-            </button>
-            <button onclick="showView('combined')" id="tab-combined" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                Supplier List
-            </button>
-            <button onclick="showView('flags')" id="tab-flags" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                Flags
-            </button>
-        </div>
+function showResultView(view) {
+    ['rooms', 'combined', 'flags'].forEach(v => {
+        document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
+        const tab = document.getElementById(`tab-${v}`);
+        if (v === view) {
+            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white';
+        } else {
+            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+        }
+    });
+}
 
-        <!-- Per Room View -->
-        <div id="view-rooms"></div>
+function toggleSection(id) {
+    const body = document.getElementById(id);
+    const chevron = document.getElementById(`chevron-${id}`);
+    if (body) body.classList.toggle('hidden');
+    if (chevron) chevron.classList.toggle('rotate-180');
+}
 
-        <!-- Combined Supplier List View -->
-        <div id="view-combined" class="hidden"></div>
+// ─── Product Matching (Step 3) ───────────────────────────
 
-        <!-- Flags View -->
-        <div id="view-flags" class="hidden"></div>
-
-        <!-- Action Buttons -->
-        <div id="parse-actions" class="mt-8 flex justify-end gap-3">
-            <button onclick="exportSupplierList()" class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                Export Supplier List
-            </button>
-            <button onclick="matchProducts()" id="match-btn" class="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 dark:focus:ring-indigo-800 transition-all inline-flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                </svg>
-                <span id="match-btn-text">Match Products & Price</span>
-                <span id="match-btn-loading" class="hidden">
-                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                </span>
-            </button>
-        </div>
-    </div>
-
-    <!-- ─── Product Match Review Panel ─── -->
-    <div id="match-section" class="hidden mt-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+async function goToMatching() {
+    if (!parsedData?.combined_materials?.length) { alert('No materials to match'); return; }
+    
+    showStep('matching');
+    
+    const content = document.getElementById('match-content');
+    content.innerHTML = '<div class="text-center py-8"><svg class="animate-spin mx-auto h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><p class="mt-2 text-sm text-gray-500">Matching products...</p></div>';
+    
+    try {
+        const response = await fetch('/voice-to-quote/match-products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ combined_materials: parsedData.combined_materials })
+        });
         
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Matching failed');
+        
+        matchResults = result.results;
+        if (result.products) cachedProducts = result.products;
+        
+        renderMatchPanel(result);
+        
+        // Save match data to job
+        if (currentJob) {
+            fetch(`/voice-to-quote/jobs/${currentJob.id}/save-matches`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ match_data: matchResults })
+            });
+        }
+        
+    } catch (e) {
+        content.innerHTML = `<div class="text-center py-8 text-red-500"><p>Matching failed: ${e.message}</p><button onclick="goToMatching()" class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Retry</button></div>`;
+    }
+}
+
+function renderMatchPanel(result) {
+    const content = document.getElementById('match-content');
+    const stats = result.stats || {};
+    
+    content.innerHTML = `
         <!-- Match Header -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">Product Matching</h2>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Review matched products — confirm, override, or search for the right product</p>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Product Matching</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Review matches — click the pencil to search for the correct product</p>
                 </div>
-                <div class="flex items-center gap-3">
-                    <button onclick="syncProducts()" class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 inline-flex items-center gap-1.5" title="Re-sync products from your accounting system">
+                <div class="flex items-center gap-2">
+                    <button onclick="syncProducts()" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 inline-flex items-center gap-1">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                         Sync Products
                     </button>
-                    <div id="match-stats" class="flex items-center gap-2">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Progress bar -->
-            <div class="mt-4">
-                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    <span id="match-progress-label">Matching...</span>
-                    <span id="match-progress-pct">0%</span>
-                </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div id="match-progress-bar" class="h-2 rounded-full bg-indigo-600 transition-all" style="width: 0%"></div>
+                    ${stats.matched ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">${stats.matched} matched</span>` : ''}
+                    ${stats.review ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">${stats.review} review</span>` : ''}
+                    ${stats.unmatched ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">${stats.unmatched} unmatched</span>` : ''}
                 </div>
             </div>
         </div>
-
-        <!-- Match Results Table -->
+        
+        <!-- Match Table -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700">
                         <tr>
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-8">
-                                <input type="checkbox" id="match-select-all" onchange="toggleAllMatches(this.checked)" 
-                                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500">
+                                <input type="checkbox" checked onchange="toggleAllMatches(this.checked)" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600">
                             </th>
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Status</th>
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Parsed Item</th>
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Matched Product</th>
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Customer Description</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Customer Desc</th>
                             <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Qty</th>
-                            <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Unit Price</th>
+                            <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Price</th>
                             <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Total</th>
                         </tr>
                     </thead>
-                    <tbody id="match-results-body">
-                        <!-- Populated by JS -->
-                    </tbody>
+                    <tbody id="match-tbody"></tbody>
                     <tfoot class="bg-gray-50 dark:bg-gray-750 border-t border-gray-200 dark:border-gray-700">
                         <tr>
                             <td colspan="7" class="text-right px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Quote Total</td>
@@ -240,1133 +861,345 @@ Example: 'Okay so this is for a job reference called West Grove. Family room we 
                 </table>
             </div>
         </div>
-
-        <!-- Match Action Buttons -->
+        
+        <!-- Actions -->
         <div class="flex justify-between items-center">
-            <button onclick="backToResults()" class="px-4 py-2.5 text-gray-600 dark:text-gray-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all inline-flex items-center gap-2">
-                ← Back to Results
-            </button>
+            <button onclick="showStep('parsed')" class="px-4 py-2.5 text-gray-600 dark:text-gray-400 text-sm font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">← Back to Results</button>
             <div class="flex gap-3">
-                <button onclick="exportMatchedList()" class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                    Export Priced List
-                </button>
-                <button onclick="sendToQuoteBuilder()" id="send-quote-btn" class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 dark:focus:ring-green-800 transition-all inline-flex items-center gap-2">
+                <button onclick="exportMatchedList()" class="px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Export Priced CSV</button>
+                <button onclick="sendToQuoteBuilder()" class="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 inline-flex items-center gap-2">
                     Send to Quote Builder →
                 </button>
             </div>
         </div>
-    </div>
-
-    <!-- Error Section -->
-    <div id="error-section" class="hidden mt-6">
-        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <div class="flex items-start">
-                <svg class="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                </svg>
-                <p id="error-message" class="text-red-700 dark:text-red-300 text-sm"></p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-let parsedData = null;
-const isDark = () => document.documentElement.classList.contains('dark');
-
-// Floor plan upload handling
-const dropZone = document.getElementById('floor-plan-drop');
-const fileInput = document.getElementById('floor-plan-input');
-
-// ─── Transcription file drop/upload handling ────────────
-const txDropZone = document.getElementById('transcription-drop-zone');
-const txOverlay = document.getElementById('transcription-drop-overlay');
-const txFileInput = document.getElementById('transcription-file-input');
-const txTextarea = document.getElementById('transcription');
-let dragCounter = 0;
-
-// Drag events on the whole drop zone
-txDropZone.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    dragCounter++;
-    txOverlay.classList.remove('hidden');
-});
-txDropZone.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dragCounter--;
-    if (dragCounter === 0) txOverlay.classList.add('hidden');
-});
-txDropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-});
-txDropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    txOverlay.classList.add('hidden');
-    if (e.dataTransfer.files.length) {
-        handleTranscriptionFile(e.dataTransfer.files[0]);
-    }
-});
-
-// File input browse button
-txFileInput.addEventListener('change', () => {
-    if (txFileInput.files.length) handleTranscriptionFile(txFileInput.files[0]);
-});
-
-async function handleTranscriptionFile(file) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    const validExts = ['txt', 'pdf', 'md', 'docx'];
-    
-    if (!validExts.includes(ext)) {
-        alert('Unsupported file type. Please use .txt, .pdf, .md, or .docx files.');
-        return;
-    }
-    
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-        alert('File too large — maximum 10MB.');
-        return;
-    }
-    
-    // Show file info bar
-    document.getElementById('transcription-file-name').textContent = file.name;
-    document.getElementById('transcription-file-size').textContent = formatFileSize(file.size);
-    document.getElementById('transcription-file-info').classList.remove('hidden');
-    
-    // For .txt and .md — read directly in browser
-    if (ext === 'txt' || ext === 'md') {
-        const text = await file.text();
-        txTextarea.value = text;
-        return;
-    }
-    
-    // For .pdf and .docx — send to server for text extraction
-    txTextarea.value = 'Extracting text from ' + file.name + '...';
-    txTextarea.disabled = true;
-    
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('/voice-to-quote/extract-text', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const result = await response.json();
-        
-        if (!response.ok || result.error) {
-            throw new Error(result.error || 'Failed to extract text');
-        }
-        
-        txTextarea.value = result.text;
-    } catch (err) {
-        txTextarea.value = '';
-        document.getElementById('transcription-file-info').classList.add('hidden');
-        alert('Failed to extract text: ' + err.message);
-    } finally {
-        txTextarea.disabled = false;
-    }
-}
-
-function clearTranscriptionFile() {
-    txTextarea.value = '';
-    txFileInput.value = '';
-    document.getElementById('transcription-file-info').classList.add('hidden');
-}
-
-function formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-// ─── Floor plan upload handling ─────────────────────────
-
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20'); });
-dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20'); });
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('border-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20');
-    if (e.dataTransfer.files.length) {
-        fileInput.files = e.dataTransfer.files;
-        updateFloorPlanLabel(e.dataTransfer.files[0].name);
-    }
-});
-fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) updateFloorPlanLabel(fileInput.files[0].name);
-});
-
-function updateFloorPlanLabel(name) {
-    document.getElementById('floor-plan-label').innerHTML = `<span class="text-green-600 dark:text-green-400 font-medium">${name}</span> — <span class="text-gray-400 dark:text-gray-500 cursor-pointer" onclick="clearFloorPlan(event)">remove</span>`;
-}
-
-function clearFloorPlan(e) {
-    e.stopPropagation();
-    fileInput.value = '';
-    document.getElementById('floor-plan-label').innerHTML = 'Drop floor plan here or <span class="text-blue-600 dark:text-blue-400">browse</span>';
-}
-
-async function parseTranscription() {
-    const transcription = document.getElementById('transcription').value.trim();
-    if (!transcription) { alert('Please paste a transcription first'); return; }
-    
-    const btn = document.getElementById('parse-btn');
-    const btnText = document.getElementById('parse-btn-text');
-    const btnLoading = document.getElementById('parse-btn-loading');
-    
-    btn.disabled = true;
-    btnText.classList.add('hidden');
-    btnLoading.classList.remove('hidden');
-    document.getElementById('error-section').classList.add('hidden');
-    document.getElementById('results-section').classList.add('hidden');
-    
-    try {
-        const formData = new FormData();
-        const floorPlanFile = document.getElementById('floor-plan-input').files[0];
-        
-        let response;
-        if (floorPlanFile) {
-            formData.append('transcription', transcription);
-            formData.append('floor_plan', floorPlanFile);
-            response = await fetch('/voice-to-quote/parse', {
-                method: 'POST',
-                body: formData
-            });
-        } else {
-            response = await fetch('/voice-to-quote/parse', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transcription })
-            });
-        }
-        
-        const result = await response.json();
-        
-        if (!response.ok || result.error) {
-            throw new Error(result.error || 'Failed to parse transcription');
-        }
-        
-        parsedData = result.data;
-        renderResults(parsedData);
-        document.getElementById('results-section').classList.remove('hidden');
-        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
-        
-    } catch (err) {
-        document.getElementById('error-message').textContent = err.message;
-        document.getElementById('error-section').classList.remove('hidden');
-    } finally {
-        btn.disabled = false;
-        btnText.classList.remove('hidden');
-        btnLoading.classList.add('hidden');
-    }
-}
-
-function renderResults(data) {
-    document.getElementById('job-title').textContent = data.job?.title || 'Untitled Job';
-    document.getElementById('job-client').textContent = data.job?.client || '';
-    
-    const totalFlags = (data.rooms || []).reduce((sum, r) => sum + (r.flags?.length || 0), 0) + (data.global_flags?.length || 0);
-    document.getElementById('flag-count').textContent = `${totalFlags} flag${totalFlags !== 1 ? 's' : ''}`;
-    document.getElementById('room-count').textContent = `${(data.rooms || []).length} room${(data.rooms || []).length !== 1 ? 's' : ''}`;
-    
-    const defaults = document.getElementById('job-defaults');
-    defaults.innerHTML = '';
-    if (data.job?.default_wall_type) addBadge(defaults, `Walls: ${data.job.default_wall_type}`);
-    if (data.job?.default_finish) addBadge(defaults, `Finish: ${data.job.default_finish}`);
-    if (data.job?.default_back_box_depth) addBadge(defaults, `Box depth: ${data.job.default_back_box_depth}`);
-    
-    renderRooms(data.rooms || []);
-    renderCombined(data.combined_materials || []);
-    renderFlags(data);
-}
-
-function addBadge(container, text) {
-    const span = document.createElement('span');
-    span.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
-    span.textContent = text;
-    container.appendChild(span);
-}
-
-function renderRooms(rooms) {
-    const container = document.getElementById('view-rooms');
-    container.innerHTML = '';
-    
-    rooms.forEach((room, ri) => {
-        const card = document.createElement('div');
-        card.className = 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-4 overflow-hidden';
-        
-        const flagCount = room.flags?.length || 0;
-        const flagBadge = flagCount > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">${flagCount} flag${flagCount > 1 ? 's' : ''}</span>` : '';
-        
-        let html = `
-            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between cursor-pointer" onclick="toggleRoom(${ri})">
-                <div class="flex items-center gap-3">
-                    <svg id="room-chevron-${ri}" class="h-5 w-5 text-gray-400 dark:text-gray-500 transform rotate-0 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                    <h3 class="font-semibold text-gray-900 dark:text-white">${room.name}</h3>
-                    ${room.dimensions ? `<span class="text-xs text-gray-400 dark:text-gray-500">${room.dimensions.length}m × ${room.dimensions.width}m × ${room.dimensions.height}m</span>` : ''}
-                </div>
-                <div class="flex items-center gap-2">
-                    ${room.wall_type ? `<span class="text-xs text-gray-500 dark:text-gray-400">${room.wall_type}</span>` : ''}
-                    ${flagBadge}
-                </div>
-            </div>
-            <div id="room-body-${ri}" class="px-6 py-4">
-        `;
-        
-        // Accessories table — EDITABLE
-        if (room.accessories?.length) {
-            html += `
-                <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Accessories</h4>
-                <table class="w-full text-sm mb-6">
-                    <thead><tr class="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                        <th class="pb-2 pr-2 w-12">Qty</th>
-                        <th class="pb-2 pr-2">Description</th>
-                        <th class="pb-2 pr-2">Part No.</th>
-                        <th class="pb-2 pr-2">Back Box</th>
-                        <th class="pb-2 w-8"></th>
-                    </tr></thead>
-                    <tbody>
-            `;
-            room.accessories.forEach((acc, ai) => {
-                const hasFlag = !acc.part_number || (typeof acc.part_number === 'string' && acc.part_number.includes('FLAG'));
-                html += `<tr class="border-b border-gray-100 dark:border-gray-700/50 ${hasFlag ? 'bg-amber-50 dark:bg-amber-900/10' : ''}" id="acc-${ri}-${ai}">
-                    <td class="py-2 pr-2">
-                        <span class="editable font-medium text-gray-900 dark:text-white" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].quantity', 'quantity', ${ri}, ${ai})">${acc.quantity}</span>
-                    </td>
-                    <td class="py-2 pr-2">
-                        <span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].description', 'description', ${ri}, ${ai})">${acc.description || acc.type}</span>
-                    </td>
-                    <td class="py-2 pr-2">
-                        <span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].part_number', 'part_number', ${ri}, ${ai})">${acc.part_number || '<span class="text-amber-600 dark:text-amber-400">TBC</span>'}</span>
-                    </td>
-                    <td class="py-2 pr-2">
-                        <span class="editable text-xs text-gray-500 dark:text-gray-400" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].back_box', 'back_box', ${ri}, ${ai})">${acc.back_box || '—'}</span>
-                    </td>
-                    <td class="py-2">
-                        ${acc.notes ? `<span title="${acc.notes}" class="cursor-help text-gray-400 dark:text-gray-500">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        </span>` : ''}
-                    </td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-        }
-        
-        // Switching — EDITABLE
-        if (room.switching?.length) {
-            html += `<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Switching</h4>`;
-            room.switching.forEach((sw, si) => {
-                html += `<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-3 text-sm">
-                    <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">${sw.location} <span class="text-xs text-gray-400 dark:text-gray-500">(${sw.system})</span></div>`;
-                if (sw.components) {
-                    sw.components.forEach((c, ci) => {
-                        html += `<div class="text-xs text-gray-600 dark:text-gray-400 ml-4 flex items-center gap-1">
-                            <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].quantity', 'quantity')">${c.quantity}</span>× 
-                            <span class="editable font-mono text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].part_number', 'part_number')">${c.part_number}</span> — 
-                            <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].description', 'description')">${c.description}</span>
-                        </div>`;
-                    });
-                }
-                html += `<div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Back box: <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].back_box', 'back_box')">${sw.back_box || 'TBC'}</span></div>`;
-                if (sw.notes) html += `<div class="text-xs text-amber-600 dark:text-amber-400 mt-1">${sw.notes}</div>`;
-                html += '</div>';
-            });
-        }
-        
-        // Cable summary
-        if (room.cable_summary && Object.keys(room.cable_summary).length) {
-            html += `<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 mt-4">Cable</h4>
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">`;
-            for (const [type, info] of Object.entries(room.cable_summary)) {
-                const metres = typeof info === 'object' ? info.metres : info;
-                const calc = typeof info === 'object' ? info.calculation : '';
-                html += `<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-xs">
-                    <div class="font-medium text-gray-700 dark:text-gray-300">${type}</div>
-                    <div class="text-lg font-bold text-gray-900 dark:text-white">${metres}m</div>
-                    ${calc ? `<div class="text-gray-400 dark:text-gray-500 mt-0.5">${calc}</div>` : ''}
-                </div>`;
-            }
-            html += '</div>';
-        }
-        
-        // Room flags
-        if (room.flags?.length) {
-            html += `<h4 class="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2 mt-4">Flags</h4>`;
-            room.flags.forEach((flag, fi) => {
-                const msg = typeof flag === 'string' ? flag : flag.message;
-                const severity = typeof flag === 'object' ? flag.severity : 'amber';
-                const defaultVal = typeof flag === 'object' ? flag.default_value : null;
-                const bgColor = severity === 'red' ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800';
-                const textColor = severity === 'red' ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300';
-                
-                html += `<div class="flex items-start gap-3 ${bgColor} border rounded-lg p-3 mb-2">
-                    <svg class="h-4 w-4 ${textColor} mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    <div class="flex-1">
-                        <p class="${textColor} text-sm">${msg}</p>
-                        ${defaultVal ? `<p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Default: ${defaultVal}</p>` : ''}
-                        <input type="text" placeholder="Your answer..." 
-                            class="mt-2 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                            data-room="${ri}" data-flag="${fi}">
-                    </div>
-                </div>`;
-            });
-        }
-        
-        html += '</div>';
-        card.innerHTML = html;
-        container.appendChild(card);
-    });
-}
-
-function renderCombined(materials) {
-    const container = document.getElementById('view-combined');
-    if (!materials?.length) {
-        container.innerHTML = '<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center text-gray-400 dark:text-gray-500">No combined materials generated</div>';
-        return;
-    }
-    
-    let html = `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-gray-900 dark:text-white">Combined Supplier Materials List</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${materials.length} line items — click any cell to edit</p>
-            </div>
-            <table class="w-full text-sm">
-                <thead><tr class="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
-                    <th class="px-6 py-3">Part No.</th>
-                    <th class="px-6 py-3">Description</th>
-                    <th class="px-6 py-3 text-right">Qty</th>
-                    <th class="px-6 py-3">Unit</th>
-                </tr></thead>
-                <tbody>
     `;
-    materials.forEach((item, i) => {
-        html += `<tr class="border-b border-gray-100 dark:border-gray-700/50 ${i % 2 ? 'bg-gray-50 dark:bg-gray-700/20' : ''}">
-            <td class="px-6 py-3">
-                <span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].part_number', 'part_number')">${item.part_number || '—'}</span>
-            </td>
-            <td class="px-6 py-3">
-                <span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].description', 'description')">${item.description}</span>
-            </td>
-            <td class="px-6 py-3 text-right">
-                <span class="editable font-bold text-gray-900 dark:text-white" onclick="makeEditable(this, 'combined_materials[${i}].total_quantity', 'quantity')">${item.total_quantity}</span>
-            </td>
-            <td class="px-6 py-3 text-xs text-gray-500 dark:text-gray-400">${item.unit || 'each'}</td>
-        </tr>`;
-    });
-    html += '</tbody></table></div>';
-    container.innerHTML = html;
+    
+    renderMatchRows();
 }
 
-function renderFlags(data) {
-    const container = document.getElementById('view-flags');
-    let allFlags = [];
+function renderMatchRows() {
+    const tbody = document.getElementById('match-tbody');
+    if (!tbody || !matchResults) return;
     
-    (data.rooms || []).forEach(room => {
-        (room.flags || []).forEach(flag => {
-            const msg = typeof flag === 'string' ? flag : flag.message;
-            const severity = typeof flag === 'object' ? flag.severity : 'amber';
-            allFlags.push({ room: room.name, message: msg, severity });
-        });
-    });
-    (data.global_flags || []).forEach(flag => {
-        const msg = typeof flag === 'string' ? flag : flag.message;
-        const severity = typeof flag === 'object' ? flag.severity : 'amber';
-        allFlags.push({ room: 'Global', message: msg, severity });
-    });
-    
-    if (!allFlags.length) {
-        container.innerHTML = '<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 text-center"><p class="text-green-700 dark:text-green-300 font-medium">No flags — all items resolved</p></div>';
-        return;
-    }
-    
-    let html = '<div class="space-y-3">';
-    allFlags.forEach(f => {
-        const bgColor = f.severity === 'red' ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800';
-        const textColor = f.severity === 'red' ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300';
-        html += `<div class="${bgColor} border rounded-lg p-4 flex items-start gap-3">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">${f.room}</span>
-            <p class="${textColor} text-sm flex-1">${f.message}</p>
-            <input type="text" placeholder="Answer..." class="w-48 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
-        </div>`;
-    });
-    html += '</div>';
-    container.innerHTML = html;
-}
-
-function toggleRoom(index) {
-    const body = document.getElementById(`room-body-${index}`);
-    const chevron = document.getElementById(`room-chevron-${index}`);
-    body.classList.toggle('hidden');
-    chevron.classList.toggle('rotate-180');
-}
-
-function showView(view) {
-    ['rooms', 'combined', 'flags'].forEach(v => {
-        document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
-        const tab = document.getElementById(`tab-${v}`);
-        if (v === view) {
-            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white';
-        } else {
-            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600';
-        }
-    });
-}
-
-function exportSupplierList() {
-    if (!parsedData?.combined_materials?.length) { alert('No materials to export'); return; }
-    
-    let csv = 'Part Number,Description,Quantity,Unit\n';
-    parsedData.combined_materials.forEach(item => {
-        csv += `"${item.part_number || ''}","${item.description}",${item.total_quantity},"${item.unit || 'each'}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(parsedData.job?.title || 'materials').replace(/\s+/g, '_')}_supplier_list.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-let matchResults = null;
-let cachedProducts = null;  // Full product list for client-side searching
-
-// ─── Product Matching ────────────────────────────────────
-
-async function matchProducts() {
-    if (!parsedData?.combined_materials?.length) {
-        alert('No materials to match — parse a transcription first');
-        return;
-    }
-    
-    const btn = document.getElementById('match-btn');
-    const btnText = document.getElementById('match-btn-text');
-    const btnLoading = document.getElementById('match-btn-loading');
-    
-    btn.disabled = true;
-    btnText.textContent = 'Matching...';
-    btnLoading.classList.remove('hidden');
-    
-    try {
-        const response = await fetch('/voice-to-quote/match-products', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                combined_materials: parsedData.combined_materials
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(result.error || 'Matching failed');
-        }
-        
-        matchResults = result.results;
-        // Cache the full product list for client-side search
-        if (result.products) {
-            cachedProducts = result.products;
-        }
-        
-        renderMatchResults(result);
-        
-        // Show match section
-        document.getElementById('match-section').classList.remove('hidden');
-        document.getElementById('match-section').scrollIntoView({ behavior: 'smooth' });
-        
-    } catch (e) {
-        alert('Matching failed: ' + e.message);
-    } finally {
-        btn.disabled = false;
-        btnText.textContent = 'Match Products & Price';
-        btnLoading.classList.add('hidden');
-    }
-}
-
-async function syncProducts() {
-    const btn = event.target;
-    const origText = btn.textContent;
-    btn.textContent = 'Syncing...';
-    btn.disabled = true;
-    
-    try {
-        const response = await fetch('/voice-to-quote/sync-products', { method: 'POST' });
-        const result = await response.json();
-        
-        if (result.success) {
-            // Refresh cached products
-            const fetchResp = await fetch('/voice-to-quote/fetch-products?refresh=true');
-            const fetchResult = await fetchResp.json();
-            if (fetchResult.products) {
-                cachedProducts = fetchResult.products;
-            }
-            btn.textContent = `✓ ${result.count} products synced`;
-            setTimeout(() => { btn.textContent = origText; }, 3000);
-        } else {
-            btn.textContent = 'Sync failed';
-            setTimeout(() => { btn.textContent = origText; }, 3000);
-        }
-    } catch (e) {
-        btn.textContent = 'Sync failed';
-        setTimeout(() => { btn.textContent = origText; }, 3000);
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-function renderMatchResults(result) {
-    const tbody = document.getElementById('match-results-body');
-    const statsDiv = document.getElementById('match-stats');
-    
-    // Stats badges
-    const stats = result.stats || {};
-    statsDiv.innerHTML = '';
-    if (result.no_products) {
-        statsDiv.innerHTML = `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">No accounting system connected</span>`;
-    } else {
-        if (stats.matched) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">${stats.matched} matched</span>`;
-        if (stats.review) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">${stats.review} needs review</span>`;
-        if (stats.unmatched) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">${stats.unmatched} unmatched</span>`;
-    }
-    
-    // Progress
-    const confirmed = matchResults.filter(r => r.status === 'matched').length;
-    updateMatchProgress(confirmed, matchResults.length);
-    
-    // Table rows
-    tbody.innerHTML = '';
-    matchResults.forEach((item, i) => {
+    tbody.innerHTML = matchResults.map((item, i) => {
         const mat = item.material || {};
         const sel = item.selected;
         const price = sel?.product?.sale_price || 0;
         const qty = mat.total_quantity || 0;
-        const total = (price * qty).toFixed(2);
         
         const statusBadge = {
-            'matched': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">✓ Matched</span>',
-            'review': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">⚠ Review</span>',
-            'unmatched': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">✗ No match</span>'
+            'matched': '<span class="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">✓</span>',
+            'review': '<span class="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">⚠</span>',
+            'unmatched': '<span class="px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">✗</span>'
         }[item.status] || '';
         
-        const confidenceBar = sel ? `
-            <div class="mt-1 flex items-center gap-2">
-                <div class="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                    <div class="h-1.5 rounded-full ${sel.confidence >= 0.9 ? 'bg-green-500' : sel.confidence >= 0.7 ? 'bg-amber-500' : 'bg-red-500'}" style="width: ${Math.round(sel.confidence * 100)}%"></div>
-                </div>
-                <span class="text-xs text-gray-400">${Math.round(sel.confidence * 100)}%</span>
-            </div>
-        ` : '';
-        
-        const matchInfo = sel ? `
-            <div class="match-display" id="match-display-${i}">
-                <div class="flex items-center gap-1.5">
+        const matchCell = sel ? `
+            <div id="match-display-${i}" class="flex items-center gap-1.5">
+                <div>
                     <span class="font-mono text-xs text-indigo-600 dark:text-indigo-400">${sel.product?.code || '—'}</span>
-                    <button onclick="startProductSearch(${i})" class="text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400" title="Change product">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                    </button>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[180px]">${sel.product?.name || ''}</p>
                 </div>
-                <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate max-w-xs">${sel.product?.name || sel.product?.description || '—'}</p>
-                ${confidenceBar}
+                <button onclick="startProductSearch(${i})" class="text-gray-400 hover:text-indigo-500 p-0.5" title="Change">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
             </div>
         ` : `
-            <div class="match-display" id="match-display-${i}">
-                <button onclick="startProductSearch(${i})" class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center gap-1">
+            <div id="match-display-${i}">
+                <button onclick="startProductSearch(${i})" class="text-xs text-indigo-500 hover:text-indigo-700 inline-flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    Search products...
+                    Search...
                 </button>
             </div>
         `;
         
-        // Search input (hidden by default, shown on click)
-        const searchInput = `
-            <div id="product-search-${i}" class="hidden relative">
-                <input type="text" 
-                    id="product-search-input-${i}"
-                    class="w-full px-2 py-1.5 border border-indigo-400 dark:border-indigo-500 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    placeholder="Type part number or description..."
-                    oninput="searchProductsLive(${i}, this.value)"
-                    onkeydown="handleSearchKey(event, ${i})"
-                    onfocus="searchProductsLive(${i}, this.value)"
-                >
-                <div id="product-search-results-${i}" class="hidden absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
-                <button onclick="cancelProductSearch(${i})" class="absolute right-1.5 top-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-500">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-        `;
-        
-        // Dropdown for alternative matches
-        const altMatches = (item.matches || []).length > 1 ? `
-            <button onclick="showAlternatives(${i})" class="ml-2 text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 underline">
-                ${item.matches.length - 1} more
-            </button>
-        ` : '';
-        
-        const cleanDesc = item.clean_description || '';
-        
-        tbody.innerHTML += `
-            <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-750/50 match-row" data-index="${i}">
-                <td class="px-4 py-3">
-                    <input type="checkbox" class="match-checkbox rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500" 
-                        data-index="${i}" ${item.status !== 'unmatched' ? 'checked' : ''} onchange="updateMatchTotals()">
-                </td>
-                <td class="px-4 py-3">${statusBadge}</td>
-                <td class="px-4 py-3">
-                    <span class="font-mono text-xs text-gray-700 dark:text-gray-300">${mat.part_number || '—'}</span>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${mat.description || ''}</p>
-                </td>
-                <td class="px-4 py-3">
-                    <div class="flex items-center">
-                        ${matchInfo}
-                        ${altMatches}
-                    </div>
-                    ${searchInput}
-                    <div id="alternatives-${i}" class="hidden mt-2"></div>
-                </td>
-                <td class="px-4 py-3">
-                    <span class="editable text-xs text-gray-700 dark:text-gray-300 ${cleanDesc ? '' : 'italic text-gray-400'}" 
-                        onclick="makeCleanDescEditable(this, ${i})">${cleanDesc || 'Click to add'}</span>
-                </td>
-                <td class="text-right px-4 py-3 font-medium text-gray-900 dark:text-white">${qty}</td>
-                <td class="text-right px-4 py-3">
-                    <span class="editable text-gray-700 dark:text-gray-300" onclick="makePriceEditable(this, ${i})">
-                        ${price > 0 ? '£' + price.toFixed(2) : '—'}
-                    </span>
-                </td>
-                <td class="text-right px-4 py-3 font-semibold text-gray-900 dark:text-white match-total-cell">
-                    ${price > 0 ? '£' + total : '—'}
-                </td>
-            </tr>
-        `;
-    });
+        return `
+        <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-750/50">
+            <td class="px-4 py-3"><input type="checkbox" class="match-cb rounded border-gray-300 dark:border-gray-600 text-indigo-600" data-idx="${i}" ${item.status !== 'unmatched' ? 'checked' : ''} onchange="updateMatchTotal()"></td>
+            <td class="px-4 py-3">${statusBadge}</td>
+            <td class="px-4 py-3">
+                <span class="font-mono text-xs text-gray-600 dark:text-gray-400">${mat.part_number || '—'}</span>
+                <p class="text-xs text-gray-500 truncate max-w-[180px]">${mat.description || ''}</p>
+            </td>
+            <td class="px-4 py-3 relative">
+                ${matchCell}
+                <div id="product-search-${i}" class="hidden relative mt-1">
+                    <input type="text" id="psearch-${i}" class="w-full px-2 py-1.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-6" placeholder="Type part no. or description..." oninput="searchProducts(${i}, this.value)" onkeydown="if(event.key==='Escape')cancelSearch(${i});if(event.key==='Enter'){selectFirstResult(${i})}">
+                    <button onclick="cancelSearch(${i})" class="absolute right-1.5 top-1.5 text-gray-400 hover:text-gray-600"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                    <div id="psearch-results-${i}" class="hidden absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+                </div>
+            </td>
+            <td class="px-4 py-3"><span class="editable text-xs text-gray-700 dark:text-gray-300 ${item.clean_description ? '' : 'italic text-gray-400'}" onclick="editCleanDesc(this, ${i})">${item.clean_description || 'Click to add'}</span></td>
+            <td class="text-right px-4 py-3 font-medium text-gray-900 dark:text-white">${qty}</td>
+            <td class="text-right px-4 py-3"><span class="editable text-gray-700 dark:text-gray-300" onclick="editPrice(this, ${i})">${price > 0 ? '£' + price.toFixed(2) : '—'}</span></td>
+            <td class="text-right px-4 py-3 font-semibold text-gray-900 dark:text-white row-total">${price > 0 ? '£' + (price * qty).toFixed(2) : '—'}</td>
+        </tr>`;
+    }).join('');
     
-    updateMatchTotals();
+    updateMatchTotal();
 }
 
-function showAlternatives(index) {
-    const container = document.getElementById(`alternatives-${index}`);
-    if (!container.classList.contains('hidden')) {
-        container.classList.add('hidden');
-        return;
-    }
-    
-    const item = matchResults[index];
-    const alts = (item.matches || []).slice(1);
-    
-    container.innerHTML = alts.map((alt, j) => `
-        <div class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0"
-            onclick="selectAlternative(${index}, ${j + 1})">
-            <div>
-                <span class="font-mono text-xs text-gray-600 dark:text-gray-400">${alt.product?.code || '—'}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">${alt.product?.name || ''}</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-400">${Math.round(alt.confidence * 100)}%</span>
-                ${alt.product?.sale_price ? '<span class="text-xs font-medium text-gray-700 dark:text-gray-300">£' + alt.product.sale_price.toFixed(2) + '</span>' : ''}
-            </div>
-        </div>
-    `).join('');
-    
-    container.classList.remove('hidden');
-}
+// ─── Product Search ──────────────────────────────────────
 
-function selectAlternative(index, matchIndex) {
-    const item = matchResults[index];
-    const newMatch = item.matches[matchIndex];
-    
-    item.selected = newMatch;
-    item.status = 'matched';
-    
-    // Re-render the whole table (simpler than surgical DOM update)
-    renderMatchResults({ results: matchResults, stats: calculateStats() });
-}
+let _searchTimer = null;
 
-// ─── Product Search (type-ahead in match table) ──────────
-
-let searchDebounceTimer = null;
-
-function startProductSearch(index) {
-    // Hide the display, show the search input
-    const display = document.getElementById(`match-display-${index}`);
-    const search = document.getElementById(`product-search-${index}`);
-    if (display) display.classList.add('hidden');
-    if (search) {
-        search.classList.remove('hidden');
-        const input = document.getElementById(`product-search-input-${index}`);
-        if (input) {
-            // Pre-fill with current part number if available
-            const mat = matchResults[index]?.material;
-            input.value = mat?.part_number || '';
-            input.focus();
-            input.select();
-            // Trigger initial search if there's a value
-            if (input.value.length >= 2) {
-                searchProductsLive(index, input.value);
-            }
-        }
+function startProductSearch(i) {
+    document.getElementById(`match-display-${i}`)?.classList.add('hidden');
+    const search = document.getElementById(`product-search-${i}`);
+    search?.classList.remove('hidden');
+    const input = document.getElementById(`psearch-${i}`);
+    if (input) {
+        input.value = matchResults[i]?.material?.part_number || '';
+        input.focus();
+        input.select();
+        if (input.value.length >= 2) searchProducts(i, input.value);
     }
 }
 
-function cancelProductSearch(index) {
-    const display = document.getElementById(`match-display-${index}`);
-    const search = document.getElementById(`product-search-${index}`);
-    const results = document.getElementById(`product-search-results-${index}`);
-    if (display) display.classList.remove('hidden');
-    if (search) search.classList.add('hidden');
-    if (results) results.classList.add('hidden');
+function cancelSearch(i) {
+    document.getElementById(`match-display-${i}`)?.classList.remove('hidden');
+    document.getElementById(`product-search-${i}`)?.classList.add('hidden');
+    document.getElementById(`psearch-results-${i}`)?.classList.add('hidden');
 }
 
-function searchProductsLive(index, query) {
-    clearTimeout(searchDebounceTimer);
+function searchProducts(i, query) {
+    clearTimeout(_searchTimer);
+    const resultsDiv = document.getElementById(`psearch-results-${i}`);
+    if (query.length < 2) { resultsDiv?.classList.add('hidden'); return; }
     
-    const resultsDiv = document.getElementById(`product-search-results-${index}`);
-    if (!resultsDiv) return;
-    
-    if (query.length < 2) {
-        resultsDiv.classList.add('hidden');
-        return;
-    }
-    
-    searchDebounceTimer = setTimeout(() => {
-        const q = query.toLowerCase().trim();
+    _searchTimer = setTimeout(() => {
+        const q = query.toLowerCase();
         let matches = [];
         
-        // Client-side search through cached products (instant)
-        if (cachedProducts && cachedProducts.length) {
+        if (cachedProducts?.length) {
             matches = cachedProducts.filter(p => {
-                const code = (p.code || '').toLowerCase();
-                const name = (p.name || '').toLowerCase();
-                const desc = (p.description || '').toLowerCase();
-                const pdesc = (p.purchase_description || '').toLowerCase();
-                return code.includes(q) || name.includes(q) || desc.includes(q) || pdesc.includes(q);
+                return (p.code || '').toLowerCase().includes(q) ||
+                       (p.name || '').toLowerCase().includes(q) ||
+                       (p.description || '').toLowerCase().includes(q) ||
+                       (p.purchase_description || '').toLowerCase().includes(q);
             }).slice(0, 10);
         }
         
-        if (matches.length > 0) {
-            renderSearchResults(index, matches);
+        if (matches.length) {
+            renderProductResults(i, matches);
         } else {
-            // Fallback to server-side search if no client cache
-            fetchSearchResults(index, query);
+            // Fallback to server search
+            fetch(`/voice-to-quote/search-products?q=${encodeURIComponent(query)}&limit=10`)
+                .then(r => r.json())
+                .then(data => renderProductResults(i, data.results || []))
+                .catch(() => {});
         }
-    }, 150);  // 150ms debounce
+    }, 150);
 }
 
-async function fetchSearchResults(index, query) {
-    try {
-        const response = await fetch(`/voice-to-quote/search-products?q=${encodeURIComponent(query)}&limit=10`);
-        const data = await response.json();
-        renderSearchResults(index, data.results || []);
-    } catch (e) {
-        console.warn('Product search failed:', e);
-    }
-}
-
-function renderSearchResults(index, products) {
-    const resultsDiv = document.getElementById(`product-search-results-${index}`);
-    if (!resultsDiv) return;
+function renderProductResults(i, products) {
+    const div = document.getElementById(`psearch-results-${i}`);
+    if (!div) return;
     
     if (!products.length) {
-        resultsDiv.innerHTML = `<div class="px-3 py-2 text-xs text-gray-400 italic">No products found</div>`;
-        resultsDiv.classList.remove('hidden');
+        div.innerHTML = '<div class="px-3 py-2 text-xs text-gray-400 italic">No products found</div>';
+        div.classList.remove('hidden');
+        div._products = [];
         return;
     }
     
-    resultsDiv.innerHTML = products.map((p, j) => `
-        <div class="px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0 search-result-item"
-            onclick="selectSearchProduct(${index}, ${j})"
-            data-product-index="${j}">
-            <div class="flex items-center justify-between">
+    div._products = products;
+    div.innerHTML = products.map((p, j) => `
+        <div class="px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0" onclick="selectProduct(${i}, ${j})">
+            <div class="flex justify-between">
                 <span class="font-mono text-xs font-medium text-indigo-600 dark:text-indigo-400">${p.code || '—'}</span>
                 ${p.sale_price ? `<span class="text-xs font-medium text-gray-700 dark:text-gray-300">£${parseFloat(p.sale_price).toFixed(2)}</span>` : ''}
             </div>
-            <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">${p.name || p.description || ''}</p>
+            <p class="text-xs text-gray-500 truncate">${p.name || p.description || ''}</p>
         </div>
     `).join('');
-    
-    // Store products on the div for selection
-    resultsDiv._products = products;
-    resultsDiv.classList.remove('hidden');
+    div.classList.remove('hidden');
 }
 
-function selectSearchProduct(index, productIndex) {
-    const resultsDiv = document.getElementById(`product-search-results-${index}`);
-    const product = resultsDiv?._products?.[productIndex];
+function selectProduct(i, j) {
+    const div = document.getElementById(`psearch-results-${i}`);
+    const product = div?._products?.[j];
     if (!product) return;
     
-    // Update matchResults with the manually selected product
-    matchResults[index].selected = {
-        product: product,
-        confidence: 1.0,
-        match_type: 'manual_search'
-    };
-    matchResults[index].status = 'matched';
+    matchResults[i].selected = { product, confidence: 1.0, match_type: 'manual_search' };
+    matchResults[i].status = 'matched';
     
-    // Also tick the checkbox
-    const cb = document.querySelector(`.match-checkbox[data-index="${index}"]`);
+    const cb = document.querySelector(`.match-cb[data-idx="${i}"]`);
     if (cb) cb.checked = true;
     
-    // Re-render
-    renderMatchResults({ results: matchResults, stats: calculateStats() });
+    renderMatchRows();
 }
 
-function handleSearchKey(event, index) {
-    if (event.key === 'Escape') {
-        cancelProductSearch(index);
-    } else if (event.key === 'Enter') {
-        // Select first result
-        const resultsDiv = document.getElementById(`product-search-results-${index}`);
-        if (resultsDiv?._products?.length) {
-            selectSearchProduct(index, 0);
-        }
-    }
-}
-
-function calculateStats() {
-    return {
-        total: matchResults.length,
-        matched: matchResults.filter(r => r.status === 'matched').length,
-        review: matchResults.filter(r => r.status === 'review').length,
-        unmatched: matchResults.filter(r => r.status === 'unmatched').length,
-    };
+function selectFirstResult(i) {
+    const div = document.getElementById(`psearch-results-${i}`);
+    if (div?._products?.length) selectProduct(i, 0);
 }
 
 function toggleAllMatches(checked) {
-    document.querySelectorAll('.match-checkbox').forEach(cb => { cb.checked = checked; });
-    updateMatchTotals();
+    document.querySelectorAll('.match-cb').forEach(cb => { cb.checked = checked; });
+    updateMatchTotal();
 }
 
-function updateMatchTotals() {
+function updateMatchTotal() {
     let total = 0;
-    let confirmed = 0;
-    
-    document.querySelectorAll('.match-checkbox').forEach(cb => {
-        if (cb.checked) {
-            const idx = parseInt(cb.dataset.index);
-            const item = matchResults[idx];
-            const price = item?.selected?.product?.sale_price || 0;
-            const qty = item?.material?.total_quantity || 0;
-            total += price * qty;
-            confirmed++;
-        }
+    document.querySelectorAll('.match-cb:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.idx);
+        const item = matchResults[idx];
+        const price = item?.selected?.product?.sale_price || 0;
+        const qty = item?.material?.total_quantity || 0;
+        total += price * qty;
     });
-    
-    document.getElementById('match-total').textContent = total > 0 ? `£${total.toFixed(2)}` : '—';
-    updateMatchProgress(confirmed, matchResults.length);
+    const el = document.getElementById('match-total');
+    if (el) el.textContent = total > 0 ? `£${total.toFixed(2)}` : '—';
 }
 
-function updateMatchProgress(confirmed, total) {
-    const pct = total > 0 ? Math.round((confirmed / total) * 100) : 0;
-    document.getElementById('match-progress-bar').style.width = `${pct}%`;
-    document.getElementById('match-progress-pct').textContent = `${pct}%`;
-    document.getElementById('match-progress-label').textContent = `${confirmed} of ${total} items confirmed`;
-}
-
-function makeCleanDescEditable(span, index) {
+function editCleanDesc(span, i) {
     if (span.querySelector('input')) return;
-    const current = matchResults[index]?.clean_description || '';
-    
+    const current = matchResults[i]?.clean_description || '';
     const input = document.createElement('input');
-    input.type = 'text';
-    input.value = current;
-    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none w-full';
-    input.placeholder = 'e.g. 2.5mm Twin & Earth Cable';
-    
-    span.innerHTML = '';
-    span.appendChild(input);
-    input.focus();
-    
-    const save = () => {
-        const val = input.value.trim();
-        matchResults[index].clean_description = val;
-        span.textContent = val || 'Click to add';
-        if (!val) span.classList.add('italic', 'text-gray-400');
-        else span.classList.remove('italic', 'text-gray-400');
-        span.classList.add('edit-saved');
-        setTimeout(() => span.classList.remove('edit-saved'), 1000);
-    };
-    
+    input.type = 'text'; input.value = current;
+    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none w-full';
+    span.innerHTML = ''; span.appendChild(input); input.focus();
+    const save = () => { matchResults[i].clean_description = input.value.trim(); span.textContent = input.value.trim() || 'Click to add'; };
     input.addEventListener('blur', save);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { span.textContent = current || 'Click to add'; }
-    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { span.textContent = current || 'Click to add'; } });
 }
 
-function makePriceEditable(span, index) {
+function editPrice(span, i) {
     if (span.querySelector('input')) return;
-    const current = matchResults[index]?.selected?.product?.sale_price || 0;
-    
+    const current = matchResults[i]?.selected?.product?.sale_price || 0;
     const input = document.createElement('input');
-    input.type = 'number';
-    input.value = current || '';
-    input.step = '0.01';
-    input.min = '0';
-    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none w-20';
-    
-    span.innerHTML = '';
-    span.appendChild(input);
-    input.focus();
-    
+    input.type = 'number'; input.value = current || ''; input.step = '0.01'; input.min = '0';
+    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none w-20';
+    span.innerHTML = ''; span.appendChild(input); input.focus();
     const save = () => {
         const val = parseFloat(input.value) || 0;
-        // Update the price in matchResults
-        if (!matchResults[index].selected) {
-            matchResults[index].selected = { product: { sale_price: val }, confidence: 1.0, match_type: 'manual' };
-        } else {
-            matchResults[index].selected.product.sale_price = val;
-        }
+        if (!matchResults[i].selected) matchResults[i].selected = { product: { sale_price: val }, confidence: 1.0, match_type: 'manual' };
+        else matchResults[i].selected.product.sale_price = val;
         span.textContent = val > 0 ? `£${val.toFixed(2)}` : '—';
-        
         // Update row total
-        const qty = matchResults[index]?.material?.total_quantity || 0;
-        const totalCell = span.closest('tr').querySelector('.match-total-cell');
+        const qty = matchResults[i]?.material?.total_quantity || 0;
+        const totalCell = span.closest('tr').querySelector('.row-total');
         if (totalCell) totalCell.textContent = val > 0 ? `£${(val * qty).toFixed(2)}` : '—';
-        
-        updateMatchTotals();
-        span.classList.add('edit-saved');
-        setTimeout(() => span.classList.remove('edit-saved'), 1000);
+        updateMatchTotal();
     };
-    
     input.addEventListener('blur', save);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { span.textContent = current > 0 ? `£${current.toFixed(2)}` : '—'; }
-    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
 }
 
-function backToResults() {
-    document.getElementById('match-section').classList.add('hidden');
-    document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+async function syncProducts() {
+    try {
+        const response = await fetch('/voice-to-quote/sync-products', { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+            const fetchResp = await fetch('/voice-to-quote/fetch-products?refresh=true');
+            const fetchResult = await fetchResp.json();
+            if (fetchResult.products) cachedProducts = fetchResult.products;
+            alert(`Synced ${result.count} products`);
+        }
+    } catch (e) { alert('Sync failed'); }
+}
+
+// ─── Export & Send ───────────────────────────────────────
+
+function exportSupplierList() {
+    if (!parsedData?.combined_materials?.length) return;
+    let csv = 'Part Number,Description,Quantity,Unit\n';
+    parsedData.combined_materials.forEach(m => { csv += `"${m.part_number || ''}","${m.description}",${m.total_quantity},"${m.unit || 'each'}"\n`; });
+    downloadCSV(csv, 'supplier_list');
 }
 
 function exportMatchedList() {
-    if (!matchResults?.length) { alert('No matched items to export'); return; }
-    
-    let csv = 'Part Number,Product Code,Description,Customer Description,Qty,Unit Price,Total\n';
+    if (!matchResults?.length) return;
+    let csv = 'Part No,Product Code,Description,Customer Desc,Qty,Price,Total\n';
     matchResults.forEach((item, i) => {
-        const cb = document.querySelector(`.match-checkbox[data-index="${i}"]`);
+        const cb = document.querySelector(`.match-cb[data-idx="${i}"]`);
         if (!cb?.checked) return;
-        
-        const mat = item.material || {};
-        const sel = item.selected;
-        const price = sel?.product?.sale_price || 0;
-        const qty = mat.total_quantity || 0;
-        
-        csv += `"${mat.part_number || ''}","${sel?.product?.code || ''}","${mat.description || ''}","${item.clean_description || ''}",${qty},${price.toFixed(2)},${(price * qty).toFixed(2)}\n`;
+        const m = item.material || {}, sel = item.selected, price = sel?.product?.sale_price || 0, qty = m.total_quantity || 0;
+        csv += `"${m.part_number || ''}","${sel?.product?.code || ''}","${m.description || ''}","${item.clean_description || ''}",${qty},${price.toFixed(2)},${(price * qty).toFixed(2)}\n`;
     });
-    
+    downloadCSV(csv, 'priced_materials');
+}
+
+function downloadCSV(csv, name) {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(parsedData?.job?.title || 'quote').replace(/\s+/g, '_')}_priced_materials.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `${(currentJob?.title || name).replace(/\s+/g, '_')}_${name}.csv`;
+    a.click(); URL.revokeObjectURL(url);
 }
 
 async function sendToQuoteBuilder() {
-    if (!matchResults?.length) {
-        alert('Match products first before sending to Quote Builder');
-        return;
-    }
+    if (!matchResults?.length) { alert('Match products first'); return; }
     
-    // Collect checked items
     const confirmed = [];
-    document.querySelectorAll('.match-checkbox:checked').forEach(cb => {
-        const idx = parseInt(cb.dataset.index);
+    document.querySelectorAll('.match-cb:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.idx);
         const item = matchResults[idx];
-        const mat = item.material || {};
-        const sel = item.selected;
-        
+        const m = item.material || {}, sel = item.selected;
         confirmed.push({
-            product_code: sel?.product?.code || mat.part_number || '',
-            product_id: sel?.product?.id || '',
-            description: mat.description || '',
-            supplier_description: sel?.product?.purchase_description || mat.description || '',
-            clean_description: item.clean_description || mat.description || '',
-            quantity: mat.total_quantity || 0,
-            sale_price: sel?.product?.sale_price || 0,
-            source: 'voice_to_quote'
+            product_code: sel?.product?.code || m.part_number || '',
+            product_id: sel?.product?.id || '', description: m.description || '',
+            supplier_description: sel?.product?.purchase_description || m.description || '',
+            clean_description: item.clean_description || m.description || '',
+            quantity: m.total_quantity || 0, sale_price: sel?.product?.sale_price || 0,
         });
     });
     
-    if (!confirmed.length) {
-        alert('No items selected — tick at least one item to send');
-        return;
-    }
+    if (!confirmed.length) { alert('Select at least one item'); return; }
     
     try {
         const response = await fetch('/voice-to-quote/confirm-matches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ matches: confirmed })
         });
-        
         const result = await response.json();
-        
         if (result.success) {
-            alert(`✓ ${result.item_count} items ready for Quote Builder\nTotal value: £${result.total_value.toFixed(2)}\n\nQuote Builder integration coming next — items will be pushed directly into your quote.`);
-        } else {
-            alert('Failed: ' + (result.error || 'Unknown error'));
+            alert(`✓ ${result.item_count} items ready — £${result.total_value.toFixed(2)}\n\nQuote Builder integration coming next.`);
+            if (currentJob) {
+                fetch(`/voice-to-quote/jobs/${currentJob.id}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'quoted' })
+                });
+            }
         }
-    } catch (e) {
-        alert('Error sending to Quote Builder: ' + e.message);
-    }
+    } catch (e) { alert('Failed: ' + e.message); }
 }
 
-// ─── Inline Editing ─────────────────────────────────────
+// ─── Inline Editing ──────────────────────────────────────
 
 function makeEditable(span, dataPath, fieldType, roomIndex, accIndex) {
-    if (span.querySelector('input')) return; // Already editing
-    
+    if (span.querySelector('input')) return;
     const originalValue = span.textContent.trim();
-    const isQuantity = fieldType === 'quantity';
-    
+    const isQty = fieldType === 'quantity';
     const input = document.createElement('input');
-    input.type = isQuantity ? 'number' : 'text';
+    input.type = isQty ? 'number' : 'text';
     input.value = originalValue === '—' || originalValue === 'TBC' ? '' : originalValue;
-    input.className = 'inline-edit-input px-1.5 py-0.5 border border-blue-400 dark:border-blue-500 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none w-full';
-    if (isQuantity) { input.min = 0; input.step = 1; input.style.width = '60px'; }
-    
-    span.innerHTML = '';
-    span.appendChild(input);
-    input.focus();
-    input.select();
+    input.className = 'px-1.5 py-0.5 border border-blue-400 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none w-full';
+    if (isQty) { input.min = 0; input.step = 1; input.style.width = '60px'; }
+    span.innerHTML = ''; span.appendChild(input); input.focus(); input.select();
     
     const save = () => {
-        const newValue = input.value.trim();
-        span.innerHTML = newValue || (fieldType === 'part_number' ? '<span class="text-amber-600 dark:text-amber-400">TBC</span>' : '—');
-        
-        // Update parsedData
-        updateParsedData(dataPath, isQuantity ? Number(newValue) || 0 : newValue);
-        
-        // Log correction if value changed
-        if (newValue && newValue !== originalValue && originalValue !== '—' && originalValue !== 'TBC') {
-            logCorrection(fieldType, originalValue, newValue, roomIndex, accIndex);
+        const v = input.value.trim();
+        span.innerHTML = v || '—';
+        updateParsedData(dataPath, isQty ? Number(v) || 0 : v);
+        if (v && v !== originalValue && originalValue !== '—' && originalValue !== 'TBC') {
+            logCorrection(fieldType, originalValue, v, roomIndex, accIndex);
         }
-        
-        // Flash green to confirm save
+        // Auto-save to job
+        if (currentJob && parsedData) {
+            fetch(`/voice-to-quote/jobs/${currentJob.id}/save-parsed`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parsed_data: parsedData })
+            });
+        }
         span.classList.add('edit-saved');
         setTimeout(() => span.classList.remove('edit-saved'), 1000);
     };
-    
     input.addEventListener('blur', save);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { span.innerHTML = originalValue; }
-    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') span.innerHTML = originalValue; });
 }
 
 function updateParsedData(path, value) {
-    // Parse path like "rooms[0].accessories[1].part_number" and update parsedData
     try {
         const parts = path.match(/([^\[\].]+|\[\d+\])/g);
         let obj = parsedData;
@@ -1378,95 +1211,52 @@ function updateParsedData(path, value) {
         let lastKey = parts[parts.length - 1].replace(/[\[\]]/g, '');
         if (/^\d+$/.test(lastKey)) lastKey = parseInt(lastKey);
         obj[lastKey] = value;
-    } catch (e) {
-        console.warn('Failed to update parsed data:', path, e);
-    }
+    } catch (e) { console.warn('Update failed:', path, e); }
 }
 
-async function logCorrection(fieldType, originalValue, correctedValue, roomIndex, accIndex) {
+async function logCorrection(fieldType, original, corrected, roomIndex, accIndex) {
     try {
-        const roomName = roomIndex !== undefined ? parsedData.rooms?.[roomIndex]?.name : '';
-        const context = accIndex !== undefined ? parsedData.rooms?.[roomIndex]?.accessories?.[accIndex]?.description : '';
-        
-        const response = await fetch('/voice-to-quote/log-correction', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                field_type: fieldType,
-                original_value: originalValue,
-                corrected_value: correctedValue,
-                job_title: parsedData.job?.title || '',
-                room_name: roomName || '',
-                context: context || ''
-            })
+        const roomName = roomIndex !== undefined ? parsedData?.rooms?.[roomIndex]?.name : '';
+        await fetch('/voice-to-quote/log-correction', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ field_type: fieldType, original_value: original, corrected_value: corrected, job_title: currentJob?.title || '', room_name: roomName || '' })
         });
-        
-        const result = await response.json();
-        
-        // Show promotion prompt if threshold reached
-        if (result.should_promote && result.promotion_suggestion) {
-            showPromotionPrompt(result.promotion_suggestion);
-        }
-    } catch (e) {
-        console.warn('Failed to log correction:', e);
-    }
+    } catch (e) { /* silent */ }
 }
 
-function showPromotionPrompt(suggestion) {
-    const container = document.getElementById('results-section');
-    
-    const banner = document.createElement('div');
-    banner.className = 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 mb-4 flex items-center justify-between';
-    banner.innerHTML = `
-        <div class="flex items-center gap-3">
-            <svg class="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-            <p class="text-sm text-purple-700 dark:text-purple-300">${suggestion.message}</p>
-        </div>
-        <div class="flex gap-2 flex-shrink-0 ml-4">
-            <button onclick="promoteCorrection(${suggestion.correction_id}, '${suggestion.category}', '${suggestion.key}', '${suggestion.value}'); this.closest('.bg-purple-50, .dark\\:bg-purple-900\\/20').remove();" 
-                class="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
-                Yes, remember this
-            </button>
-            <button onclick="this.closest('.bg-purple-50, .dark\\:bg-purple-900\\/20').remove();" 
-                class="px-3 py-1.5 text-purple-600 dark:text-purple-400 text-xs font-medium hover:underline">
-                No thanks
-            </button>
-        </div>
-    `;
-    container.insertBefore(banner, container.firstChild);
+// ─── Utilities ───────────────────────────────────────────
+
+function formatTimeAgo(isoStr) {
+    if (!isoStr) return '';
+    const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
 }
 
-async function promoteCorrection(correctionId, category, key, value) {
-    try {
-        await fetch('/voice-to-quote/promote-correction', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ correction_id: correctionId, category, key, value })
-        });
-    } catch (e) {
-        console.warn('Failed to promote correction:', e);
-    }
+function formatCharCount(n) {
+    if (!n) return '';
+    if (n < 1000) return `${n} chars`;
+    return `${(n / 1000).toFixed(1)}k chars`;
+}
+
+function truncate(str, len) {
+    if (!str) return '';
+    return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 </script>
 
 <style>
-    .editable { 
-        cursor: pointer; 
-        border-bottom: 1px dashed transparent;
-        transition: border-color 0.15s;
-    }
-    .editable:hover { 
-        border-bottom-color: #3b82f6;
-    }
-    .inline-edit-input {
-        transition: none !important;
-    }
-    .edit-saved {
-        background-color: rgba(16, 185, 129, 0.15);
-        border-radius: 2px;
-        transition: background-color 1s ease;
-    }
+    .editable { cursor: pointer; border-bottom: 1px dashed transparent; transition: border-color 0.15s; }
+    .editable:hover { border-bottom-color: #3b82f6; }
+    .edit-saved { background-color: rgba(16, 185, 129, 0.15); border-radius: 2px; transition: background-color 1s ease; }
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 </style>
 {% endblock %}
+        alert('Please enter a longer transcription (at least 20 characters)');

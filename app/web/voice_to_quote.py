@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, render_template, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.user_preference import UserPreference, CorrectionLog, ProductCache
+from app.models.vtq_models import VTQJob, VTQTranscription
 from datetime import datetime, timedelta
 import anthropic
 import json
@@ -233,7 +234,7 @@ Return valid JSON matching this structure:
 @bp.route('/')
 @login_required
 def index():
-    """Voice-to-quote main page"""
+    """Voice-to-quote main page — shows jobs list"""
     return render_template('voice_to_quote/index.html')
 
 
@@ -242,6 +243,361 @@ def index():
 def teach_ai():
     """Teach AI page — chat interface for managing preferences"""
     return render_template('voice_to_quote/teach_ai.html')
+
+
+# ─────────────────────────────────────────────────────────
+# JOBS — CRUD for quoting jobs
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/jobs', methods=['GET'])
+@login_required
+def list_jobs():
+    """List all jobs for the current user, optionally filtered by status"""
+    status = request.args.get('status')
+    query = VTQJob.query.filter_by(user_id=current_user.id)
+    
+    if status:
+        query = query.filter_by(status=status)
+    
+    # Active jobs first (draft, parsed, matched), then by updated_at desc
+    jobs = query.order_by(
+        db.case(
+            (VTQJob.status == 'draft', 1),
+            (VTQJob.status == 'parsed', 2),
+            (VTQJob.status == 'matched', 3),
+            (VTQJob.status == 'quoted', 4),
+            else_=5
+        ),
+        VTQJob.updated_at.desc()
+    ).all()
+    
+    return jsonify({
+        'success': True,
+        'jobs': [j.to_dict(include_transcriptions=True) for j in jobs]
+    })
+
+
+@bp.route('/jobs', methods=['POST'])
+@login_required
+def create_job():
+    """Create a new job"""
+    data = request.get_json() or {}
+    title = data.get('title', '').strip()
+    
+    if not title:
+        return jsonify({'error': 'Job title is required'}), 400
+    
+    job = VTQJob(
+        user_id=current_user.id,
+        title=title,
+        client_name=data.get('client_name', '').strip() or None,
+        reference=data.get('reference', '').strip() or None,
+        accounting_project_id=data.get('accounting_project_id'),
+        accounting_project_name=data.get('accounting_project_name'),
+        accounting_source=data.get('accounting_source'),
+        notes=data.get('notes', '').strip() or None,
+        status='draft'
+    )
+    
+    db.session.add(job)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'job': job.to_dict(include_transcriptions=True)
+    }), 201
+
+
+@bp.route('/jobs/<int:job_id>', methods=['GET'])
+@login_required
+def get_job(job_id):
+    """Get a single job with transcriptions and parsed data"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify({
+        'success': True,
+        'job': job.to_dict(include_transcriptions=True, include_parsed=True)
+    })
+
+
+@bp.route('/jobs/<int:job_id>', methods=['PUT'])
+@login_required
+def update_job(job_id):
+    """Update job details"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    
+    if 'title' in data:
+        job.title = data['title'].strip()
+    if 'client_name' in data:
+        job.client_name = data['client_name'].strip() or None
+    if 'reference' in data:
+        job.reference = data['reference'].strip() or None
+    if 'notes' in data:
+        job.notes = data['notes'].strip() or None
+    if 'status' in data:
+        job.status = data['status']
+    if 'accounting_project_id' in data:
+        job.accounting_project_id = data['accounting_project_id']
+        job.accounting_project_name = data.get('accounting_project_name')
+        job.accounting_source = data.get('accounting_source')
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'job': job.to_dict(include_transcriptions=True)
+    })
+
+
+@bp.route('/jobs/<int:job_id>', methods=['DELETE'])
+@login_required
+def delete_job(job_id):
+    """Delete a job and all its transcriptions"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    db.session.delete(job)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+
+# ─────────────────────────────────────────────────────────
+# TRANSCRIPTIONS — Add/remove transcriptions within a job
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/jobs/<int:job_id>/transcriptions', methods=['POST'])
+@login_required
+def add_transcription(job_id):
+    """Add a transcription to a job"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    text = data.get('text', '').strip()
+    
+    if not text or len(text) < 20:
+        return jsonify({'error': 'Transcription too short — please provide more detail'}), 400
+    
+    transcription = VTQTranscription(
+        job_id=job.id,
+        user_id=current_user.id,
+        title=data.get('title', '').strip() or None,
+        text=text,
+        source_filename=data.get('source_filename')
+    )
+    
+    db.session.add(transcription)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'transcription': transcription.to_dict(),
+        'job': job.to_dict(include_transcriptions=True)
+    }), 201
+
+
+@bp.route('/jobs/<int:job_id>/transcriptions/<int:trans_id>', methods=['PUT'])
+@login_required
+def update_transcription(job_id, trans_id):
+    """Update a transcription's text or title"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    trans = VTQTranscription.query.filter_by(id=trans_id, job_id=job.id).first()
+    if not trans:
+        return jsonify({'error': 'Transcription not found'}), 404
+    
+    data = request.get_json() or {}
+    if 'text' in data:
+        trans.text = data['text'].strip()
+    if 'title' in data:
+        trans.title = data['title'].strip() or None
+    
+    db.session.commit()
+    
+    return jsonify({'success': True, 'transcription': trans.to_dict()})
+
+
+@bp.route('/jobs/<int:job_id>/transcriptions/<int:trans_id>', methods=['DELETE'])
+@login_required
+def delete_transcription(job_id, trans_id):
+    """Delete a single transcription from a job"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    trans = VTQTranscription.query.filter_by(id=trans_id, job_id=job.id).first()
+    if not trans:
+        return jsonify({'error': 'Transcription not found'}), 404
+    
+    db.session.delete(trans)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'job': job.to_dict(include_transcriptions=True)
+    })
+
+
+@bp.route('/jobs/<int:job_id>/parse', methods=['POST'])
+@login_required
+def parse_job(job_id):
+    """Parse all unparsed transcriptions in a job (or re-parse all).
+    
+    Combines all transcription texts and sends to Claude as one parse.
+    Saves parsed result to the job.
+    """
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    parse_all = data.get('parse_all', True)  # Default: parse all transcriptions together
+    
+    transcriptions = job.transcriptions.all()
+    if not transcriptions:
+        return jsonify({'error': 'No transcriptions to parse'}), 400
+    
+    # Combine transcription texts
+    if parse_all:
+        texts_to_parse = transcriptions
+    else:
+        texts_to_parse = [t for t in transcriptions if not t.is_parsed]
+        if not texts_to_parse:
+            return jsonify({'error': 'All transcriptions already parsed'}), 400
+    
+    combined_text = ""
+    for t in texts_to_parse:
+        label = t.title or f"Recording {t.id}"
+        combined_text += f"\n--- {label} ---\n{t.text}\n"
+    
+    # Build prompt and call Claude (reuse existing logic)
+    knowledge_base = get_knowledge_base()
+    if not knowledge_base:
+        return jsonify({'error': 'Knowledge base not found — contact support'}), 500
+    
+    user_preferences_text = get_user_preferences_formatted(current_user.id)
+    user_products = get_user_products(current_user.id)
+    
+    system_prompt = build_system_prompt(knowledge_base, user_preferences_text, user_products, False)
+    
+    user_content = [{
+        "type": "text",
+        "text": f"""Parse this site visit transcription into a structured materials list:
+
+---
+{combined_text}
+---
+
+Return the full structured JSON output with all materials, quantities, cable estimates, and flags.
+Return ONLY valid JSON — no markdown, no backticks, no explanation before or after."""
+    }]
+    
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'Claude API key not configured'}), 500
+    
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=8000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}]
+        )
+        
+        response_text = ""
+        for block in message.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+        
+        response_text = response_text.strip()
+        if response_text.startswith('```'):
+            response_text = response_text.split('\n', 1)[1]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+        
+        parsed_data = json.loads(response_text)
+        
+        # Save to job
+        job.set_parsed_data(parsed_data)
+        job.parsed_at = datetime.utcnow()
+        job.status = 'parsed'
+        
+        # Mark transcriptions as parsed
+        now = datetime.utcnow()
+        for t in texts_to_parse:
+            t.is_parsed = True
+            t.parsed_at = now
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'data': parsed_data,
+            'job': job.to_dict(include_transcriptions=True),
+            'token_usage': {
+                'input': message.usage.input_tokens,
+                'output': message.usage.output_tokens
+            }
+        })
+    
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Claude response as JSON: {e}")
+        return jsonify({'error': 'AI returned invalid format — please try again'}), 500
+    except anthropic.APIError as e:
+        logger.error(f"Claude API error: {e}")
+        return jsonify({'error': f'AI service error: {str(e)}'}), 500
+    except Exception as e:
+        logger.error(f"Parse job error: {e}", exc_info=True)
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+
+
+@bp.route('/jobs/<int:job_id>/save-parsed', methods=['POST'])
+@login_required
+def save_parsed_data(job_id):
+    """Save edited parsed data back to the job (after inline edits)"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    parsed = data.get('parsed_data')
+    if parsed:
+        job.set_parsed_data(parsed)
+        db.session.commit()
+    
+    return jsonify({'success': True})
+
+
+@bp.route('/jobs/<int:job_id>/save-matches', methods=['POST'])
+@login_required
+def save_match_data(job_id):
+    """Save product match results to the job"""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    matches = data.get('match_data')
+    if matches:
+        job.set_match_data(matches)
+        job.matched_at = datetime.utcnow()
+        job.status = 'matched'
+        db.session.commit()
+    
+    return jsonify({'success': True})
 
 
 @bp.route('/parse', methods=['POST'])
