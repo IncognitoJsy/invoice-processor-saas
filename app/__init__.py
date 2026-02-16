@@ -134,7 +134,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth
+    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth, voice_to_quote
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
