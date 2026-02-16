@@ -1,3 +1,3 @@
-web: gunicorn wsgi:app --workers 4 --threads 4 --timeout 120
+web: flask db upgrade && gunicorn wsgi:app --workers 4 --threads 4 --timeout 120
 worker: celery -A app.celery worker --loglevel=info
 beat: celery -A app.celery beat --loglevel=info
