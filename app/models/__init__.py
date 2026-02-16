@@ -10,6 +10,7 @@ from app.models.part_number_correction import PartNumberCorrection
 from app.models.queued_invoice import QueuedInvoice
 from app.models.email_connection import EmailConnection, SupplierFilter
 from app.models.project import Project, ProjectDocument, ProjectMaterial, ProjectLabour, SupplierQuoteRequest
+from app.models.user_preference import UserPreference, CorrectionLog
 from app.models.takeoff import (
     TakeoffRoom, TakeoffSymbolDetection, TakeoffSymbolTemplate,
     TakeoffCableRun, TakeoffArea

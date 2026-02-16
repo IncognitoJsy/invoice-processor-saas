@@ -1,0 +1,341 @@
+{% extends "base/layout.html" %}
+
+{% block title %}Teach AI — GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center gap-3 mb-2">
+            <a href="{{ url_for('voice_to_quote.index') }}" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Teach AI</h1>
+        </div>
+        <p class="text-gray-600 dark:text-gray-400">Tell the AI how you work — your preferred brands, products, heights, circuits. It'll remember for every future quote.</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Chat Panel (2/3 width) -->
+        <div class="lg:col-span-2">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col" style="height: 70vh;">
+                
+                <!-- Chat Messages -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    
+                    <!-- Welcome message -->
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 max-w-lg">
+                            <p class="text-sm text-gray-700 dark:text-gray-300">Hey! I'm your Teach AI assistant. Tell me how you like to work and I'll remember it for all your future quotes.</p>
+                            <p class="text-sm text-gray-700 dark:text-gray-300 mt-2">Try things like:</p>
+                            <ul class="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-1">
+                                <li>"I always use BG Nexus for sockets"</li>
+                                <li>"My default downlight is Aurora EN-DE52BZ/40"</li>
+                                <li>"I mount sockets at 300mm not 450"</li>
+                                <li>"What do you know about my setup?"</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="border-t border-gray-200 dark:border-gray-700 p-4">
+                    <div class="flex gap-3">
+                        <input 
+                            type="text" 
+                            id="chat-input" 
+                            placeholder="Tell me your preferences..."
+                            class="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+                        >
+                        <button 
+                            id="send-btn"
+                            onclick="sendMessage()"
+                            class="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Preferences Sidebar (1/3 width) -->
+        <div class="lg:col-span-1">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6" style="height: 70vh; overflow-y: auto;">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Your Preferences</h2>
+                    <button onclick="loadPreferences()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Refresh</button>
+                </div>
+                
+                <div id="prefs-loading" class="text-center py-8">
+                    <svg class="animate-spin h-6 w-6 text-gray-400 mx-auto" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                </div>
+                
+                <div id="prefs-empty" class="hidden text-center py-8">
+                    <p class="text-gray-400 dark:text-gray-500 text-sm">No preferences yet — start chatting to teach the AI!</p>
+                </div>
+                
+                <div id="prefs-list" class="hidden space-y-2">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let chatHistory = [];
+
+async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    const sendBtn = document.getElementById('send-btn');
+    sendBtn.disabled = true;
+    input.disabled = true;
+    input.value = '';
+    
+    // Add user message to chat
+    addChatMessage('user', message);
+    chatHistory.push({ role: 'user', content: message });
+    
+    // Add typing indicator
+    const typingId = addTypingIndicator();
+    
+    try {
+        const response = await fetch('/voice-to-quote/teach/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                history: chatHistory
+            })
+        });
+        
+        const result = await response.json();
+        
+        // Remove typing indicator
+        removeTypingIndicator(typingId);
+        
+        if (!response.ok || result.error) {
+            addChatMessage('assistant', 'Sorry, something went wrong. Please try again.');
+        } else {
+            addChatMessage('assistant', result.response);
+            chatHistory.push({ role: 'assistant', content: result.response });
+            
+            // Show action confirmations
+            if (result.actions_applied?.length) {
+                const actionSummary = result.actions_applied.map(a => {
+                    if (a.action === 'added') return `✅ Added: ${a.key} → ${a.value}`;
+                    if (a.action === 'updated') return `✏️ Updated: ${a.key} → ${a.value}`;
+                    if (a.action === 'removed') return `🗑️ Removed: ${a.key}`;
+                    return `${a.action}: ${a.key}`;
+                }).join('\n');
+                addActionBadges(result.actions_applied);
+                
+                // Refresh preferences sidebar
+                loadPreferences();
+            }
+        }
+    } catch (err) {
+        removeTypingIndicator(typingId);
+        addChatMessage('assistant', 'Connection error — please check your internet and try again.');
+    }
+    
+    sendBtn.disabled = false;
+    input.disabled = false;
+    input.focus();
+}
+
+function addChatMessage(role, text) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-3' + (role === 'user' ? ' justify-end' : '');
+    
+    if (role === 'assistant') {
+        div.innerHTML = `
+            <div class="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+            </div>
+            <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 max-w-lg">
+                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">${escapeHtml(text)}</p>
+            </div>`;
+    } else {
+        div.innerHTML = `
+            <div class="bg-blue-600 text-white rounded-lg p-4 max-w-lg">
+                <p class="text-sm whitespace-pre-wrap">${escapeHtml(text)}</p>
+            </div>`;
+    }
+    
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function addActionBadges(actions) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-3 ml-11';
+    
+    let badges = actions.map(a => {
+        if (a.action === 'added') return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">✅ Saved: ${escapeHtml(a.key)}</span>`;
+        if (a.action === 'updated') return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">✏️ Updated: ${escapeHtml(a.key)}</span>`;
+        if (a.action === 'removed') return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">🗑️ Removed: ${escapeHtml(a.key)}</span>`;
+        return '';
+    }).join(' ');
+    
+    div.innerHTML = `<div class="flex flex-wrap gap-2">${badges}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function addTypingIndicator() {
+    const container = document.getElementById('chat-messages');
+    const id = 'typing-' + Date.now();
+    const div = document.createElement('div');
+    div.id = id;
+    div.className = 'flex items-start gap-3';
+    div.innerHTML = `
+        <div class="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+        </div>
+        <div class="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-3">
+            <div class="flex gap-1">
+                <span class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                <span class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                <span class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+            </div>
+        </div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return id;
+}
+
+function removeTypingIndicator(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ─── Preferences Sidebar ────────────────────────────────
+
+async function loadPreferences() {
+    const loading = document.getElementById('prefs-loading');
+    const empty = document.getElementById('prefs-empty');
+    const list = document.getElementById('prefs-list');
+    
+    loading.classList.remove('hidden');
+    empty.classList.add('hidden');
+    list.classList.add('hidden');
+    
+    try {
+        const response = await fetch('/voice-to-quote/preferences');
+        const result = await response.json();
+        
+        loading.classList.add('hidden');
+        
+        if (!result.preferences?.length) {
+            empty.classList.remove('hidden');
+            return;
+        }
+        
+        // Group by category
+        const grouped = {};
+        result.preferences.forEach(p => {
+            if (!grouped[p.category]) grouped[p.category] = [];
+            grouped[p.category].push(p);
+        });
+        
+        const categoryLabels = {
+            'brand_default': 'Brand Defaults',
+            'product_swap': 'Product Swaps',
+            'mounting_height': 'Mounting Heights',
+            'circuit_preference': 'Circuit Preferences',
+            'supplier': 'Supplier Preferences',
+            'cable_preference': 'Cable Preferences',
+            'general': 'General',
+        };
+        
+        const categoryColors = {
+            'brand_default': 'blue',
+            'product_swap': 'purple',
+            'mounting_height': 'green',
+            'circuit_preference': 'amber',
+            'supplier': 'indigo',
+            'cable_preference': 'orange',
+            'general': 'gray',
+        };
+        
+        let html = '';
+        for (const [cat, prefs] of Object.entries(grouped)) {
+            const label = categoryLabels[cat] || cat.replace('_', ' ');
+            const color = categoryColors[cat] || 'gray';
+            
+            html += `<div class="mb-4">
+                <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">${label}</h3>`;
+            
+            prefs.forEach(p => {
+                html += `<div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5 mb-1.5 group">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">${escapeHtml(p.key.replace(/_/g, ' '))}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(p.value)}</div>
+                    </div>
+                    <button onclick="deletePreference(${p.id})" class="ml-2 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Remove">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>`;
+            });
+            
+            html += '</div>';
+        }
+        
+        list.innerHTML = html;
+        list.classList.remove('hidden');
+        
+    } catch (err) {
+        loading.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
+async function deletePreference(prefId) {
+    if (!confirm('Remove this preference?')) return;
+    
+    try {
+        await fetch(`/voice-to-quote/preferences/${prefId}`, { method: 'DELETE' });
+        loadPreferences();
+    } catch (err) {
+        alert('Failed to delete preference');
+    }
+}
+
+// Load preferences on page load
+document.addEventListener('DOMContentLoaded', loadPreferences);
+</script>
+{% endblock %}
