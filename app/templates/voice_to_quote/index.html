@@ -427,45 +427,61 @@ function renderRooms(rooms) {
             <div id="room-body-${ri}" class="px-6 py-4">
         `;
         
-        // Accessories table
+        // Accessories table — EDITABLE
         if (room.accessories?.length) {
             html += `
                 <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Accessories</h4>
                 <table class="w-full text-sm mb-6">
                     <thead><tr class="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                        <th class="pb-2 pr-4">Qty</th>
-                        <th class="pb-2 pr-4">Description</th>
-                        <th class="pb-2 pr-4">Part No.</th>
-                        <th class="pb-2 pr-4">Back Box</th>
-                        <th class="pb-2">Notes</th>
+                        <th class="pb-2 pr-2 w-12">Qty</th>
+                        <th class="pb-2 pr-2">Description</th>
+                        <th class="pb-2 pr-2">Part No.</th>
+                        <th class="pb-2 pr-2">Back Box</th>
+                        <th class="pb-2 w-8"></th>
                     </tr></thead>
                     <tbody>
             `;
-            room.accessories.forEach(acc => {
+            room.accessories.forEach((acc, ai) => {
                 const hasFlag = !acc.part_number || (typeof acc.part_number === 'string' && acc.part_number.includes('FLAG'));
-                html += `<tr class="border-b border-gray-100 dark:border-gray-700/50 ${hasFlag ? 'bg-amber-50 dark:bg-amber-900/10' : ''}">
-                    <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white">${acc.quantity}</td>
-                    <td class="py-2 pr-4 text-gray-700 dark:text-gray-300">${acc.description || acc.type}</td>
-                    <td class="py-2 pr-4 font-mono text-xs text-gray-700 dark:text-gray-300">${acc.part_number || '<span class="text-amber-600 dark:text-amber-400">TBC</span>'}</td>
-                    <td class="py-2 pr-4 text-xs text-gray-500 dark:text-gray-400">${acc.back_box || '—'}</td>
-                    <td class="py-2 text-xs text-gray-400 dark:text-gray-500">${acc.notes || ''}</td>
+                html += `<tr class="border-b border-gray-100 dark:border-gray-700/50 ${hasFlag ? 'bg-amber-50 dark:bg-amber-900/10' : ''}" id="acc-${ri}-${ai}">
+                    <td class="py-2 pr-2">
+                        <span class="editable font-medium text-gray-900 dark:text-white" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].quantity', 'quantity', ${ri}, ${ai})">${acc.quantity}</span>
+                    </td>
+                    <td class="py-2 pr-2">
+                        <span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].description', 'description', ${ri}, ${ai})">${acc.description || acc.type}</span>
+                    </td>
+                    <td class="py-2 pr-2">
+                        <span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].part_number', 'part_number', ${ri}, ${ai})">${acc.part_number || '<span class="text-amber-600 dark:text-amber-400">TBC</span>'}</span>
+                    </td>
+                    <td class="py-2 pr-2">
+                        <span class="editable text-xs text-gray-500 dark:text-gray-400" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].back_box', 'back_box', ${ri}, ${ai})">${acc.back_box || '—'}</span>
+                    </td>
+                    <td class="py-2">
+                        ${acc.notes ? `<span title="${acc.notes}" class="cursor-help text-gray-400 dark:text-gray-500">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </span>` : ''}
+                    </td>
                 </tr>`;
             });
             html += '</tbody></table>';
         }
         
-        // Switching
+        // Switching — EDITABLE
         if (room.switching?.length) {
             html += `<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Switching</h4>`;
-            room.switching.forEach(sw => {
+            room.switching.forEach((sw, si) => {
                 html += `<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-3 text-sm">
                     <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">${sw.location} <span class="text-xs text-gray-400 dark:text-gray-500">(${sw.system})</span></div>`;
                 if (sw.components) {
-                    sw.components.forEach(c => {
-                        html += `<div class="text-xs text-gray-600 dark:text-gray-400 ml-4">${c.quantity}× <span class="font-mono text-gray-700 dark:text-gray-300">${c.part_number}</span> — ${c.description}</div>`;
+                    sw.components.forEach((c, ci) => {
+                        html += `<div class="text-xs text-gray-600 dark:text-gray-400 ml-4 flex items-center gap-1">
+                            <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].quantity', 'quantity')">${c.quantity}</span>× 
+                            <span class="editable font-mono text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].part_number', 'part_number')">${c.part_number}</span> — 
+                            <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].components[${ci}].description', 'description')">${c.description}</span>
+                        </div>`;
                     });
                 }
-                html += `<div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Back box: ${sw.back_box || 'TBC'}</div>`;
+                html += `<div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Back box: <span class="editable" onclick="makeEditable(this, 'rooms[${ri}].switching[${si}].back_box', 'back_box')">${sw.back_box || 'TBC'}</span></div>`;
                 if (sw.notes) html += `<div class="text-xs text-amber-600 dark:text-amber-400 mt-1">${sw.notes}</div>`;
                 html += '</div>';
             });
@@ -529,7 +545,7 @@ function renderCombined(materials) {
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <h3 class="font-semibold text-gray-900 dark:text-white">Combined Supplier Materials List</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${materials.length} line items — send this to your supplier for pricing</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${materials.length} line items — click any cell to edit</p>
             </div>
             <table class="w-full text-sm">
                 <thead><tr class="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
@@ -542,9 +558,15 @@ function renderCombined(materials) {
     `;
     materials.forEach((item, i) => {
         html += `<tr class="border-b border-gray-100 dark:border-gray-700/50 ${i % 2 ? 'bg-gray-50 dark:bg-gray-700/20' : ''}">
-            <td class="px-6 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">${item.part_number || '—'}</td>
-            <td class="px-6 py-3 text-gray-700 dark:text-gray-300">${item.description}</td>
-            <td class="px-6 py-3 text-right font-bold text-gray-900 dark:text-white">${item.total_quantity}</td>
+            <td class="px-6 py-3">
+                <span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].part_number', 'part_number')">${item.part_number || '—'}</span>
+            </td>
+            <td class="px-6 py-3">
+                <span class="editable text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'combined_materials[${i}].description', 'description')">${item.description}</span>
+            </td>
+            <td class="px-6 py-3 text-right">
+                <span class="editable font-bold text-gray-900 dark:text-white" onclick="makeEditable(this, 'combined_materials[${i}].total_quantity', 'quantity')">${item.total_quantity}</span>
+            </td>
             <td class="px-6 py-3 text-xs text-gray-500 dark:text-gray-400">${item.unit || 'each'}</td>
         </tr>`;
     });
@@ -627,5 +649,152 @@ function exportSupplierList() {
 function sendToQuoteBuilder() {
     alert('Send to Quote Builder — coming soon. This will push confirmed materials into your existing Quote Builder with pricing.');
 }
+
+// ─── Inline Editing ─────────────────────────────────────
+
+function makeEditable(span, dataPath, fieldType, roomIndex, accIndex) {
+    if (span.querySelector('input')) return; // Already editing
+    
+    const originalValue = span.textContent.trim();
+    const isQuantity = fieldType === 'quantity';
+    
+    const input = document.createElement('input');
+    input.type = isQuantity ? 'number' : 'text';
+    input.value = originalValue === '—' || originalValue === 'TBC' ? '' : originalValue;
+    input.className = 'inline-edit-input px-1.5 py-0.5 border border-blue-400 dark:border-blue-500 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none w-full';
+    if (isQuantity) { input.min = 0; input.step = 1; input.style.width = '60px'; }
+    
+    span.innerHTML = '';
+    span.appendChild(input);
+    input.focus();
+    input.select();
+    
+    const save = () => {
+        const newValue = input.value.trim();
+        span.innerHTML = newValue || (fieldType === 'part_number' ? '<span class="text-amber-600 dark:text-amber-400">TBC</span>' : '—');
+        
+        // Update parsedData
+        updateParsedData(dataPath, isQuantity ? Number(newValue) || 0 : newValue);
+        
+        // Log correction if value changed
+        if (newValue && newValue !== originalValue && originalValue !== '—' && originalValue !== 'TBC') {
+            logCorrection(fieldType, originalValue, newValue, roomIndex, accIndex);
+        }
+        
+        // Flash green to confirm save
+        span.classList.add('edit-saved');
+        setTimeout(() => span.classList.remove('edit-saved'), 1000);
+    };
+    
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { span.innerHTML = originalValue; }
+    });
+}
+
+function updateParsedData(path, value) {
+    // Parse path like "rooms[0].accessories[1].part_number" and update parsedData
+    try {
+        const parts = path.match(/([^\[\].]+|\[\d+\])/g);
+        let obj = parsedData;
+        for (let i = 0; i < parts.length - 1; i++) {
+            let key = parts[i].replace(/[\[\]]/g, '');
+            if (/^\d+$/.test(key)) key = parseInt(key);
+            obj = obj[key];
+        }
+        let lastKey = parts[parts.length - 1].replace(/[\[\]]/g, '');
+        if (/^\d+$/.test(lastKey)) lastKey = parseInt(lastKey);
+        obj[lastKey] = value;
+    } catch (e) {
+        console.warn('Failed to update parsed data:', path, e);
+    }
+}
+
+async function logCorrection(fieldType, originalValue, correctedValue, roomIndex, accIndex) {
+    try {
+        const roomName = roomIndex !== undefined ? parsedData.rooms?.[roomIndex]?.name : '';
+        const context = accIndex !== undefined ? parsedData.rooms?.[roomIndex]?.accessories?.[accIndex]?.description : '';
+        
+        const response = await fetch('/voice-to-quote/log-correction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                field_type: fieldType,
+                original_value: originalValue,
+                corrected_value: correctedValue,
+                job_title: parsedData.job?.title || '',
+                room_name: roomName || '',
+                context: context || ''
+            })
+        });
+        
+        const result = await response.json();
+        
+        // Show promotion prompt if threshold reached
+        if (result.should_promote && result.promotion_suggestion) {
+            showPromotionPrompt(result.promotion_suggestion);
+        }
+    } catch (e) {
+        console.warn('Failed to log correction:', e);
+    }
+}
+
+function showPromotionPrompt(suggestion) {
+    const container = document.getElementById('results-section');
+    
+    const banner = document.createElement('div');
+    banner.className = 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 mb-4 flex items-center justify-between';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <svg class="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <p class="text-sm text-purple-700 dark:text-purple-300">${suggestion.message}</p>
+        </div>
+        <div class="flex gap-2 flex-shrink-0 ml-4">
+            <button onclick="promoteCorrection(${suggestion.correction_id}, '${suggestion.category}', '${suggestion.key}', '${suggestion.value}'); this.closest('.bg-purple-50, .dark\\:bg-purple-900\\/20').remove();" 
+                class="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
+                Yes, remember this
+            </button>
+            <button onclick="this.closest('.bg-purple-50, .dark\\:bg-purple-900\\/20').remove();" 
+                class="px-3 py-1.5 text-purple-600 dark:text-purple-400 text-xs font-medium hover:underline">
+                No thanks
+            </button>
+        </div>
+    `;
+    container.insertBefore(banner, container.firstChild);
+}
+
+async function promoteCorrection(correctionId, category, key, value) {
+    try {
+        await fetch('/voice-to-quote/promote-correction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ correction_id: correctionId, category, key, value })
+        });
+    } catch (e) {
+        console.warn('Failed to promote correction:', e);
+    }
+}
 </script>
+
+<style>
+    .editable { 
+        cursor: pointer; 
+        border-bottom: 1px dashed transparent;
+        transition: border-color 0.15s;
+    }
+    .editable:hover { 
+        border-bottom-color: #3b82f6;
+    }
+    .inline-edit-input {
+        transition: none !important;
+    }
+    .edit-saved {
+        background-color: rgba(16, 185, 129, 0.15);
+        border-radius: 2px;
+        transition: background-color 1s ease;
+    }
+</style>
 {% endblock %}
