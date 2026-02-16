@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+
+{% block title %}Voice to Quote — GoZappify{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Voice to Quote</h1>
+        <p class="text-gray-600 mt-1">Paste your Plaud transcription and let AI build your materials list</p>
+    </div>
+
+    <!-- Input Section -->
+    <div id="input-section">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            
+            <!-- Transcription Input -->
+            <div class="mb-6">
+                <label for="transcription" class="block text-sm font-medium text-gray-700 mb-2">
+                    Site Visit Transcription
+                </label>
+                <textarea 
+                    id="transcription" 
+                    rows="8" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Paste your Plaud transcription here...
+
+Example: 'Okay so this is for a job reference called West Grove. Family room we have got two ceiling mounted pendants, eight spotlights which are two-way switched...'"
+                ></textarea>
+            </div>
+
+            <!-- Floor Plan Upload (Optional) -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Floor Plan <span class="text-gray-400 font-normal">(optional — for validation only)</span>
+                </label>
+                <div id="floor-plan-drop" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer">
+                    <input type="file" id="floor-plan-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                    <svg class="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-500" id="floor-plan-label">
+                        Drop floor plan here or <span class="text-blue-600">browse</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Parse Button -->
+            <div class="flex items-center justify-between">
+                <p class="text-xs text-gray-400">AI will parse your transcription using UK electrical standards (BS 7671)</p>
+                <button 
+                    id="parse-btn"
+                    onclick="parseTranscription()"
+                    class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <span id="parse-btn-text">Generate Quote</span>
+                    <span id="parse-btn-loading" class="hidden">
+                        <svg class="animate-spin inline h-5 w-5 ml-1" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Parsing...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section (hidden until parse completes) -->
+    <div id="results-section" class="hidden mt-8">
+        
+        <!-- Job Header -->
+        <div id="job-header" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 id="job-title" class="text-xl font-bold text-gray-900"></h2>
+                    <p id="job-client" class="text-gray-500 text-sm mt-1"></p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="flag-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800"></span>
+                    <span id="room-count" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"></span>
+                </div>
+            </div>
+            <div id="job-defaults" class="mt-4 flex flex-wrap gap-3 text-xs">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- View Toggle -->
+        <div class="flex gap-2 mb-6">
+            <button onclick="showView('rooms')" id="tab-rooms" class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">
+                Per Room
+            </button>
+            <button onclick="showView('combined')" id="tab-combined" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Supplier List
+            </button>
+            <button onclick="showView('flags')" id="tab-flags" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Flags
+            </button>
+        </div>
+
+        <!-- Per Room View -->
+        <div id="view-rooms"></div>
+
+        <!-- Combined Supplier List View -->
+        <div id="view-combined" class="hidden"></div>
+
+        <!-- Flags View -->
+        <div id="view-flags" class="hidden"></div>
+
+        <!-- Action Buttons -->
+        <div class="mt-8 flex justify-end gap-3">
+            <button onclick="exportSupplierList()" class="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-all">
+                Export Supplier List
+            </button>
+            <button onclick="sendToQuoteBuilder()" class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 transition-all">
+                Send to Quote Builder →
+            </button>
+        </div>
+    </div>
+
+    <!-- Error Section -->
+    <div id="error-section" class="hidden mt-6">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div class="flex items-start">
+                <svg class="h-5 w-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                </svg>
+                <p id="error-message" class="text-red-700 text-sm"></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let parsedData = null;
+
+// Floor plan upload handling
+const dropZone = document.getElementById('floor-plan-drop');
+const fileInput = document.getElementById('floor-plan-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-blue-400', 'bg-blue-50'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-blue-400', 'bg-blue-50'); });
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        updateFloorPlanLabel(e.dataTransfer.files[0].name);
+    }
+});
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) updateFloorPlanLabel(fileInput.files[0].name);
+});
+
+function updateFloorPlanLabel(name) {
+    document.getElementById('floor-plan-label').innerHTML = `<span class="text-green-600 font-medium">${name}</span> — <span class="text-gray-400 cursor-pointer" onclick="clearFloorPlan(event)">remove</span>`;
+}
+
+function clearFloorPlan(e) {
+    e.stopPropagation();
+    fileInput.value = '';
+    document.getElementById('floor-plan-label').innerHTML = 'Drop floor plan here or <span class="text-blue-600">browse</span>';
+}
+
+async function parseTranscription() {
+    const transcription = document.getElementById('transcription').value.trim();
+    if (!transcription) { alert('Please paste a transcription first'); return; }
+    
+    const btn = document.getElementById('parse-btn');
+    const btnText = document.getElementById('parse-btn-text');
+    const btnLoading = document.getElementById('parse-btn-loading');
+    
+    btn.disabled = true;
+    btnText.classList.add('hidden');
+    btnLoading.classList.remove('hidden');
+    document.getElementById('error-section').classList.add('hidden');
+    document.getElementById('results-section').classList.add('hidden');
+    
+    try {
+        const formData = new FormData();
+        // For now, send as JSON. Floor plan via FormData if present.
+        const floorPlanFile = document.getElementById('floor-plan-input').files[0];
+        
+        let response;
+        if (floorPlanFile) {
+            formData.append('transcription', transcription);
+            formData.append('floor_plan', floorPlanFile);
+            response = await fetch('/voice-to-quote/parse', {
+                method: 'POST',
+                body: formData
+            });
+        } else {
+            response = await fetch('/voice-to-quote/parse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transcription })
+            });
+        }
+        
+        const result = await response.json();
+        
+        if (!response.ok || result.error) {
+            throw new Error(result.error || 'Failed to parse transcription');
+        }
+        
+        parsedData = result.data;
+        renderResults(parsedData);
+        document.getElementById('results-section').classList.remove('hidden');
+        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (err) {
+        document.getElementById('error-message').textContent = err.message;
+        document.getElementById('error-section').classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoading.classList.add('hidden');
+    }
+}
+
+function renderResults(data) {
+    // Job header
+    document.getElementById('job-title').textContent = data.job?.title || 'Untitled Job';
+    document.getElementById('job-client').textContent = data.job?.client || '';
+    
+    const totalFlags = (data.rooms || []).reduce((sum, r) => sum + (r.flags?.length || 0), 0) + (data.global_flags?.length || 0);
+    document.getElementById('flag-count').textContent = `${totalFlags} flag${totalFlags !== 1 ? 's' : ''}`;
+    document.getElementById('room-count').textContent = `${(data.rooms || []).length} room${(data.rooms || []).length !== 1 ? 's' : ''}`;
+    
+    // Job defaults badges
+    const defaults = document.getElementById('job-defaults');
+    defaults.innerHTML = '';
+    if (data.job?.default_wall_type) addBadge(defaults, `Walls: ${data.job.default_wall_type}`, 'gray');
+    if (data.job?.default_finish) addBadge(defaults, `Finish: ${data.job.default_finish}`, 'gray');
+    if (data.job?.default_back_box_depth) addBadge(defaults, `Box depth: ${data.job.default_back_box_depth}`, 'gray');
+    
+    // Render rooms
+    renderRooms(data.rooms || []);
+    renderCombined(data.combined_materials || []);
+    renderFlags(data);
+}
+
+function addBadge(container, text, color) {
+    const span = document.createElement('span');
+    span.className = `inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-${color}-100 text-${color}-700`;
+    span.textContent = text;
+    container.appendChild(span);
+}
+
+function renderRooms(rooms) {
+    const container = document.getElementById('view-rooms');
+    container.innerHTML = '';
+    
+    rooms.forEach((room, ri) => {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 mb-4 overflow-hidden';
+        
+        const flagCount = room.flags?.length || 0;
+        const flagBadge = flagCount > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">${flagCount} flag${flagCount > 1 ? 's' : ''}</span>` : '';
+        
+        let html = `
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between cursor-pointer" onclick="toggleRoom(${ri})">
+                <div class="flex items-center gap-3">
+                    <svg id="room-chevron-${ri}" class="h-5 w-5 text-gray-400 transform rotate-0 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                    <h3 class="font-semibold text-gray-900">${room.name}</h3>
+                    ${room.dimensions ? `<span class="text-xs text-gray-400">${room.dimensions.length}m × ${room.dimensions.width}m × ${room.dimensions.height}m</span>` : ''}
+                </div>
+                <div class="flex items-center gap-2">
+                    ${room.wall_type ? `<span class="text-xs text-gray-500">${room.wall_type}</span>` : ''}
+                    ${flagBadge}
+                </div>
+            </div>
+            <div id="room-body-${ri}" class="px-6 py-4">
+        `;
+        
+        // Accessories table
+        if (room.accessories?.length) {
+            html += `
+                <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Accessories</h4>
+                <table class="w-full text-sm mb-6">
+                    <thead><tr class="text-left text-xs text-gray-400 border-b">
+                        <th class="pb-2 pr-4">Qty</th>
+                        <th class="pb-2 pr-4">Description</th>
+                        <th class="pb-2 pr-4">Part No.</th>
+                        <th class="pb-2 pr-4">Back Box</th>
+                        <th class="pb-2">Notes</th>
+                    </tr></thead>
+                    <tbody>
+            `;
+            room.accessories.forEach(acc => {
+                const hasFlag = !acc.part_number || acc.part_number.includes('FLAG');
+                html += `<tr class="border-b border-gray-100 ${hasFlag ? 'bg-amber-50' : ''}">
+                    <td class="py-2 pr-4 font-medium">${acc.quantity}</td>
+                    <td class="py-2 pr-4">${acc.description || acc.type}</td>
+                    <td class="py-2 pr-4 font-mono text-xs">${acc.part_number || '<span class="text-amber-600">TBC</span>'}</td>
+                    <td class="py-2 pr-4 text-xs text-gray-500">${acc.back_box || '—'}</td>
+                    <td class="py-2 text-xs text-gray-400">${acc.notes || ''}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+        }
+        
+        // Switching
+        if (room.switching?.length) {
+            html += `<h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Switching</h4>`;
+            room.switching.forEach(sw => {
+                html += `<div class="bg-gray-50 rounded-lg p-3 mb-3 text-sm">
+                    <div class="font-medium text-gray-700 mb-1">${sw.location} <span class="text-xs text-gray-400">(${sw.system})</span></div>`;
+                if (sw.components) {
+                    sw.components.forEach(c => {
+                        html += `<div class="text-xs text-gray-600 ml-4">${c.quantity}× <span class="font-mono">${c.part_number}</span> — ${c.description}</div>`;
+                    });
+                }
+                html += `<div class="text-xs text-gray-400 mt-1">Back box: ${sw.back_box || 'TBC'}</div>`;
+                if (sw.notes) html += `<div class="text-xs text-amber-600 mt-1">${sw.notes}</div>`;
+                html += '</div>';
+            });
+        }
+        
+        // Cable summary
+        if (room.cable_summary && Object.keys(room.cable_summary).length) {
+            html += `<h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-4">Cable</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">`;
+            for (const [type, info] of Object.entries(room.cable_summary)) {
+                const metres = typeof info === 'object' ? info.metres : info;
+                const calc = typeof info === 'object' ? info.calculation : '';
+                html += `<div class="bg-gray-50 rounded-lg p-2 text-xs">
+                    <div class="font-medium text-gray-700">${type}</div>
+                    <div class="text-lg font-bold text-gray-900">${metres}m</div>
+                    ${calc ? `<div class="text-gray-400 mt-0.5">${calc}</div>` : ''}
+                </div>`;
+            }
+            html += '</div>';
+        }
+        
+        // Room flags
+        if (room.flags?.length) {
+            html += `<h4 class="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2 mt-4">Flags</h4>`;
+            room.flags.forEach((flag, fi) => {
+                const msg = typeof flag === 'string' ? flag : flag.message;
+                const severity = typeof flag === 'object' ? flag.severity : 'amber';
+                const defaultVal = typeof flag === 'object' ? flag.default_value : null;
+                const bgColor = severity === 'red' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200';
+                const textColor = severity === 'red' ? 'text-red-700' : 'text-amber-700';
+                
+                html += `<div class="flex items-start gap-3 ${bgColor} border rounded-lg p-3 mb-2">
+                    <svg class="h-4 w-4 ${textColor} mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <div class="flex-1">
+                        <p class="${textColor} text-sm">${msg}</p>
+                        ${defaultVal ? `<p class="text-xs text-gray-400 mt-1">Default: ${defaultVal}</p>` : ''}
+                        <input type="text" placeholder="Your answer..." 
+                            class="mt-2 w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            data-room="${ri}" data-flag="${fi}">
+                    </div>
+                </div>`;
+            });
+        }
+        
+        html += '</div>';
+        card.innerHTML = html;
+        container.appendChild(card);
+    });
+}
+
+function renderCombined(materials) {
+    const container = document.getElementById('view-combined');
+    if (!materials?.length) {
+        container.innerHTML = '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-400">No combined materials generated</div>';
+        return;
+    }
+    
+    let html = `
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h3 class="font-semibold text-gray-900">Combined Supplier Materials List</h3>
+                <p class="text-xs text-gray-500 mt-1">${materials.length} line items — send this to your supplier for pricing</p>
+            </div>
+            <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-400 border-b bg-gray-50">
+                    <th class="px-6 py-3">Part No.</th>
+                    <th class="px-6 py-3">Description</th>
+                    <th class="px-6 py-3 text-right">Qty</th>
+                    <th class="px-6 py-3">Unit</th>
+                </tr></thead>
+                <tbody>
+    `;
+    materials.forEach((item, i) => {
+        html += `<tr class="border-b border-gray-100 ${i % 2 ? 'bg-gray-50' : ''}">
+            <td class="px-6 py-3 font-mono text-xs">${item.part_number || '—'}</td>
+            <td class="px-6 py-3">${item.description}</td>
+            <td class="px-6 py-3 text-right font-bold">${item.total_quantity}</td>
+            <td class="px-6 py-3 text-xs text-gray-500">${item.unit || 'each'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function renderFlags(data) {
+    const container = document.getElementById('view-flags');
+    let allFlags = [];
+    
+    (data.rooms || []).forEach(room => {
+        (room.flags || []).forEach(flag => {
+            const msg = typeof flag === 'string' ? flag : flag.message;
+            const severity = typeof flag === 'object' ? flag.severity : 'amber';
+            allFlags.push({ room: room.name, message: msg, severity });
+        });
+    });
+    (data.global_flags || []).forEach(flag => {
+        const msg = typeof flag === 'string' ? flag : flag.message;
+        const severity = typeof flag === 'object' ? flag.severity : 'amber';
+        allFlags.push({ room: 'Global', message: msg, severity });
+    });
+    
+    if (!allFlags.length) {
+        container.innerHTML = '<div class="bg-green-50 border border-green-200 rounded-lg p-6 text-center"><p class="text-green-700 font-medium">No flags — all items resolved</p></div>';
+        return;
+    }
+    
+    let html = '<div class="space-y-3">';
+    allFlags.forEach(f => {
+        const bgColor = f.severity === 'red' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200';
+        const textColor = f.severity === 'red' ? 'text-red-700' : 'text-amber-700';
+        html += `<div class="${bgColor} border rounded-lg p-4 flex items-start gap-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">${f.room}</span>
+            <p class="${textColor} text-sm flex-1">${f.message}</p>
+            <input type="text" placeholder="Answer..." class="w-48 px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500">
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function toggleRoom(index) {
+    const body = document.getElementById(`room-body-${index}`);
+    const chevron = document.getElementById(`room-chevron-${index}`);
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180');
+}
+
+function showView(view) {
+    ['rooms', 'combined', 'flags'].forEach(v => {
+        document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
+        const tab = document.getElementById(`tab-${v}`);
+        if (v === view) {
+            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white';
+        } else {
+            tab.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200';
+        }
+    });
+}
+
+function exportSupplierList() {
+    if (!parsedData?.combined_materials?.length) { alert('No materials to export'); return; }
+    
+    let csv = 'Part Number,Description,Quantity,Unit\n';
+    parsedData.combined_materials.forEach(item => {
+        csv += `"${item.part_number || ''}","${item.description}",${item.total_quantity},"${item.unit || 'each'}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(parsedData.job?.title || 'materials').replace(/\s+/g, '_')}_supplier_list.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function sendToQuoteBuilder() {
+    // TODO: POST confirmed data to quote builder endpoint
+    alert('Send to Quote Builder — coming soon. This will push confirmed materials into your existing Quote Builder with pricing.');
+}
+</script>
+{% endblock %}
