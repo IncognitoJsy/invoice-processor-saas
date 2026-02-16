@@ -57,8 +57,21 @@ def get_user_preferences_formatted(user_id):
 
 def get_user_products(user_id):
     """Pull user's product list from Xero/QuickBooks for price matching"""
-    # TODO: Query user's connected accounting system
-    return []
+    try:
+        from app.models.connection import Connection
+        conn = Connection.query.filter_by(user_id=user_id, active=True).first()
+        if not conn:
+            return []
+        
+        from app.services.product_matcher import fetch_user_products
+        from flask_login import current_user
+        return fetch_user_products(current_user)
+    except ImportError:
+        logger.warning("Product matcher not available — skipping product fetch")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch user products: {e}")
+        return []
 
 
 def build_system_prompt(knowledge_base, user_preferences_text, user_products, has_floor_plan=False):
@@ -796,3 +809,164 @@ def extract_text():
     except Exception as e:
         logger.error(f"Text extraction error: {e}", exc_info=True)
         return jsonify({'error': f'Failed to extract text: {str(e)}'}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# PRODUCT MATCHING — Match parsed materials to Xero/QB products
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/fetch-products', methods=['GET'])
+@login_required
+def fetch_products():
+    """Fetch user's product list from connected accounting system"""
+    try:
+        from app.services.product_matcher import fetch_user_products
+        products = fetch_user_products(current_user)
+        
+        return jsonify({
+            'success': True,
+            'products': products,
+            'count': len(products)
+        })
+    except ImportError:
+        return jsonify({'success': True, 'products': [], 'count': 0,
+                        'message': 'Product matching module not available'})
+    except Exception as e:
+        logger.error(f"Fetch products error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/match-products', methods=['POST'])
+@login_required
+def match_products():
+    """Match parsed combined_materials against user's product list.
+    
+    Expects: {combined_materials: [...], products: [...] (optional, fetched if missing)}
+    Returns: {results: [{material, matches, status, selected, clean_description}]}
+    """
+    try:
+        data = request.get_json() or {}
+        combined_materials = data.get('combined_materials', [])
+        
+        if not combined_materials:
+            return jsonify({'error': 'No materials to match'}), 400
+        
+        # Get products — either passed in or fetch from accounting system
+        products = data.get('products')
+        if not products:
+            try:
+                from app.services.product_matcher import fetch_user_products
+                products = fetch_user_products(current_user)
+            except ImportError:
+                products = []
+        
+        if not products:
+            # No products available — return all as unmatched
+            results = []
+            for i, item in enumerate(combined_materials):
+                results.append({
+                    'index': i,
+                    'material': item,
+                    'matches': [],
+                    'status': 'unmatched',
+                    'selected': None,
+                    'clean_description': None
+                })
+            return jsonify({
+                'success': True,
+                'results': results,
+                'no_products': True,
+                'message': 'No accounting system connected — connect Xero or QuickBooks to enable product matching'
+            })
+        
+        # Run fuzzy matching
+        from app.services.product_matcher import match_all_materials, ai_match_unresolved, generate_clean_descriptions
+        
+        match_results = match_all_materials(combined_materials, products)
+        
+        # Collect unmatched items for AI assistance
+        unmatched = []
+        for i, result in enumerate(match_results):
+            result['index'] = i
+            if result['status'] == 'unmatched':
+                unmatched.append({'index': i, 'material': result['material']})
+        
+        # AI-assisted matching for unresolved items
+        if unmatched:
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+            if api_key:
+                ai_results = ai_match_unresolved(unmatched, products, api_key)
+                for idx, ai_match in ai_results.items():
+                    if idx < len(match_results):
+                        match_results[idx]['matches'].insert(0, ai_match)
+                        match_results[idx]['status'] = 'review'
+                        match_results[idx]['selected'] = ai_match
+        
+        # Generate clean customer descriptions for matched items
+        api_key = os.getenv('ANTHROPIC_API_KEY')
+        if api_key:
+            clean_descs = generate_clean_descriptions(match_results, api_key)
+            for idx, desc in clean_descs.items():
+                if idx < len(match_results):
+                    match_results[idx]['clean_description'] = desc
+        
+        # Summary stats
+        stats = {
+            'total': len(match_results),
+            'matched': sum(1 for r in match_results if r['status'] == 'matched'),
+            'review': sum(1 for r in match_results if r['status'] == 'review'),
+            'unmatched': sum(1 for r in match_results if r['status'] == 'unmatched'),
+        }
+        
+        return jsonify({
+            'success': True,
+            'results': match_results,
+            'stats': stats,
+            'product_count': len(products)
+        })
+    
+    except Exception as e:
+        logger.error(f"Product matching error: {e}", exc_info=True)
+        return jsonify({'error': f'Matching failed: {str(e)}'}), 500
+
+
+@bp.route('/confirm-matches', methods=['POST'])
+@login_required
+def confirm_matches():
+    """Confirm product matches and prepare for Quote Builder.
+    
+    Expects: {matches: [{material_index, product_id, product_code, sale_price, clean_description, quantity}]}
+    Returns: {quote_items: [...ready for quote builder]}
+    """
+    try:
+        data = request.get_json() or {}
+        confirmed = data.get('matches', [])
+        
+        if not confirmed:
+            return jsonify({'error': 'No matches to confirm'}), 400
+        
+        quote_items = []
+        for match in confirmed:
+            quote_items.append({
+                'product_code': match.get('product_code', ''),
+                'description': match.get('clean_description') or match.get('description', ''),
+                'supplier_description': match.get('supplier_description', ''),
+                'quantity': match.get('quantity', 0),
+                'unit_price': match.get('sale_price', 0),
+                'total': round(match.get('quantity', 0) * match.get('sale_price', 0), 2),
+                'product_id': match.get('product_id', ''),
+                'source': match.get('source', 'voice_to_quote')
+            })
+        
+        total_value = sum(item['total'] for item in quote_items)
+        
+        return jsonify({
+            'success': True,
+            'quote_items': quote_items,
+            'item_count': len(quote_items),
+            'total_value': round(total_value, 2)
+        })
+    
+    except Exception as e:
+        logger.error(f"Confirm matches error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500

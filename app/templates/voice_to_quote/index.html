@@ -157,13 +157,97 @@ Example: 'Okay so this is for a job reference called West Grove. Family room we 
         <div id="view-flags" class="hidden"></div>
 
         <!-- Action Buttons -->
-        <div class="mt-8 flex justify-end gap-3">
+        <div id="parse-actions" class="mt-8 flex justify-end gap-3">
             <button onclick="exportSupplierList()" class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                 Export Supplier List
             </button>
-            <button onclick="sendToQuoteBuilder()" class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 dark:focus:ring-green-800 transition-all">
-                Send to Quote Builder →
+            <button onclick="matchProducts()" id="match-btn" class="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 dark:focus:ring-indigo-800 transition-all inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                <span id="match-btn-text">Match Products & Price</span>
+                <span id="match-btn-loading" class="hidden">
+                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                </span>
             </button>
+        </div>
+    </div>
+
+    <!-- ─── Product Match Review Panel ─── -->
+    <div id="match-section" class="hidden mt-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Match Header -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">Product Matching</h2>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Review matched products — confirm, override, or skip items</p>
+                </div>
+                <div id="match-stats" class="flex items-center gap-3">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+            
+            <!-- Progress bar -->
+            <div class="mt-4">
+                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    <span id="match-progress-label">Matching...</span>
+                    <span id="match-progress-pct">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div id="match-progress-bar" class="h-2 rounded-full bg-indigo-600 transition-all" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Match Results Table -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-8">
+                                <input type="checkbox" id="match-select-all" onchange="toggleAllMatches(this.checked)" 
+                                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500">
+                            </th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Status</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Parsed Item</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Matched Product</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Customer Description</th>
+                            <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Qty</th>
+                            <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Unit Price</th>
+                            <th class="text-right px-4 py-3 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="match-results-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                    <tfoot class="bg-gray-50 dark:bg-gray-750 border-t border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <td colspan="7" class="text-right px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Quote Total</td>
+                            <td class="text-right px-4 py-3 text-sm font-bold text-gray-900 dark:text-white" id="match-total">£0.00</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Match Action Buttons -->
+        <div class="flex justify-between items-center">
+            <button onclick="backToResults()" class="px-4 py-2.5 text-gray-600 dark:text-gray-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all inline-flex items-center gap-2">
+                ← Back to Results
+            </button>
+            <div class="flex gap-3">
+                <button onclick="exportMatchedList()" class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                    Export Priced List
+                </button>
+                <button onclick="sendToQuoteBuilder()" id="send-quote-btn" class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 dark:focus:ring-green-800 transition-all inline-flex items-center gap-2">
+                    Send to Quote Builder →
+                </button>
+            </div>
         </div>
     </div>
 
@@ -646,8 +730,386 @@ function exportSupplierList() {
     URL.revokeObjectURL(url);
 }
 
-function sendToQuoteBuilder() {
-    alert('Send to Quote Builder — coming soon. This will push confirmed materials into your existing Quote Builder with pricing.');
+let matchResults = null;
+let userProducts = null;
+
+// ─── Product Matching ────────────────────────────────────
+
+async function matchProducts() {
+    if (!parsedData?.combined_materials?.length) {
+        alert('No materials to match — parse a transcription first');
+        return;
+    }
+    
+    const btn = document.getElementById('match-btn');
+    const btnText = document.getElementById('match-btn-text');
+    const btnLoading = document.getElementById('match-btn-loading');
+    
+    btn.disabled = true;
+    btnText.textContent = 'Matching...';
+    btnLoading.classList.remove('hidden');
+    
+    try {
+        const response = await fetch('/voice-to-quote/match-products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                combined_materials: parsedData.combined_materials,
+                products: userProducts
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Matching failed');
+        }
+        
+        matchResults = result.results;
+        userProducts = null; // Clear cached products
+        
+        renderMatchResults(result);
+        
+        // Show match section, keep results visible above
+        document.getElementById('match-section').classList.remove('hidden');
+        document.getElementById('match-section').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (e) {
+        alert('Matching failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Match Products & Price';
+        btnLoading.classList.add('hidden');
+    }
+}
+
+function renderMatchResults(result) {
+    const tbody = document.getElementById('match-results-body');
+    const statsDiv = document.getElementById('match-stats');
+    
+    // Stats badges
+    const stats = result.stats || {};
+    statsDiv.innerHTML = '';
+    if (result.no_products) {
+        statsDiv.innerHTML = `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">No accounting system connected</span>`;
+    } else {
+        if (stats.matched) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">${stats.matched} matched</span>`;
+        if (stats.review) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">${stats.review} needs review</span>`;
+        if (stats.unmatched) statsDiv.innerHTML += `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">${stats.unmatched} unmatched</span>`;
+    }
+    
+    // Progress
+    const confirmed = matchResults.filter(r => r.status === 'matched').length;
+    updateMatchProgress(confirmed, matchResults.length);
+    
+    // Table rows
+    tbody.innerHTML = '';
+    matchResults.forEach((item, i) => {
+        const mat = item.material || {};
+        const sel = item.selected;
+        const price = sel?.product?.sale_price || 0;
+        const qty = mat.total_quantity || 0;
+        const total = (price * qty).toFixed(2);
+        
+        const statusBadge = {
+            'matched': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">✓ Matched</span>',
+            'review': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">⚠ Review</span>',
+            'unmatched': '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">✗ No match</span>'
+        }[item.status] || '';
+        
+        const confidenceBar = sel ? `
+            <div class="mt-1 flex items-center gap-2">
+                <div class="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full ${sel.confidence >= 0.9 ? 'bg-green-500' : sel.confidence >= 0.7 ? 'bg-amber-500' : 'bg-red-500'}" style="width: ${Math.round(sel.confidence * 100)}%"></div>
+                </div>
+                <span class="text-xs text-gray-400">${Math.round(sel.confidence * 100)}%</span>
+            </div>
+        ` : '';
+        
+        const matchInfo = sel ? `
+            <div>
+                <span class="font-mono text-xs text-indigo-600 dark:text-indigo-400">${sel.product?.code || '—'}</span>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate max-w-xs">${sel.product?.name || sel.product?.description || '—'}</p>
+                ${confidenceBar}
+            </div>
+        ` : '<span class="text-xs text-gray-400 italic">No match found</span>';
+        
+        // Dropdown for alternative matches
+        const altMatches = (item.matches || []).length > 1 ? `
+            <button onclick="showAlternatives(${i})" class="ml-2 text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 underline">
+                ${item.matches.length - 1} more
+            </button>
+        ` : '';
+        
+        const cleanDesc = item.clean_description || '';
+        
+        tbody.innerHTML += `
+            <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-750/50 match-row" data-index="${i}">
+                <td class="px-4 py-3">
+                    <input type="checkbox" class="match-checkbox rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500" 
+                        data-index="${i}" ${item.status !== 'unmatched' ? 'checked' : ''} onchange="updateMatchTotals()">
+                </td>
+                <td class="px-4 py-3">${statusBadge}</td>
+                <td class="px-4 py-3">
+                    <span class="font-mono text-xs text-gray-700 dark:text-gray-300">${mat.part_number || '—'}</span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${mat.description || ''}</p>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center">
+                        ${matchInfo}
+                        ${altMatches}
+                    </div>
+                    <div id="alternatives-${i}" class="hidden mt-2"></div>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="editable text-xs text-gray-700 dark:text-gray-300 ${cleanDesc ? '' : 'italic text-gray-400'}" 
+                        onclick="makeCleanDescEditable(this, ${i})">${cleanDesc || 'Click to add'}</span>
+                </td>
+                <td class="text-right px-4 py-3 font-medium text-gray-900 dark:text-white">${qty}</td>
+                <td class="text-right px-4 py-3">
+                    <span class="editable text-gray-700 dark:text-gray-300" onclick="makePriceEditable(this, ${i})">
+                        ${price > 0 ? '£' + price.toFixed(2) : '—'}
+                    </span>
+                </td>
+                <td class="text-right px-4 py-3 font-semibold text-gray-900 dark:text-white match-total-cell">
+                    ${price > 0 ? '£' + total : '—'}
+                </td>
+            </tr>
+        `;
+    });
+    
+    updateMatchTotals();
+}
+
+function showAlternatives(index) {
+    const container = document.getElementById(`alternatives-${index}`);
+    if (!container.classList.contains('hidden')) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    const item = matchResults[index];
+    const alts = (item.matches || []).slice(1);
+    
+    container.innerHTML = alts.map((alt, j) => `
+        <div class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0"
+            onclick="selectAlternative(${index}, ${j + 1})">
+            <div>
+                <span class="font-mono text-xs text-gray-600 dark:text-gray-400">${alt.product?.code || '—'}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">${alt.product?.name || ''}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400">${Math.round(alt.confidence * 100)}%</span>
+                ${alt.product?.sale_price ? '<span class="text-xs font-medium text-gray-700 dark:text-gray-300">£' + alt.product.sale_price.toFixed(2) + '</span>' : ''}
+            </div>
+        </div>
+    `).join('');
+    
+    container.classList.remove('hidden');
+}
+
+function selectAlternative(index, matchIndex) {
+    const item = matchResults[index];
+    const newMatch = item.matches[matchIndex];
+    
+    item.selected = newMatch;
+    item.status = 'matched';
+    
+    // Re-render the whole table (simpler than surgical DOM update)
+    renderMatchResults({ results: matchResults, stats: calculateStats() });
+}
+
+function calculateStats() {
+    return {
+        total: matchResults.length,
+        matched: matchResults.filter(r => r.status === 'matched').length,
+        review: matchResults.filter(r => r.status === 'review').length,
+        unmatched: matchResults.filter(r => r.status === 'unmatched').length,
+    };
+}
+
+function toggleAllMatches(checked) {
+    document.querySelectorAll('.match-checkbox').forEach(cb => { cb.checked = checked; });
+    updateMatchTotals();
+}
+
+function updateMatchTotals() {
+    let total = 0;
+    let confirmed = 0;
+    
+    document.querySelectorAll('.match-checkbox').forEach(cb => {
+        if (cb.checked) {
+            const idx = parseInt(cb.dataset.index);
+            const item = matchResults[idx];
+            const price = item?.selected?.product?.sale_price || 0;
+            const qty = item?.material?.total_quantity || 0;
+            total += price * qty;
+            confirmed++;
+        }
+    });
+    
+    document.getElementById('match-total').textContent = total > 0 ? `£${total.toFixed(2)}` : '—';
+    updateMatchProgress(confirmed, matchResults.length);
+}
+
+function updateMatchProgress(confirmed, total) {
+    const pct = total > 0 ? Math.round((confirmed / total) * 100) : 0;
+    document.getElementById('match-progress-bar').style.width = `${pct}%`;
+    document.getElementById('match-progress-pct').textContent = `${pct}%`;
+    document.getElementById('match-progress-label').textContent = `${confirmed} of ${total} items confirmed`;
+}
+
+function makeCleanDescEditable(span, index) {
+    if (span.querySelector('input')) return;
+    const current = matchResults[index]?.clean_description || '';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none w-full';
+    input.placeholder = 'e.g. 2.5mm Twin & Earth Cable';
+    
+    span.innerHTML = '';
+    span.appendChild(input);
+    input.focus();
+    
+    const save = () => {
+        const val = input.value.trim();
+        matchResults[index].clean_description = val;
+        span.textContent = val || 'Click to add';
+        if (!val) span.classList.add('italic', 'text-gray-400');
+        else span.classList.remove('italic', 'text-gray-400');
+        span.classList.add('edit-saved');
+        setTimeout(() => span.classList.remove('edit-saved'), 1000);
+    };
+    
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { span.textContent = current || 'Click to add'; }
+    });
+}
+
+function makePriceEditable(span, index) {
+    if (span.querySelector('input')) return;
+    const current = matchResults[index]?.selected?.product?.sale_price || 0;
+    
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = current || '';
+    input.step = '0.01';
+    input.min = '0';
+    input.className = 'px-1.5 py-0.5 border border-indigo-400 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none w-20';
+    
+    span.innerHTML = '';
+    span.appendChild(input);
+    input.focus();
+    
+    const save = () => {
+        const val = parseFloat(input.value) || 0;
+        // Update the price in matchResults
+        if (!matchResults[index].selected) {
+            matchResults[index].selected = { product: { sale_price: val }, confidence: 1.0, match_type: 'manual' };
+        } else {
+            matchResults[index].selected.product.sale_price = val;
+        }
+        span.textContent = val > 0 ? `£${val.toFixed(2)}` : '—';
+        
+        // Update row total
+        const qty = matchResults[index]?.material?.total_quantity || 0;
+        const totalCell = span.closest('tr').querySelector('.match-total-cell');
+        if (totalCell) totalCell.textContent = val > 0 ? `£${(val * qty).toFixed(2)}` : '—';
+        
+        updateMatchTotals();
+        span.classList.add('edit-saved');
+        setTimeout(() => span.classList.remove('edit-saved'), 1000);
+    };
+    
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { span.textContent = current > 0 ? `£${current.toFixed(2)}` : '—'; }
+    });
+}
+
+function backToResults() {
+    document.getElementById('match-section').classList.add('hidden');
+    document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportMatchedList() {
+    if (!matchResults?.length) { alert('No matched items to export'); return; }
+    
+    let csv = 'Part Number,Product Code,Description,Customer Description,Qty,Unit Price,Total\n';
+    matchResults.forEach((item, i) => {
+        const cb = document.querySelector(`.match-checkbox[data-index="${i}"]`);
+        if (!cb?.checked) return;
+        
+        const mat = item.material || {};
+        const sel = item.selected;
+        const price = sel?.product?.sale_price || 0;
+        const qty = mat.total_quantity || 0;
+        
+        csv += `"${mat.part_number || ''}","${sel?.product?.code || ''}","${mat.description || ''}","${item.clean_description || ''}",${qty},${price.toFixed(2)},${(price * qty).toFixed(2)}\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(parsedData?.job?.title || 'quote').replace(/\s+/g, '_')}_priced_materials.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+async function sendToQuoteBuilder() {
+    if (!matchResults?.length) {
+        alert('Match products first before sending to Quote Builder');
+        return;
+    }
+    
+    // Collect checked items
+    const confirmed = [];
+    document.querySelectorAll('.match-checkbox:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.index);
+        const item = matchResults[idx];
+        const mat = item.material || {};
+        const sel = item.selected;
+        
+        confirmed.push({
+            product_code: sel?.product?.code || mat.part_number || '',
+            product_id: sel?.product?.id || '',
+            description: mat.description || '',
+            supplier_description: sel?.product?.purchase_description || mat.description || '',
+            clean_description: item.clean_description || mat.description || '',
+            quantity: mat.total_quantity || 0,
+            sale_price: sel?.product?.sale_price || 0,
+            source: 'voice_to_quote'
+        });
+    });
+    
+    if (!confirmed.length) {
+        alert('No items selected — tick at least one item to send');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/voice-to-quote/confirm-matches', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matches: confirmed })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`✓ ${result.item_count} items ready for Quote Builder\nTotal value: £${result.total_value.toFixed(2)}\n\nQuote Builder integration coming next — items will be pushed directly into your quote.`);
+        } else {
+            alert('Failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error sending to Quote Builder: ' + e.message);
+    }
 }
 
 // ─── Inline Editing ─────────────────────────────────────
