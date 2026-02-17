@@ -1138,31 +1138,52 @@ async function sendToQuoteBuilder() {
         const m = item.material || {}, sel = item.selected;
         confirmed.push({
             product_code: sel?.product?.code || m.part_number || '',
-            product_id: sel?.product?.id || '', description: m.description || '',
+            product_id: sel?.product?.id || '',
+            part_number: m.part_number || '',
+            description: m.description || '',
             supplier_description: sel?.product?.purchase_description || m.description || '',
             clean_description: item.clean_description || m.description || '',
-            quantity: m.total_quantity || 0, sale_price: sel?.product?.sale_price || 0,
+            quantity: m.total_quantity || 0,
+            sale_price: parseFloat(sel?.product?.sale_price) || 0,
+            purchase_price: parseFloat(sel?.product?.purchase_price) || 0,
+            unit: m.unit || 'each',
+            category: m.category || 'Accessories',
         });
     });
     
     if (!confirmed.length) { alert('Select at least one item'); return; }
     
+    const btn = event?.target?.closest('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating project...'; }
+    
     try {
-        const response = await fetch('/voice-to-quote/confirm-matches', {
+        const response = await fetch('/voice-to-quote/send-to-quote-builder', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ matches: confirmed })
+            body: JSON.stringify({
+                job_title: currentJob?.title || 'Voice to Quote Project',
+                client_name: currentJob?.client_name || '',
+                matches: confirmed
+            })
         });
         const result = await response.json();
         if (result.success) {
-            alert(`✓ ${result.item_count} items ready — £${result.total_value.toFixed(2)}\n\nQuote Builder integration coming next.`);
+            // Update VTQ job status
             if (currentJob) {
-                fetch(`/voice-to-quote/jobs/${currentJob.id}`, {
+                await fetch(`/voice-to-quote/jobs/${currentJob.id}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'quoted' })
                 });
             }
+            // Redirect to the new Quote Builder project
+            window.location.href = result.project_url;
+        } else {
+            alert(result.error || 'Failed to create project');
         }
-    } catch (e) { alert('Failed: ' + e.message); }
+    } catch (e) {
+        alert('Failed: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Send to Quote Builder →'; }
+    }
 }
 
 // ─── Inline Editing ──────────────────────────────────────

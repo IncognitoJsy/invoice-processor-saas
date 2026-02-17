@@ -1115,7 +1115,7 @@ def extract_text():
             # PDF extraction
             try:
                 import pdfplumber
-            except ImportError as ie:
+            except ImportError:
                 try:
                     from PyPDF2 import PdfReader
                     reader = PdfReader(file)
@@ -1127,7 +1127,7 @@ def extract_text():
                     if not text.strip():
                         return jsonify({'error': 'Could not extract text from PDF — it may be image-based. Try copying the text manually.'}), 400
                     return jsonify({'success': True, 'text': text.strip()})
-                except ImportError as ie:
+                except ImportError:
                     return jsonify({'error': 'PDF processing not available — please paste the text manually'}), 400
             
             text = ""
@@ -1145,7 +1145,7 @@ def extract_text():
         elif ext == 'docx':
             try:
                 import docx
-            except ImportError as ie:
+            except ImportError:
                 return jsonify({'error': 'DOCX processing not available — please paste the text manually'}), 400
             
             import io
@@ -1222,8 +1222,8 @@ def get_cached_products(user_id, force_refresh=False):
             cached = ProductCache.query.filter_by(user_id=user_id).all()
             return [p.to_dict() for p in cached]
     
-    except ImportError as ie:
-        logger.error(f"Product matcher import failed: {ie}", exc_info=True)
+    except ImportError:
+        logger.warning("Product matcher module not available")
         cached = ProductCache.query.filter_by(user_id=user_id).all()
         return [p.to_dict() for p in cached]
     except Exception as e:
@@ -1348,10 +1348,9 @@ def match_products():
         if not combined_materials:
             return jsonify({'error': 'No materials to match'}), 400
         
-        # Always use cached productsn        logger.info(f"Match request: {len(combined_materials)} materials")
+        # Always use cached products
         products = get_cached_products(current_user.id)
         
-        logger.info(f"Cached products loaded: {len(products)}")
         if not products:
             # No products available — return all as unmatched + empty product list
             results = []
@@ -1375,7 +1374,6 @@ def match_products():
         # Run fuzzy matching
         from app.services.product_matcher import match_all_materials, ai_match_unresolved, generate_clean_descriptions
         
-        logger.info(f"Running fuzzy match: {len(combined_materials)} items against {len(products)} products")
         match_results = match_all_materials(combined_materials, products)
         
         # Collect unmatched items for AI assistance
@@ -1430,7 +1428,7 @@ def match_products():
 def confirm_matches():
     """Confirm product matches and prepare for Quote Builder.
     
-    Expects: {matches: [{material_index, product_id, product_code, sale_price, clean_description, quantity}]}
+    Expects: {matches: [{product_code, sale_price, clean_description, quantity, ...}]}
     Returns: {quote_items: [...ready for quote builder]}
     """
     try:
@@ -1464,4 +1462,92 @@ def confirm_matches():
     
     except Exception as e:
         logger.error(f"Confirm matches error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/send-to-quote-builder', methods=['POST'])
+@login_required
+def send_to_quote_builder():
+    """Create a Quote Builder project from matched VTQ materials.
+    
+    Expects: {
+        job_title: str,
+        client_name: str (optional),
+        matches: [{product_code, product_id, description, clean_description, 
+                   supplier_description, quantity, sale_price, purchase_price}]
+    }
+    Returns: {success, project_id, project_url}
+    """
+    from app.models.project import Project, ProjectMaterial
+    
+    try:
+        data = request.get_json() or {}
+        matches = data.get('matches', [])
+        
+        if not matches:
+            return jsonify({'error': 'No materials to send'}), 400
+        
+        # Create the project
+        project = Project(
+            user_id=current_user.id,
+            name=data.get('job_title', 'Voice to Quote Project'),
+            client_name=data.get('client_name') or None,
+            site_address=data.get('site_address') or None,
+            building_type=data.get('building_type', 'renovation'),
+            materials_markup_percent=data.get('markup_percent', 25.0),
+            labour_rate_per_hour=data.get('labour_rate', 45.0),
+            contingency_percent=data.get('contingency_percent', 10.0),
+        )
+        db.session.add(project)
+        db.session.flush()  # Get the project ID
+        
+        markup = float(project.materials_markup_percent)
+        
+        # Add each matched material
+        for match in matches:
+            purchase_price = float(match.get('purchase_price', 0) or 0)
+            sale_price = float(match.get('sale_price', 0) or 0)
+            
+            # Use purchase price as unit_cost if available, otherwise back-calculate from sale price
+            unit_cost = purchase_price if purchase_price > 0 else sale_price
+            
+            material = ProjectMaterial(
+                project_id=project.id,
+                manually_added=False,
+                category=match.get('category', 'Accessories'),
+                part_number=match.get('product_code', '') or match.get('part_number', ''),
+                description=match.get('clean_description') or match.get('description', ''),
+                manufacturer=match.get('manufacturer', ''),
+                quantity=float(match.get('quantity', 1) or 1),
+                unit=match.get('unit', 'each'),
+                unit_cost=unit_cost,
+                price_source='quickbooks' if match.get('product_id') else 'voice_to_quote',
+                price_verified=bool(match.get('product_id')),
+                qb_item_id=str(match.get('product_id', '')) or None,
+                qb_item_name=match.get('product_code', ''),
+                notes=match.get('supplier_description', ''),
+            )
+            
+            material.calculate_totals(markup_percent=markup)
+            db.session.add(material)
+        
+        # Recalculate project totals
+        project.recalculate_totals()
+        db.session.commit()
+        
+        logger.info(f"Created Quote Builder project '{project.name}' (ID: {project.id}) with {len(matches)} materials for user {current_user.id}")
+        
+        return jsonify({
+            'success': True,
+            'project_id': project.id,
+            'project_uuid': project.uuid,
+            'project_url': f'/quotebuilder/project/{project.id}',
+            'item_count': len(matches),
+            'total_materials_cost': float(project.total_materials_cost or 0),
+            'total_materials_sell': float(project.total_materials_sell or 0),
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Send to Quote Builder error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
