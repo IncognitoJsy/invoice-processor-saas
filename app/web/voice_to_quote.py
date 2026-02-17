@@ -1351,7 +1351,8 @@ def match_products():
         # Always use cached productsn        logger.info(f"Match request: {len(combined_materials)} materials")
         products = get_cached_products(current_user.id)
         
-        logger.info(f"Cached products loaded: {len(products)}")n        if not products:
+        logger.info(f"Cached products loaded: {len(products)}")
+        if not products:
             # No products available — return all as unmatched + empty product list
             results = []
             for i, item in enumerate(combined_materials):
