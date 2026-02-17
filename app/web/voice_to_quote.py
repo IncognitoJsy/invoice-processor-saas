@@ -1115,7 +1115,7 @@ def extract_text():
             # PDF extraction
             try:
                 import pdfplumber
-            except ImportError:
+            except ImportError as ie:
                 try:
                     from PyPDF2 import PdfReader
                     reader = PdfReader(file)
@@ -1127,7 +1127,7 @@ def extract_text():
                     if not text.strip():
                         return jsonify({'error': 'Could not extract text from PDF — it may be image-based. Try copying the text manually.'}), 400
                     return jsonify({'success': True, 'text': text.strip()})
-                except ImportError:
+                except ImportError as ie:
                     return jsonify({'error': 'PDF processing not available — please paste the text manually'}), 400
             
             text = ""
@@ -1145,7 +1145,7 @@ def extract_text():
         elif ext == 'docx':
             try:
                 import docx
-            except ImportError:
+            except ImportError as ie:
                 return jsonify({'error': 'DOCX processing not available — please paste the text manually'}), 400
             
             import io
@@ -1222,8 +1222,8 @@ def get_cached_products(user_id, force_refresh=False):
             cached = ProductCache.query.filter_by(user_id=user_id).all()
             return [p.to_dict() for p in cached]
     
-    except ImportError:
-        logger.warning("Product matcher module not available")
+    except ImportError as ie:
+        logger.error(f"Product matcher import failed: {ie}", exc_info=True)
         cached = ProductCache.query.filter_by(user_id=user_id).all()
         return [p.to_dict() for p in cached]
     except Exception as e:
