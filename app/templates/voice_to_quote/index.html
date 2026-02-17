@@ -1138,7 +1138,7 @@ async function sendToQuoteBuilder() {
         const m = item.material || {}, sel = item.selected;
         confirmed.push({
             product_code: sel?.product?.code || m.part_number || '',
-            product_id: sel?.product?.id || '',
+            product_id: sel?.product?.product_id || sel?.product?.id || '',
             part_number: m.part_number || '',
             description: m.description || '',
             supplier_description: sel?.product?.purchase_description || m.description || '',
