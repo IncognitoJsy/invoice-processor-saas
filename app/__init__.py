@@ -13,6 +13,12 @@ def create_app(config_name='default'):
     app = Flask(__name__, static_folder=static_folder)
     app.config.from_object(config[config_name])
     
+    # Ensure upload directories exist (important for Railway volumes)
+    import os as _os
+    upload_root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", app.config.get("UPLOAD_FOLDER", "uploads"))
+    for subdir in ["queue", "invoices", "temp"]:
+        _os.makedirs(_os.path.join(upload_root, subdir), exist_ok=True)
+    
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
