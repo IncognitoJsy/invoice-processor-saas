@@ -517,7 +517,7 @@ function projectDetail(projectId) {
                 if (data.success) {
                     this.project.qb_customer_id = data.qb_customer_id;
                     this.project.qb_customer_name = data.qb_customer_name;
-                    this.showToast('Customer linked: ' + customer.name, 'success');
+                    showToast('Customer linked: ' + customer.name, 'success');
                 }
             } catch(e) { console.error(e); }
         },
@@ -535,13 +535,13 @@ function projectDetail(projectId) {
                 });
                 this.project.qb_customer_id = null;
                 this.project.qb_customer_name = null;
-                this.showToast('Customer unlinked', 'info');
+                showToast('Customer unlinked', 'info');
             } catch(e) { console.error(e); }
         },
         
         async pushToQuickBooks() {
             if (!this.project.qb_customer_id) {
-                this.showToast('Link a customer first', 'error');
+                showToast('Link a customer first', 'error');
                 return;
             }
             if (!confirm('Push this quote to QuickBooks as an Estimate?')) return;
@@ -562,13 +562,13 @@ function projectDetail(projectId) {
                     if (data.skipped_items?.length) {
                         msg += `\n${data.skipped_items.length} items skipped (no QB match)`;
                     }
-                    this.showToast(msg, 'success');
+                    showToast(msg, 'success');
                     await this.loadProject();
                 } else {
-                    this.showToast(data.error || 'Failed to push estimate', 'error');
+                    showToast(data.error || 'Failed to push estimate', 'error');
                 }
             } catch(e) {
-                this.showToast('Failed: ' + e.message, 'error');
+                showToast('Failed: ' + e.message, 'error');
             } finally {
                 this.pushingEstimate = false;
             }
