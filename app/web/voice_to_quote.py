@@ -1714,15 +1714,33 @@ def push_estimate():
                 'missing_items': items_without_qb
             }), 400
         
-        # Create the estimate
-        memo = data.get('memo', f'Generated from GoZappify Voice-to-Quote — {project.name}')
+        # Add contingency line if project has contingency > 0
+        contingency_pct = float(project.contingency_percent or 0)
+        if contingency_pct > 0:
+            materials_total = sum(item['unit_price'] * item['quantity'] for item in line_items)
+            contingency_amount = round(materials_total * contingency_pct / 100, 2)
+            
+            # Find or note contingency item in QB
+            contingency_item = qb.find_item_by_name(qb_connection, 'Contingency')
+            if not contingency_item:
+                contingency_item = qb.find_item_by_sku(qb_connection, 'CONTINGENCY')
+            
+            if contingency_item:
+                line_items.append({
+                    'item_id': str(contingency_item['Id']),
+                    'quantity': 1,
+                    'unit_price': contingency_amount,
+                    'description': f'Contingency ({contingency_pct:.0f}%)',
+                })
+            else:
+                logger.warning('No Contingency item found in QB - skipping contingency line')
+        
         expiry_days = data.get('expiry_days', 30)
         
         result = qb.create_estimate(
             qb_connection, 
             project.qb_customer_id, 
             line_items,
-            memo=memo,
             expiry_days=expiry_days
         )
         
