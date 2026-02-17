@@ -3,7 +3,7 @@
 This module now includes the interactive takeoff canvas functionality,
 replacing the old automated AI parsing approach with a hybrid user-controlled workflow.
 """
-from flask import Blueprint, render_template, jsonify, request, send_file, current_app
+from flask import Blueprint, render_template, jsonify, request, send_file, current_app, redirect
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -87,6 +87,8 @@ def add_security_headers(response):
 @login_required
 def index():
     """Quote Builder main page - list all projects"""
+    if not current_user.is_admin and current_user.subscription_plan not in ['ultimate', 'trial']:
+        return redirect('/billing?upgrade=ultimate')
     return render_template('quotebuilder/index.html')
 
 

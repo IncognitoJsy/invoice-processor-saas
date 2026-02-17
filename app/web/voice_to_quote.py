@@ -1,5 +1,5 @@
 """Voice-to-Quote: Parse Plaud transcriptions into structured materials lists"""
-from flask import Blueprint, request, jsonify, render_template, current_app
+from flask import Blueprint, request, jsonify, render_template, current_app, redirect
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.user_preference import UserPreference, CorrectionLog, ProductCache
@@ -230,6 +230,8 @@ Return valid JSON matching this structure:
 @login_required
 def index():
     """Voice-to-quote main page — shows jobs list"""
+    if not current_user.is_admin and current_user.subscription_plan not in ['ultimate', 'trial']:
+        return redirect('/billing?upgrade=ultimate')
     return render_template('voice_to_quote/index.html')
 
 
