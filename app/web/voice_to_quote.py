@@ -1551,3 +1551,334 @@ def send_to_quote_builder():
         db.session.rollback()
         logger.error(f"Send to Quote Builder error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# QB CUSTOMERS — Search & Link
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/search-customers', methods=['GET'])
+@login_required
+def search_customers():
+    """Search QuickBooks customers by name.
+    
+    ?q=smith&limit=15
+    Returns: {customers: [{id, name, company, email, phone, balance}]}
+    """
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+    
+    query = request.args.get('q', '').strip()
+    if len(query) < 2:
+        return jsonify({'customers': [], 'error': 'Search term too short'})
+    
+    try:
+        qb_connection = QuickBooksConnection.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).first()
+        if not qb_connection:
+            return jsonify({'customers': [], 'error': 'No QuickBooks connection'})
+        
+        qb = QuickBooksService(current_user)
+        results = qb.search_customers(qb_connection, query)
+        
+        customers = []
+        for c in results:
+            customers.append({
+                'id': c.get('Id'),
+                'name': c.get('DisplayName', ''),
+                'company': c.get('CompanyName', ''),
+                'email': c.get('PrimaryEmailAddr', {}).get('Address', '') if c.get('PrimaryEmailAddr') else '',
+                'phone': c.get('PrimaryPhone', {}).get('FreeFormNumber', '') if c.get('PrimaryPhone') else '',
+                'balance': float(c.get('Balance', 0)),
+            })
+        
+        return jsonify({'customers': customers, 'count': len(customers)})
+    
+    except Exception as e:
+        logger.error(f"Customer search error: {e}", exc_info=True)
+        return jsonify({'customers': [], 'error': str(e)})
+
+
+@bp.route('/link-customer', methods=['POST'])
+@login_required
+def link_customer():
+    """Link a QuickBooks customer to a Quote Builder project.
+    
+    Expects: {project_id: int, customer_id: str, customer_name: str}
+    """
+    from app.models.project import Project
+    
+    try:
+        data = request.get_json() or {}
+        project_id = data.get('project_id')
+        customer_id = data.get('customer_id')
+        customer_name = data.get('customer_name')
+        
+        if not project_id or not customer_id:
+            return jsonify({'error': 'Project and customer are required'}), 400
+        
+        project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+        
+        project.qb_customer_id = str(customer_id)
+        project.qb_customer_name = customer_name
+        db.session.commit()
+        
+        logger.info(f"Linked customer '{customer_name}' (ID: {customer_id}) to project {project_id}")
+        
+        return jsonify({
+            'success': True,
+            'project_id': project.id,
+            'qb_customer_id': project.qb_customer_id,
+            'qb_customer_name': project.qb_customer_name,
+        })
+    
+    except Exception as e:
+        logger.error(f"Link customer error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/push-estimate', methods=['POST'])
+@login_required
+def push_estimate():
+    """Push a Quote Builder project to QuickBooks as an Estimate.
+    
+    Expects: {project_id: int, memo: str (optional), expiry_days: int (optional)}
+    Returns: {success, estimate_id, estimate_number}
+    """
+    from app.models.project import Project, ProjectMaterial
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+    
+    try:
+        data = request.get_json() or {}
+        project_id = data.get('project_id')
+        
+        if not project_id:
+            return jsonify({'error': 'Project ID is required'}), 400
+        
+        project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+        
+        if not project.qb_customer_id:
+            return jsonify({'error': 'Link a customer first before pushing to QuickBooks'}), 400
+        
+        qb_connection = QuickBooksConnection.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).first()
+        if not qb_connection:
+            return jsonify({'error': 'No QuickBooks connection'}), 400
+        
+        qb = QuickBooksService(current_user)
+        
+        # Get all project materials
+        materials = ProjectMaterial.query.filter_by(project_id=project.id).all()
+        if not materials:
+            return jsonify({'error': 'No materials in project'}), 400
+        
+        # Build line items for QB Estimate
+        line_items = []
+        items_without_qb = []
+        
+        for mat in materials:
+            if mat.qb_item_id:
+                line_items.append({
+                    'item_id': mat.qb_item_id,
+                    'quantity': float(mat.quantity),
+                    'unit_price': float(mat.unit_sell or mat.unit_cost or 0),
+                    'description': mat.description or mat.part_number or '',
+                })
+            else:
+                # Try to find by SKU in QuickBooks
+                found = qb.find_item_by_sku(qb_connection, mat.part_number) if mat.part_number else None
+                if found:
+                    mat.qb_item_id = str(found['Id'])
+                    mat.qb_item_name = found.get('Name', '')
+                    line_items.append({
+                        'item_id': str(found['Id']),
+                        'quantity': float(mat.quantity),
+                        'unit_price': float(mat.unit_sell or mat.unit_cost or 0),
+                        'description': mat.description or mat.part_number or '',
+                    })
+                else:
+                    items_without_qb.append(mat.part_number or mat.description)
+        
+        if not line_items:
+            return jsonify({
+                'error': 'No materials could be matched to QuickBooks items',
+                'missing_items': items_without_qb
+            }), 400
+        
+        # Create the estimate
+        memo = data.get('memo', f'Generated from GoZappify Voice-to-Quote — {project.name}')
+        expiry_days = data.get('expiry_days', 30)
+        
+        result = qb.create_estimate(
+            qb_connection, 
+            project.qb_customer_id, 
+            line_items,
+            memo=memo,
+            expiry_days=expiry_days
+        )
+        
+        if result and 'Estimate' in result:
+            estimate = result['Estimate']
+            estimate_id = estimate.get('Id')
+            estimate_number = estimate.get('DocNumber', '')
+            
+            # Update project status
+            project.status = 'quoted'
+            project.quoted_at = datetime.utcnow()
+            db.session.commit()
+            
+            logger.info(f"Pushed estimate #{estimate_number} (ID: {estimate_id}) to QB for project {project_id}")
+            
+            return jsonify({
+                'success': True,
+                'estimate_id': estimate_id,
+                'estimate_number': estimate_number,
+                'line_count': len(line_items),
+                'skipped_items': items_without_qb,
+                'total': float(estimate.get('TotalAmt', 0)),
+            })
+        else:
+            return jsonify({'error': 'QuickBooks did not return an estimate — check your connection'}), 500
+    
+    except Exception as e:
+        logger.error(f"Push estimate error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/update-prices-only', methods=['POST'])
+@login_required
+def update_prices_only():
+    """Process a queued invoice ONLY to update product prices in QuickBooks — no bill created.
+    
+    Expects: {queue_id: int} or {invoice_id: int}
+    Reads the invoice, extracts line items, updates cost+sale prices in QB for each product.
+    """
+    from app.models.quickbooks import QuickBooksConnection
+    from app.integrations.quickbooks_service import QuickBooksService
+    
+    try:
+        data = request.get_json() or {}
+        queue_id = data.get('queue_id')
+        invoice_id = data.get('invoice_id')
+        
+        if not queue_id and not invoice_id:
+            return jsonify({'error': 'Provide queue_id or invoice_id'}), 400
+        
+        qb_connection = QuickBooksConnection.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).first()
+        if not qb_connection:
+            return jsonify({'error': 'No QuickBooks connection'}), 400
+        
+        qb = QuickBooksService(current_user)
+        
+        # Get the invoice data — from queue or processed invoices
+        line_items = []
+        source_name = ''
+        
+        if queue_id:
+            from app.models.queued_invoice import QueuedInvoice
+            queued = QueuedInvoice.query.filter_by(id=queue_id, user_id=current_user.id).first()
+            if not queued:
+                return jsonify({'error': 'Queued invoice not found'}), 404
+            
+            # Parse the PDF to get line items
+            from app.services.invoice_processor import process_invoice_file
+            parsed = process_invoice_file(queued.file_path)
+            if parsed and parsed.get('line_items'):
+                line_items = parsed['line_items']
+                source_name = queued.original_filename
+            else:
+                return jsonify({'error': 'Could not parse invoice line items'}), 400
+        
+        elif invoice_id:
+            from app.models.invoice import Invoice, InvoiceLineItem
+            invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+            if not invoice:
+                return jsonify({'error': 'Invoice not found'}), 404
+            
+            for item in invoice.line_items:
+                line_items.append({
+                    'sku': item.part_number or item.sku or '',
+                    'description': item.description or '',
+                    'unit_price': float(item.unit_price or 0),
+                    'quantity': float(item.quantity or 0),
+                })
+            source_name = invoice.filename or f'Invoice #{invoice.id}'
+        
+        if not line_items:
+            return jsonify({'error': 'No line items found in invoice'}), 400
+        
+        # Update prices in QuickBooks
+        updated = 0
+        skipped = 0
+        errors = []
+        
+        for item in line_items:
+            sku = item.get('sku') or item.get('part_number') or item.get('code', '')
+            if not sku:
+                skipped += 1
+                continue
+            
+            unit_price = float(item.get('unit_price', 0) or 0)
+            if unit_price <= 0:
+                skipped += 1
+                continue
+            
+            try:
+                # Find item in QB
+                found = qb.find_item_by_sku(qb_connection, sku)
+                if not found:
+                    found = qb.find_item_by_name(qb_connection, sku)
+                
+                if found:
+                    # Calculate sale price with user's markup
+                    markup = data.get('markup_percent', 25)
+                    sale_price = round(unit_price * (1 + float(markup) / 100), 2)
+                    
+                    # Update the item
+                    update_data = {
+                        'Id': found['Id'],
+                        'SyncToken': found['SyncToken'],
+                        'Name': found['Name'],
+                        'PurchaseCost': unit_price,
+                        'UnitPrice': sale_price,
+                    }
+                    
+                    result = qb.make_api_request(qb_connection, 'item', method='POST', data=update_data)
+                    if result and 'Item' in result:
+                        updated += 1
+                    else:
+                        errors.append(f'{sku}: Update failed')
+                else:
+                    skipped += 1
+                    
+            except Exception as e:
+                errors.append(f'{sku}: {str(e)}')
+        
+        # Also update the product cache
+        try:
+            get_cached_products(current_user.id, force_refresh=True)
+        except:
+            pass
+        
+        logger.info(f"Price update from '{source_name}': {updated} updated, {skipped} skipped, {len(errors)} errors")
+        
+        return jsonify({
+            'success': True,
+            'updated': updated,
+            'skipped': skipped,
+            'errors': errors,
+            'source': source_name,
+        })
+    
+    except Exception as e:
+        logger.error(f"Update prices error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
