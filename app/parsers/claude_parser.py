@@ -646,6 +646,23 @@ STANDARD RULES:
 34. If quantity is not explicitly shown, it's usually 1
 35. Be very careful with decimal points - 1,541.12 means one thousand five hundred forty-one pounds
 
+HANDLING UNKNOWN/NEW SUPPLIERS:
+36. If the supplier is NOT YESSS, CEF, or Wholesale Electrics, apply these universal rules:
+37. Look for the document title (INVOICE, QUOTE, etc.) prominently displayed at the top
+38. Look for column headers - common patterns: Code/SKU/Part No | Description | Qty/Quantity | Unit Price/Price | Amount/Total/Net
+39. The supplier name is usually the company logo or name at the very top of the page
+40. Invoice/quote number is usually in the top right area, labeled Invoice No, Invoice Number, Quote No, Reference, etc.
+41. Customer account number may be labeled: Account, A/C, Customer No, Account Code, etc.
+42. Job reference may be labeled: Your Ref, Customer Ref, Order Ref, Job Ref, PO Number, Your Order, Reference, etc.
+43. For line items, map columns by their headers - do NOT assume a fixed column order
+44. If there is a subtotal/net total at the bottom, use it to verify your extraction (sum of line amounts should match)
+45. If you see VAT/GST amounts, extract the NET amount (before tax) as total_net_amount
+46. For part numbers: extract exactly as shown, preserving dashes, slashes, and spaces
+47. For descriptions: capture the full text even if it wraps across multiple lines
+48. If a discount column exists, extract the discount percentage as a string
+49. If no discount column exists, set discount to "0" for all items
+50. ALWAYS extract every single line item - never skip items even if the format is unfamiliar
+
 Double-check your work - missing items, wrong document type, wrong account number, or wrong grouping costs real money!"""
     
     def _parse_response(self, text: str, pdf_path: str, expected_document_type: str = 'invoice') -> Dict:
