@@ -1348,10 +1348,10 @@ def match_products():
         if not combined_materials:
             return jsonify({'error': 'No materials to match'}), 400
         
-        # Always use cached products
+        # Always use cached productsn        logger.info(f"Match request: {len(combined_materials)} materials")
         products = get_cached_products(current_user.id)
         
-        if not products:
+        logger.info(f"Cached products loaded: {len(products)}")n        if not products:
             # No products available — return all as unmatched + empty product list
             results = []
             for i, item in enumerate(combined_materials):
@@ -1374,7 +1374,7 @@ def match_products():
         # Run fuzzy matching
         from app.services.product_matcher import match_all_materials, ai_match_unresolved, generate_clean_descriptions
         
-        match_results = match_all_materials(combined_materials, products)
+        logger.info(f"Running fuzzy match: {len(combined_materials)} items against {len(products)} products")n        match_results = match_all_materials(combined_materials, products)n        logger.info(f"Match results: {sum(1 for r in match_results if r["status"]=="matched")} matched, {sum(1 for r in match_results if r["status"]=="unmatched")} unmatched")
         
         # Collect unmatched items for AI assistance
         unmatched = []
