@@ -1081,14 +1081,18 @@ Rules:
         lines = []
         for idx, item in enumerate(line_items):
             qty = float(item.get('quantity', 1))
+            unit_price = round(float(item.get('unit_price', 0)), 2)
+            amount = round(qty * unit_price, 2)
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",
+                "Amount": amount,
                 "SalesItemLineDetail": {
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": qty
+                    "Qty": qty,
+                    "UnitPrice": unit_price
                 }
             }
             
@@ -1096,7 +1100,7 @@ Rules:
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
-            # UnitPrice omitted - QB uses its stored sale price for the item
+
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
@@ -1369,14 +1373,18 @@ Rules:
         lines = []
         for idx, item in enumerate(line_items):
             qty = float(item.get('quantity', 1))
+            unit_price = round(float(item.get('unit_price', 0)), 2)
+            amount = round(qty * unit_price, 2)
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",
+                "Amount": amount,
                 "SalesItemLineDetail": {
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": qty
+                    "Qty": qty,
+                    "UnitPrice": unit_price
                 }
             }
             
@@ -1384,7 +1392,7 @@ Rules:
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
-            # UnitPrice omitted - QB uses its stored sale price for the item
+
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
