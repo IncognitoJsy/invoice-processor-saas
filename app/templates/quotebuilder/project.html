@@ -74,7 +74,8 @@
     </div>
     
     <!-- QuickBooks Customer & Actions -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6"
+         @customer-linked.window="project.qb_customer_id = $event.detail.id; project.qb_customer_name = $event.detail.name">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-4 flex-1">
                 <!-- Customer Link -->
@@ -87,31 +88,63 @@
                         </div>
                     </template>
                     <template x-if="!project.qb_customer_name">
-                        <div class="relative flex-1" x-data="{searching: false, query: '', results: [], showResults: false}">
+                        <div class="relative flex-1" x-data="{
+                            query: '', 
+                            results: [], 
+                            showResults: false,
+                            searching: false,
+                            async doSearch() {
+                                if (this.query.length < 2) { this.results = []; return; }
+                                this.searching = true;
+                                try {
+                                    const resp = await fetch('/voice-to-quote/search-customers?q=' + encodeURIComponent(this.query));
+                                    const data = await resp.json();
+                                    this.results = data.customers || [];
+                                    this.showResults = true;
+                                } catch(e) { console.error(e); }
+                                this.searching = false;
+                            },
+                            async pickCustomer(c) {
+                                try {
+                                    const resp = await fetch('/voice-to-quote/link-customer', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({
+                                            project_id: $data.projectId || {{ project.id }},
+                                            customer_id: c.id,
+                                            customer_name: c.name
+                                        })
+                                    });
+                                    const data = await resp.json();
+                                    if (data.success) {
+                                        $dispatch('customer-linked', {id: data.qb_customer_id, name: data.qb_customer_name});
+                                    }
+                                } catch(e) { console.error(e); }
+                                this.showResults = false;
+                                this.query = '';
+                            }
+                        }">
                             <input type="text" x-model="query" 
-                                   @input.debounce.200ms="searchCustomers()" 
+                                   @input.debounce.300ms="doSearch()" 
                                    @focus="if(results.length) showResults=true"
                                    @click.away="showResults=false"
                                    placeholder="Search QuickBooks customers..."
                                    class="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+                            <div x-show="searching" class="absolute right-2 top-2"><span class="text-xs text-gray-400">Searching...</span></div>
                             <div x-show="showResults && results.length > 0" 
                                  class="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                 <template x-for="c in results" :key="c.id">
-                                    <div @click="selectCustomer(c)" 
+                                    <div @click="pickCustomer(c)" 
                                          class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0">
                                         <span class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></span>
                                         <span class="text-xs text-gray-400 ml-2" x-text="c.email"></span>
                                     </div>
                                 </template>
                             </div>
-                            <div x-show="showResults && query.length >= 2 && results.length === 0" 
+                            <div x-show="showResults && query.length >= 2 && results.length === 0 && !searching" 
                                  class="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-3">
                                 <p class="text-xs text-gray-400 italic">No customers found</p>
                             </div>
-                            <script>
-                                // Attach to Alpine component
-                                document.addEventListener('alpine:init', () => {});
-                            </script>
                         </div>
                     </template>
                 </div>
