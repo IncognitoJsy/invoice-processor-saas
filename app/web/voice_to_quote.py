@@ -1375,7 +1375,8 @@ def match_products():
         # Run fuzzy matching
         from app.services.product_matcher import match_all_materials, ai_match_unresolved, generate_clean_descriptions
         
-        logger.info(f"Running fuzzy match: {len(combined_materials)} items against {len(products)} products")n        match_results = match_all_materials(combined_materials, products)n        logger.info(f"Match results: {sum(1 for r in match_results if r["status"]=="matched")} matched, {sum(1 for r in match_results if r["status"]=="unmatched")} unmatched")
+        logger.info(f"Running fuzzy match: {len(combined_materials)} items against {len(products)} products")
+        match_results = match_all_materials(combined_materials, products)
         
         # Collect unmatched items for AI assistance
         unmatched = []
