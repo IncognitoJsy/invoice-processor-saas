@@ -21,10 +21,9 @@ def fetch_xero_products(user):
     
     Returns list of dicts: [{code, name, description, purchase_price, sale_price, supplier_name, ...}]
     """
-    from app.models.connection import Connection
-    from app.services.xero_service import XeroService
-    
     try:
+        from app.models.connection import Connection
+        from app.services.xero_service import XeroService
         conn = Connection.query.filter_by(user_id=user.id, provider='xero', active=True).first()
         if not conn:
             return []
