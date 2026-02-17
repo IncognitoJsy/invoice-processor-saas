@@ -73,6 +73,62 @@
         </div>
     </div>
     
+    <!-- QuickBooks Customer & Actions -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4 flex-1">
+                <!-- Customer Link -->
+                <div class="flex items-center gap-2 flex-1 max-w-md">
+                    <span class="text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Customer:</span>
+                    <template x-if="project.qb_customer_name">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-gray-900 dark:text-white" x-text="project.qb_customer_name"></span>
+                            <button @click="unlinkCustomer()" class="text-xs text-gray-400 hover:text-red-500" title="Unlink">✕</button>
+                        </div>
+                    </template>
+                    <template x-if="!project.qb_customer_name">
+                        <div class="relative flex-1" x-data="{searching: false, query: '', results: [], showResults: false}">
+                            <input type="text" x-model="query" 
+                                   @input.debounce.200ms="searchCustomers()" 
+                                   @focus="if(results.length) showResults=true"
+                                   @click.away="showResults=false"
+                                   placeholder="Search QuickBooks customers..."
+                                   class="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+                            <div x-show="showResults && results.length > 0" 
+                                 class="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                <template x-for="c in results" :key="c.id">
+                                    <div @click="selectCustomer(c)" 
+                                         class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                                        <span class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></span>
+                                        <span class="text-xs text-gray-400 ml-2" x-text="c.email"></span>
+                                    </div>
+                                </template>
+                            </div>
+                            <div x-show="showResults && query.length >= 2 && results.length === 0" 
+                                 class="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-3">
+                                <p class="text-xs text-gray-400 italic">No customers found</p>
+                            </div>
+                            <script>
+                                // Attach to Alpine component
+                                document.addEventListener('alpine:init', () => {});
+                            </script>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- QB Actions -->
+            <div class="flex items-center gap-2">
+                <button @click="pushToQuickBooks()" 
+                        :disabled="!project.qb_customer_name || pushingEstimate"
+                        class="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-2">
+                    <span x-show="!pushingEstimate">📤 Push to QuickBooks</span>
+                    <span x-show="pushingEstimate">⏳ Pushing...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Content - Tabs -->
     <div x-data="{ activeTab: 'documents' }">
         <!-- Tab Navigation -->
@@ -365,6 +421,9 @@ function projectDetail(projectId) {
         generatingMaterials: false,
         matchingPrices: false,
         calculatingLabour: false,
+        pushingEstimate: false,
+        customerQuery: '',
+        customerResults: [],
         
         async init() {
             await this.loadProject();
@@ -396,6 +455,89 @@ function projectDetail(projectId) {
                 await this.loadProject();
             } catch (error) {
                 console.error('Error updating project:', error);
+            }
+        },
+        
+        async searchCustomers() {
+            const query = this.$el?.querySelector?.('[x-model="query"]')?.value || this.customerQuery;
+            if (!query || query.length < 2) return;
+            try {
+                const resp = await fetch(`/voice-to-quote/search-customers?q=${encodeURIComponent(query)}`);
+                const data = await resp.json();
+                // Update the nested Alpine component
+                this.customerResults = data.customers || [];
+            } catch(e) { console.error(e); }
+        },
+        
+        async selectCustomer(customer) {
+            try {
+                const resp = await fetch('/voice-to-quote/link-customer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: this.projectId,
+                        customer_id: customer.id,
+                        customer_name: customer.name
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.project.qb_customer_id = data.qb_customer_id;
+                    this.project.qb_customer_name = data.qb_customer_name;
+                    this.showToast('Customer linked: ' + customer.name, 'success');
+                }
+            } catch(e) { console.error(e); }
+        },
+        
+        async unlinkCustomer() {
+            try {
+                await fetch('/voice-to-quote/link-customer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: this.projectId,
+                        customer_id: '',
+                        customer_name: ''
+                    })
+                });
+                this.project.qb_customer_id = null;
+                this.project.qb_customer_name = null;
+                this.showToast('Customer unlinked', 'info');
+            } catch(e) { console.error(e); }
+        },
+        
+        async pushToQuickBooks() {
+            if (!this.project.qb_customer_id) {
+                this.showToast('Link a customer first', 'error');
+                return;
+            }
+            if (!confirm('Push this quote to QuickBooks as an Estimate?')) return;
+            
+            this.pushingEstimate = true;
+            try {
+                const resp = await fetch('/voice-to-quote/push-estimate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: this.projectId,
+                        memo: `GoZappify Quote: ${this.project.name}`
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    let msg = `Estimate #${data.estimate_number} created — ${data.line_count} items, £${data.total.toFixed(2)}`;
+                    if (data.skipped_items?.length) {
+                        msg += `\n${data.skipped_items.length} items skipped (no QB match)`;
+                    }
+                    this.showToast(msg, 'success');
+                    await this.loadProject();
+                } else {
+                    this.showToast(data.error || 'Failed to push estimate', 'error');
+                }
+            } catch(e) {
+                this.showToast('Failed: ' + e.message, 'error');
+            } finally {
+                this.pushingEstimate = false;
             }
         },
         
