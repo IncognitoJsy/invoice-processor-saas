@@ -1080,15 +1080,15 @@ Rules:
         # Build line items with GST
         lines = []
         for idx, item in enumerate(line_items):
+            qty = float(item.get('quantity', 1))
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",
-                "Amount": round(float(item.get('quantity', 1)) * float(item.get('unit_price', 0)), 2),
                 "SalesItemLineDetail": {
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": float(item.get('quantity', 1))
+                    "Qty": qty
                 }
             }
             
@@ -1096,8 +1096,7 @@ Rules:
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
-            if item.get('unit_price'):
-                line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
+            # UnitPrice omitted - QB uses its stored sale price for the item
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
@@ -1369,15 +1368,15 @@ Rules:
         # Build line items with GST
         lines = []
         for idx, item in enumerate(line_items):
+            qty = float(item.get('quantity', 1))
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",
-                "Amount": round(float(item.get('quantity', 1)) * float(item.get('unit_price', 0)), 2),
                 "SalesItemLineDetail": {
                     "ItemRef": {
                         "value": item['item_id']
                     },
-                    "Qty": float(item.get('quantity', 1))
+                    "Qty": qty
                 }
             }
             
@@ -1385,8 +1384,7 @@ Rules:
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
             
-            if item.get('unit_price'):
-                line["SalesItemLineDetail"]["UnitPrice"] = float(item['unit_price'])
+            # UnitPrice omitted - QB uses its stored sale price for the item
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
