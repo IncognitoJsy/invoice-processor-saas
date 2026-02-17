@@ -360,7 +360,7 @@ class QuickBooksService:
                     # Parse error details safely without exposing raw response
                     error_detail = self._parse_qb_error(response)
                     current_app.logger.error(
-                        f"QB API client error: {response.status_code} on {endpoint}"
+                        f"QB API client error: {response.status_code} on {endpoint} — {error_detail}"
                     )
                     return {
                         'error': error_detail,
