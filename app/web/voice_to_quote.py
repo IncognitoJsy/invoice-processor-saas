@@ -12,6 +12,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def repair_json(text):
+    """Fix common JSON issues from Claude responses"""
+    import re
+    # Remove trailing commas before } or ]
+    text = re.sub(r',\s*([}\]])', r'\1', text)
+    # Remove any BOM or zero-width chars
+    text = text.replace('\ufeff', '').replace('\u200b', '')
+    # Fix single quotes to double quotes (but not inside strings)
+    # Only if it looks like single-quoted keys
+    if "'" in text and '"' not in text[:100]:
+        text = text.replace("'", '"')
+    return text
+
+
+
 bp = Blueprint('voice_to_quote', __name__, url_prefix='/voice-to-quote')
 
 PRODUCT_CACHE_TTL_HOURS = 24  # Refresh cache if older than this
@@ -560,7 +575,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
                 response_text = response_text[:-3]
             response_text = response_text.strip()
         
-        parsed_data = json.loads(response_text)
+        parsed_data = json.loads(repair_json(response_text))
         
         # Save to job
         job.set_parsed_data(parsed_data)
@@ -732,7 +747,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
             response_text = response_text.strip()
         
         try:
-            parsed_data = json.loads(response_text)
+            parsed_data = json.loads(repair_json(response_text))
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse Claude response as JSON: {e}")
             logger.error(f"Response was: {response_text[:500]}")
@@ -2174,7 +2189,7 @@ IMPORTANT:
             lines = response_text.split('\n')
             response_text = '\n'.join(lines[1:-1])
         
-        rooms_data = json.loads(response_text)
+        rooms_data = json.loads(repair_json(response_text))
         
         # Store results
         job.floor_plan_rooms = json.dumps(rooms_data)
