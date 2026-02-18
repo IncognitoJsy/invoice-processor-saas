@@ -33,6 +33,18 @@ def create_app(config_name='default'):
         for attempt in range(max_retries):
             try:
                 db.create_all()
+                # Add new columns if they don't exist (safe migrations)
+                with db.engine.connect() as conn:
+                    conn.execute(db.text("""
+                        ALTER TABLE vtq_jobs 
+                        ADD COLUMN IF NOT EXISTS floor_plan_path VARCHAR(500),
+                        ADD COLUMN IF NOT EXISTS floor_plan_filename VARCHAR(300),
+                        ADD COLUMN IF NOT EXISTS floor_plan_scale VARCHAR(20),
+                        ADD COLUMN IF NOT EXISTS floor_plan_paper VARCHAR(10),
+                        ADD COLUMN IF NOT EXISTS floor_plan_orientation VARCHAR(10),
+                        ADD COLUMN IF NOT EXISTS floor_plan_rooms TEXT
+                    """))
+                    conn.commit()
                 app.logger.info('Database connection established')
                 break
             except Exception as e:
