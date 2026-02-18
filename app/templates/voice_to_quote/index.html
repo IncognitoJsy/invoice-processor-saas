@@ -257,6 +257,69 @@
             </div>
         </div>
 
+        <!-- Floor Plan Check Modal -->
+        <div id="fp-check-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick="if(event.target===this) closeFpCheck()">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 max-w-md mx-4 w-full">
+                <div class="text-center mb-4">
+                    <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Do you have a floor plan?</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">A scaled floor plan helps us accurately calculate cable runs, room areas, and reduce manual flags.</p>
+                </div>
+                
+                <div id="fp-check-options" class="space-y-2">
+                    <button onclick="closeFpCheck(); scrollToFloorPlan()" class="w-full px-4 py-3 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition text-left flex items-center gap-3">
+                        <span class="text-lg">📐</span>
+                        <div>
+                            <div class="font-semibold">Yes, let me upload it</div>
+                            <div class="text-xs text-blue-200">Upload a drawing for better accuracy</div>
+                        </div>
+                    </button>
+                    <button onclick="closeFpCheck(); doParseJob()" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition text-left flex items-center gap-3">
+                        <span class="text-lg">⏩</span>
+                        <div>
+                            <div class="font-semibold">No drawing available</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Parse anyway — room sizes will be flagged for manual input</div>
+                        </div>
+                    </button>
+                </div>
+                
+                <div id="fp-check-analysed" class="hidden">
+                    <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-green-600">✓</span>
+                            <span class="text-sm font-medium text-green-700 dark:text-green-300" id="fp-check-room-count"></span>
+                        </div>
+                    </div>
+                    <button onclick="closeFpCheck(); doParseJob()" class="w-full px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                        Parse with floor plan data
+                    </button>
+                </div>
+                
+                <div id="fp-check-uploaded-not-analysed" class="hidden">
+                    <div class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-yellow-600">⚠</span>
+                            <span class="text-sm font-medium text-yellow-700 dark:text-yellow-300">Floor plan uploaded but not analysed yet</span>
+                        </div>
+                        <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Set the scale and click "Analyse Drawing" first for best results.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <button onclick="closeFpCheck(); scrollToFloorPlan()" class="w-full px-4 py-3 bg-yellow-600 text-white text-sm font-medium rounded-xl hover:bg-yellow-700 transition">
+                            Set scale & analyse first
+                        </button>
+                        <button onclick="closeFpCheck(); doParseJob()" class="w-full px-4 py-2 text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition">
+                            Skip — parse without floor plan data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ─── Step 2: Parsed Results ─── -->
         <div id="step-parsed" class="hidden">
             
@@ -674,7 +737,45 @@ async function loadFile(file, textarea) {
 
 // ─── Parse Job ───────────────────────────────────────────
 
-async function parseJob() {
+function parseJob() {
+    // Show floor plan check modal before parsing
+    const modal = document.getElementById('fp-check-modal');
+    const options = document.getElementById('fp-check-options');
+    const analysed = document.getElementById('fp-check-analysed');
+    const uploadedNotAnalysed = document.getElementById('fp-check-uploaded-not-analysed');
+    
+    // Hide all states
+    options.classList.add('hidden');
+    analysed.classList.add('hidden');
+    uploadedNotAnalysed.classList.add('hidden');
+    
+    if (currentJob && currentJob.floor_plan_rooms) {
+        // Floor plan already analysed — show room count and parse button
+        const rooms = currentJob.floor_plan_rooms.rooms || currentJob.floor_plan_rooms;
+        const count = Array.isArray(rooms) ? rooms.length : 0;
+        document.getElementById('fp-check-room-count').textContent = `Floor plan analysed: ${count} rooms extracted`;
+        analysed.classList.remove('hidden');
+    } else if (currentJob && currentJob.floor_plan_filename) {
+        // Floor plan uploaded but not analysed
+        uploadedNotAnalysed.classList.remove('hidden');
+    } else {
+        // No floor plan — show upload or skip options
+        options.classList.remove('hidden');
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+function closeFpCheck() {
+    document.getElementById('fp-check-modal').classList.add('hidden');
+}
+
+function scrollToFloorPlan() {
+    const section = document.getElementById('floor-plan-section');
+    if (section) section.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+async function doParseJob() {
     if (!currentJob) return;
     
     const btn = document.getElementById('parse-btn');
