@@ -1902,3 +1902,263 @@ def update_prices_only():
     except Exception as e:
         logger.error(f"Update prices error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+
+# ─────────────────────────────────────────────────────────
+# FLOOR PLAN — Upload, Scale, AI Room Extraction
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/jobs/<int:job_id>/floor-plan', methods=['POST'])
+@login_required
+def upload_floor_plan(job_id):
+    """Upload a floor plan drawing for a VTQ job.
+    
+    Accepts PDF or image. Stores it and returns the job with floor plan info.
+    """
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Save the file
+    import uuid
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ['.pdf', '.png', '.jpg', '.jpeg', '.webp']:
+        return jsonify({'error': 'Supported formats: PDF, PNG, JPG, WEBP'}), 400
+    
+    upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'uploads', 'floor_plans')
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    safe_name = f"fp_{job_id}_{uuid.uuid4().hex[:8]}{ext}"
+    save_path = os.path.join(upload_dir, safe_name)
+    file.save(save_path)
+    
+    job.floor_plan_path = save_path
+    job.floor_plan_filename = file.filename
+    db.session.commit()
+    
+    logger.info(f"Floor plan uploaded for job {job_id}: {file.filename}")
+    
+    return jsonify({
+        'success': True,
+        'filename': file.filename,
+        'job': job.to_dict()
+    })
+
+
+@bp.route('/jobs/<int:job_id>/floor-plan', methods=['DELETE'])
+@login_required
+def delete_floor_plan(job_id):
+    """Remove floor plan from a VTQ job."""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    if job.floor_plan_path and os.path.exists(job.floor_plan_path):
+        os.remove(job.floor_plan_path)
+    
+    job.floor_plan_path = None
+    job.floor_plan_filename = None
+    job.floor_plan_scale = None
+    job.floor_plan_paper = None
+    job.floor_plan_orientation = None
+    job.floor_plan_rooms = None
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+
+@bp.route('/jobs/<int:job_id>/floor-plan/preview')
+@login_required
+def preview_floor_plan(job_id):
+    """Serve the floor plan file for preview."""
+    from flask import send_file
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job or not job.floor_plan_path or not os.path.exists(job.floor_plan_path):
+        return jsonify({'error': 'No floor plan'}), 404
+    
+    return send_file(job.floor_plan_path, as_attachment=False)
+
+
+@bp.route('/jobs/<int:job_id>/analyse-floor-plan', methods=['POST'])
+@login_required
+def analyse_floor_plan(job_id):
+    """Set scale and use AI to extract room names + dimensions from the floor plan.
+    
+    Expects: {scale_ratio: '1:50', paper_size: 'A1', orientation: 'landscape'}
+    Returns: {rooms: [{name, width_m, length_m, area_sqm, perimeter_m}]}
+    """
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    if not job.floor_plan_path or not os.path.exists(job.floor_plan_path):
+        return jsonify({'error': 'No floor plan uploaded'}), 400
+    
+    data = request.get_json() or {}
+    scale_ratio = data.get('scale_ratio', '1:50')
+    paper_size = data.get('paper_size', 'A1')
+    orientation = data.get('orientation', 'landscape')
+    
+    # Save scale settings
+    job.floor_plan_scale = scale_ratio
+    job.floor_plan_paper = paper_size
+    job.floor_plan_orientation = orientation
+    
+    # Parse scale ratio
+    import re
+    match = re.match(r'1\s*[:to]\s*(\d+)', scale_ratio, re.IGNORECASE)
+    if not match:
+        match = re.match(r'^(\d+)$', scale_ratio.strip())
+    if not match:
+        return jsonify({'error': 'Invalid scale ratio. Use format like 1:50 or just 50'}), 400
+    
+    ratio = int(match.group(1))
+    
+    # Paper sizes in mm
+    papers = {
+        'A0': (1189, 841), 'A1': (841, 594), 'A2': (594, 420),
+        'A3': (420, 297), 'A4': (297, 210)
+    }
+    pw_mm, ph_mm = papers.get(paper_size, (841, 594))
+    if orientation == 'portrait':
+        pw_mm, ph_mm = ph_mm, pw_mm
+    
+    # Real-world dimensions of the drawing
+    real_width_m = (pw_mm * ratio) / 1000
+    real_height_m = (ph_mm * ratio) / 1000
+    
+    # Read the floor plan image
+    import base64
+    file_path = job.floor_plan_path
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    try:
+        if ext == '.pdf':
+            # Convert first page of PDF to image
+            import subprocess
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                tmp_path = tmp.name
+            
+            # Try pdftoppm first, fall back to pdf2image
+            try:
+                subprocess.run([
+                    'pdftoppm', '-png', '-r', '200', '-singlefile',
+                    file_path, tmp_path.replace('.png', '')
+                ], check=True, capture_output=True)
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                from pdf2image import convert_from_path
+                images = convert_from_path(file_path, first_page=1, last_page=1, dpi=200)
+                images[0].save(tmp_path, 'PNG')
+            
+            with open(tmp_path, 'rb') as f:
+                image_bytes = f.read()
+            os.unlink(tmp_path)
+            media_type = 'image/png'
+        else:
+            with open(file_path, 'rb') as f:
+                image_bytes = f.read()
+            media_type = f'image/{ext.replace(".", "").replace("jpg", "jpeg")}'
+        
+        image_b64 = base64.standard_b64encode(image_bytes).decode('utf-8')
+        
+    except Exception as e:
+        logger.error(f"Failed to read floor plan: {e}")
+        return jsonify({'error': f'Failed to read floor plan: {str(e)}'}), 500
+    
+    # Call Claude to analyse the floor plan
+    try:
+        client = anthropic.Anthropic()
+        
+        prompt = f"""Analyse this architectural floor plan drawing. The drawing is at scale {scale_ratio} on {paper_size} paper ({orientation}).
+The full drawing represents approximately {real_width_m:.1f}m wide × {real_height_m:.1f}m tall in real-world dimensions.
+
+Extract ALL rooms visible on the floor plan. For each room:
+1. The room name/label as written on the drawing (e.g. "Kitchen", "Bedroom 1", "En-Suite", "Utility", "Lounge", "Hall", "WC")
+2. Estimate the room dimensions in metres based on the scale — look for dimension lines or estimate from the room proportions relative to the overall drawing size
+3. Calculate the area in square metres
+4. Calculate the perimeter in metres
+
+Return ONLY valid JSON, no markdown:
+{{
+    "rooms": [
+        {{
+            "name": "Kitchen",
+            "width_m": 4.2,
+            "length_m": 3.8,
+            "area_sqm": 15.96,
+            "perimeter_m": 16.0,
+            "notes": "Open plan with dining area"
+        }}
+    ],
+    "total_floor_area_sqm": 120.5,
+    "drawing_notes": "Ground floor plan, 3-bed detached house"
+}}
+
+IMPORTANT:
+- Extract EVERY room, including small ones like WCs, cupboards, hallways, landings
+- If dimension lines are shown on the drawing, use those exact measurements
+- If no dimension lines, estimate proportionally from the overall drawing size
+- Be accurate with measurements — these will be used for cable run calculations
+- Include any notes about room features (e.g. "has island unit", "L-shaped", "vaulted ceiling")"""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_b64,
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }]
+        )
+        
+        response_text = response.content[0].text.strip()
+        
+        # Clean up JSON
+        if response_text.startswith('```'):
+            lines = response_text.split('\n')
+            response_text = '\n'.join(lines[1:-1])
+        
+        rooms_data = json.loads(response_text)
+        
+        # Store results
+        job.floor_plan_rooms = json.dumps(rooms_data)
+        db.session.commit()
+        
+        logger.info(f"Floor plan analysed for job {job_id}: {len(rooms_data.get('rooms', []))} rooms extracted")
+        
+        return jsonify({
+            'success': True,
+            'rooms': rooms_data.get('rooms', []),
+            'total_floor_area_sqm': rooms_data.get('total_floor_area_sqm'),
+            'drawing_notes': rooms_data.get('drawing_notes'),
+            'scale': scale_ratio,
+            'paper_size': paper_size,
+        })
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI room extraction: {e}")
+        return jsonify({'error': 'AI could not parse the floor plan properly. Try a clearer image.'}), 500
+    except Exception as e:
+        logger.error(f"Floor plan analysis error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500

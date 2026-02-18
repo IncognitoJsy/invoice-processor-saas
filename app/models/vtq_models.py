@@ -33,6 +33,14 @@ class VTQJob(db.Model):
     parsed_data = db.Column(db.Text)
     match_data = db.Column(db.Text)
     
+    # Floor plan
+    floor_plan_path = db.Column(db.String(500))            # Path to uploaded drawing
+    floor_plan_filename = db.Column(db.String(300))        # Original filename
+    floor_plan_scale = db.Column(db.String(20))            # e.g. '1:50'
+    floor_plan_paper = db.Column(db.String(10))            # e.g. 'A1'
+    floor_plan_orientation = db.Column(db.String(10))      # 'landscape' or 'portrait'
+    floor_plan_rooms = db.Column(db.Text)                  # JSON: extracted room data
+    
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -88,6 +96,11 @@ class VTQJob(db.Model):
             'parsed_at': self.parsed_at.isoformat() if self.parsed_at else None,
             'matched_at': self.matched_at.isoformat() if self.matched_at else None,
             'quoted_at': self.quoted_at.isoformat() if self.quoted_at else None,
+            'floor_plan_filename': self.floor_plan_filename,
+            'floor_plan_scale': self.floor_plan_scale,
+            'floor_plan_paper': self.floor_plan_paper,
+            'floor_plan_orientation': self.floor_plan_orientation,
+            'floor_plan_rooms': _json.loads(self.floor_plan_rooms) if self.floor_plan_rooms else None,
         }
         
         if include_transcriptions:
