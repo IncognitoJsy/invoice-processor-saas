@@ -488,6 +488,40 @@ def parse_job(job_id):
     
     system_prompt = build_system_prompt(knowledge_base, user_preferences_text, user_products, False)
     
+    # Build room data context from floor plan if available
+    room_context = ""
+    if job.floor_plan_rooms:
+        try:
+            import json as _json
+            fp_data = _json.loads(job.floor_plan_rooms) if isinstance(job.floor_plan_rooms, str) else job.floor_plan_rooms
+            rooms = fp_data.get('rooms', []) if isinstance(fp_data, dict) else fp_data
+            if rooms:
+                room_context = "\n\nFLOOR PLAN DATA (extracted from architectural drawing):\n"
+                room_context += "The following room dimensions have been measured from a scaled floor plan.\n"
+                room_context += "Use these measurements for cable run calculations and do NOT flag room dimensions as missing for these rooms.\n\n"
+                for room in rooms:
+                    name = room.get('name', 'Unknown')
+                    width = room.get('width_m', '?')
+                    length = room.get('length_m', '?')
+                    area = room.get('area_sqm', '?')
+                    perimeter = room.get('perimeter_m', '?')
+                    notes = room.get('notes', '')
+                    room_context += f"  - {name}: {width}m x {length}m = {area}m², perimeter {perimeter}m"
+                    if notes:
+                        room_context += f" ({notes})"
+                    room_context += "\n"
+                total_area = fp_data.get('total_floor_area_sqm') if isinstance(fp_data, dict) else None
+                if total_area:
+                    room_context += f"\n  Total floor area: {total_area}m²\n"
+                drawing_notes = fp_data.get('drawing_notes') if isinstance(fp_data, dict) else None
+                if drawing_notes:
+                    room_context += f"  Drawing notes: {drawing_notes}\n"
+                
+                logger.info(f"Floor plan context added: {len(rooms)} rooms")
+        except Exception as e:
+            logger.warning(f"Failed to parse floor plan rooms: {e}")
+            room_context = ""
+    
     user_content = [{
         "type": "text",
         "text": f"""Parse this site visit transcription into a structured materials list:
@@ -495,8 +529,9 @@ def parse_job(job_id):
 ---
 {combined_text}
 ---
-
+{room_context}
 Return the full structured JSON output with all materials, quantities, cable estimates, and flags.
+Use the floor plan room dimensions (if provided above) to calculate accurate cable runs and do not flag room sizes as missing for rooms that have measurements from the floor plan.
 Return ONLY valid JSON — no markdown, no backticks, no explanation before or after."""
     }]
     
