@@ -518,6 +518,12 @@ async function openJob(jobId) {
         // Render transcriptions
         renderTranscriptions(currentJob.transcriptions || []);
         
+        // Load floor plan if exists, otherwise reset
+        resetFloorPlanUI();
+        if (currentJob.floor_plan_filename) {
+            showFloorPlanUploaded(currentJob.floor_plan_filename);
+        }
+        
         // If already parsed, load results
         if (parsedData) {
             renderParsedResults(parsedData);
@@ -531,9 +537,21 @@ async function openJob(jobId) {
     }
 }
 
+function resetFloorPlanUI() {
+    document.getElementById('fp-upload-area').classList.remove('hidden');
+    document.getElementById('fp-uploaded').classList.add('hidden');
+    document.getElementById('fp-rooms').classList.add('hidden');
+    document.getElementById('fp-rooms-list').innerHTML = '';
+    document.getElementById('fp-total-area').textContent = '';
+    document.getElementById('fp-scale-ratio').value = '1:50';
+    document.getElementById('fp-paper-size').value = 'A1';
+    document.getElementById('fp-orientation').value = 'landscape';
+}
+
 function backToJobsList() {
     document.getElementById('job-workspace').classList.add('hidden');
     document.getElementById('jobs-list-view').classList.remove('hidden');
+    resetFloorPlanUI();
     currentJob = null;
     parsedData = null;
     matchResults = null;
