@@ -532,10 +532,13 @@ function renderTranscriptions(transcriptions) {
     if (!transcriptions.length) {
         list.innerHTML = '';
         parseSection.classList.add('hidden');
+        document.getElementById('floor-plan-section').classList.add('hidden');
         return;
     }
     
     parseSection.classList.remove('hidden');
+    document.getElementById('floor-plan-section').classList.remove('hidden');
+    if (currentJob && currentJob.floor_plan_filename) showFloorPlanUploaded(currentJob.floor_plan_filename);
     document.getElementById('trans-count-label').textContent = `${transcriptions.length} transcription${transcriptions.length !== 1 ? 's' : ''} saved`;
     
     list.innerHTML = transcriptions.map((t, i) => `
