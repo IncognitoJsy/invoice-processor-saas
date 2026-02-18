@@ -507,7 +507,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=8000,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
@@ -676,7 +676,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         client = anthropic.Anthropic(api_key=api_key)
         
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=8000,
             system=system_prompt,
             messages=[
@@ -821,7 +821,7 @@ Response: [Check preferences and answer — no JSON block needed]
         messages.append({"role": "user", "content": message})
         
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=1500,
             system=system_prompt,
             messages=messages
@@ -2111,7 +2111,7 @@ IMPORTANT:
 - Include any notes about room features (e.g. "has island unit", "L-shaped", "vaulted ceiling")"""
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=4000,
             messages=[{
                 "role": "user",

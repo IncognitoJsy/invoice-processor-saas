@@ -517,7 +517,7 @@ class ClaudeInvoiceParser:
             
             # Call Claude API with document/image
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=8192,  # Increased for consolidated invoices
                 messages=[{
                     "role": "user",
