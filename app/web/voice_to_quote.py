@@ -15,14 +15,23 @@ logger = logging.getLogger(__name__)
 def repair_json(text):
     """Fix common JSON issues from Claude responses"""
     import re
+    # Remove JavaScript-style comments (// ... and /* ... */)
+    text = re.sub(r'//[^\n]*', '', text)
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
     # Remove trailing commas before } or ]
     text = re.sub(r',\s*([}\]])', r'\1', text)
     # Remove any BOM or zero-width chars
     text = text.replace('\ufeff', '').replace('\u200b', '')
-    # Fix single quotes to double quotes (but not inside strings)
-    # Only if it looks like single-quoted keys
+    # Remove ellipsis or "..." entries that Claude sometimes adds
+    text = re.sub(r'"\.\.\."[^,}\]]*[,]?', '', text)
+    text = re.sub(r'\.\.\.[^,}\]]*[,]?', '', text)
+    # Fix single quotes to double quotes only if no double quotes in keys
     if "'" in text and '"' not in text[:100]:
         text = text.replace("'", '"')
+    # Clean up any double commas or empty entries left behind
+    text = re.sub(r',\s*,', ',', text)
+    text = re.sub(r'\[\s*,', '[', text)
+    text = re.sub(r',\s*\]', ']', text)
     return text
 
 
@@ -558,7 +567,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=8000,
+            max_tokens=16000,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
         )
@@ -575,7 +584,16 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
                 response_text = response_text[:-3]
             response_text = response_text.strip()
         
-        parsed_data = json.loads(repair_json(response_text))
+        repaired = repair_json(response_text)
+        try:
+            parsed_data = json.loads(repaired)
+        except json.JSONDecodeError as je:
+            # Log the area around the error for debugging
+            pos = je.pos or 0
+            snippet = repaired[max(0, pos-100):pos+100]
+            logger.error(f"JSON error at position {pos}: {je.msg}")
+            logger.error(f"Context around error: ...{snippet}...")
+            raise
         
         # Save to job
         job.set_parsed_data(parsed_data)
