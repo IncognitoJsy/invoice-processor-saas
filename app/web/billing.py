@@ -19,6 +19,7 @@ def get_paypal_config():
         'mode': os.getenv('PAYPAL_MODE', 'sandbox'),
         'plan_basic': os.getenv('PAYPAL_PLAN_BASIC'),
         'plan_pro': os.getenv('PAYPAL_PLAN_PRO'),
+        'plan_ultimate': os.getenv('PAYPAL_PLAN_ULTIMATE'),
     }
 
 
@@ -68,7 +69,7 @@ def topup():
 def subscribe(plan):
     config = get_paypal_config()
     
-    plan_ids = {'basic': config['plan_basic'], 'pro': config['plan_pro']}
+    plan_ids = {'basic': config['plan_basic'], 'pro': config['plan_pro'], 'ultimate': config['plan_ultimate']}
     
     if plan not in plan_ids:
         return jsonify({'error': 'Invalid plan'}), 400
