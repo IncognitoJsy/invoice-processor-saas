@@ -722,10 +722,6 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
             'success': True,
             'data': parsed_data,
             'job': job.to_dict(include_transcriptions=True),
-            'token_usage': {
-                'input': message.usage.input_tokens,
-                'output': message.usage.output_tokens
-            }
         })
     
     except json.JSONDecodeError as e:
