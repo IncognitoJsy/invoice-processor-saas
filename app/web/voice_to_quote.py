@@ -36,6 +36,52 @@ def repair_json(text):
 
 
 
+
+
+def apply_product_swaps(parsed_data, user_id):
+    """Post-process parsed results to apply saved product swaps.
+    Matches on material description since AI part numbers are inconsistent."""
+    swaps = UserPreference.query.filter_by(
+        user_id=user_id,
+        category='product_swap',
+        active=True
+    ).all()
+    
+    if not swaps:
+        return parsed_data
+    
+    swap_map = {}
+    for s in swaps:
+        swap_map[s.key.lower()] = s.value
+        swap_map[s.key.lower().replace('_', ' ')] = s.value
+        swap_map[s.key.lower().replace(' ', '_')] = s.value
+    
+    def check_swap(item):
+        pn = (item.get('part_number') or '').lower()
+        if pn in swap_map:
+            item['part_number'] = swap_map[pn]
+            item['swap_applied'] = True
+            return
+        desc = (item.get('description') or '').lower()
+        if desc in swap_map:
+            item['part_number'] = swap_map[desc]
+            item['swap_applied'] = True
+            return
+        for key, new_pn in swap_map.items():
+            if len(key) > 3 and key in desc:
+                item['part_number'] = new_pn
+                item['swap_applied'] = True
+                return
+    
+    for room in parsed_data.get('rooms', []):
+        for acc in room.get('accessories', []):
+            check_swap(acc)
+    for mat in parsed_data.get('combined_materials', []):
+        check_swap(mat)
+    
+    logger.info(f'Applied product swaps: {len(swap_map)} rules checked')
+    return parsed_data
+
 bp = Blueprint('voice_to_quote', __name__, url_prefix='/voice-to-quote')
 
 PRODUCT_CACHE_TTL_HOURS = 24  # Refresh cache if older than this
@@ -706,6 +752,9 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
             parsed_data = merge_parsed_results(results)
             logger.info(f"Merged {len(results)} chunks into final result")
         
+        # Apply saved product swaps (post-processing)
+        parsed_data = apply_product_swaps(parsed_data, current_user.id)
+        
         # Save to job
         job.set_parsed_data(parsed_data)
         job.parsed_at = datetime.utcnow()
@@ -881,6 +930,9 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
                 'error': 'AI returned invalid format — please try again',
                 'raw_response': response_text[:1000]
             }), 500
+        
+        # Apply saved product swaps (post-processing)
+        parsed_data = apply_product_swaps(parsed_data, current_user.id)
         
         return jsonify({
             'success': True,
@@ -2107,29 +2159,42 @@ def save_correction():
     if old_code == new_code:
         return jsonify({'error': 'Codes are the same'}), 400
     
-    # Check if this correction already exists
+    # Use material_name as key (stable across parses) instead of AI-generated part number
+    swap_key = material_name if material_name else old_code
+    
+    # Check if this correction already exists (by material name OR old code)
     existing = UserPreference.query.filter_by(
         user_id=current_user.id,
         category='product_swap',
-        key=old_code,
+        key=swap_key,
         active=True
     ).first()
     
+    if not existing and swap_key != old_code:
+        existing = UserPreference.query.filter_by(
+            user_id=current_user.id,
+            category='product_swap',
+            key=old_code,
+            active=True
+        ).first()
+    
     if existing:
         existing.value = new_code
-        existing.description = f"When AI suggests {old_code}, use {new_code} ({product_name})"
-        logger.info(f"Updated correction: {old_code} -> {new_code}")
+        existing.key = swap_key
+        existing.description = f"For {material_name or old_code}, always use part number {new_code} ({product_name})"
+        logger.info(f"Updated correction: {swap_key} -> {new_code}")
     else:
         pref = UserPreference(
             user_id=current_user.id,
             category='product_swap',
-            key=old_code,
+            key=swap_key,
             value=new_code,
-            description=f"When AI suggests {old_code}, use {new_code} ({product_name})",
+            description=f"For {material_name or old_code}, always use part number {new_code} ({product_name})",
+            source='manual',
             active=True
         )
         db.session.add(pref)
-        logger.info(f"Saved new correction: {old_code} -> {new_code}")
+        logger.info(f"Saved new correction: {swap_key} -> {new_code}")
     
     # Also log the correction for analytics
     try:

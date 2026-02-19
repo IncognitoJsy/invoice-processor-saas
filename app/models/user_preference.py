@@ -48,7 +48,7 @@ class UserPreference(db.Model):
         if self.category == 'brand_default':
             return f"- Default {self.key}: {self.value}"
         elif self.category == 'product_swap':
-            return f"- When AI suggests {self.key}, use {self.value} instead"
+            return f"- MANDATORY SWAP: Any item described as '{self.key}' MUST use part number {self.value}. Never use any other code for {self.key}."
         elif self.category == 'mounting_height':
             return f"- {self.key} mounting height: {self.value}mm FFL"
         elif self.category == 'circuit_preference':
