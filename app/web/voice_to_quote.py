@@ -2080,6 +2080,76 @@ def update_prices_only():
 
 
 # ─────────────────────────────────────────────────────────
+# LEARNING — Save corrections as user preferences
+# ─────────────────────────────────────────────────────────
+
+@bp.route('/save-correction', methods=['POST'])
+@login_required
+def save_correction():
+    """Save a product correction as a user preference so the AI learns.
+    
+    Stores it as a product_swap preference:
+      key = old_code (what AI suggested)
+      value = new_code (what user corrected to)
+    """
+    data = request.get_json() or {}
+    old_code = data.get('old_code', '').strip()
+    new_code = data.get('new_code', '').strip()
+    product_name = data.get('product_name', '').strip()
+    material_name = data.get('material_name', '').strip()
+    
+    if not old_code or not new_code:
+        return jsonify({'error': 'Missing old or new code'}), 400
+    
+    if old_code == new_code:
+        return jsonify({'error': 'Codes are the same'}), 400
+    
+    # Check if this correction already exists
+    existing = UserPreference.query.filter_by(
+        user_id=current_user.id,
+        category='product_swap',
+        key=old_code,
+        active=True
+    ).first()
+    
+    if existing:
+        existing.value = new_code
+        existing.description = f"When AI suggests {old_code}, use {new_code} ({product_name})"
+        logger.info(f"Updated correction: {old_code} -> {new_code}")
+    else:
+        pref = UserPreference(
+            user_id=current_user.id,
+            category='product_swap',
+            key=old_code,
+            value=new_code,
+            description=f"When AI suggests {old_code}, use {new_code} ({product_name})",
+            active=True
+        )
+        db.session.add(pref)
+        logger.info(f"Saved new correction: {old_code} -> {new_code}")
+    
+    # Also log the correction for analytics
+    try:
+        correction = CorrectionLog(
+            user_id=current_user.id,
+            original_value=old_code,
+            corrected_value=new_code,
+            field_name='part_number',
+            context=material_name
+        )
+        db.session.add(correction)
+    except Exception:
+        pass  # CorrectionLog is optional
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Saved: {old_code} → {new_code}'
+    })
+
+
+# ─────────────────────────────────────────────────────────
 # FLOOR PLAN — Upload, Scale, AI Room Extraction
 # ─────────────────────────────────────────────────────────
 
