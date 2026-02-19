@@ -44,8 +44,8 @@ def topup():
     if current_user.subscription_plan == 'trial':
         return render_template('billing/topup.html', error="Top-ups are only available for paid subscribers.", can_purchase=False)
     
-    if current_user.subscription_plan == 'pro':
-        return render_template('billing/topup.html', error="You have unlimited invoices on the Pro plan!", can_purchase=False)
+    if current_user.subscription_plan in ['pro', 'ultimate']:
+        return render_template('billing/topup.html', error="You have unlimited invoices on your plan!", can_purchase=False)
     
     if current_user.subscription_plan == 'cancelled':
         return render_template('billing/topup.html', error="Please reactivate your subscription to purchase top-ups.", can_purchase=False)

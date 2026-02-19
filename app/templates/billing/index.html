@@ -67,7 +67,12 @@
                         </p>
                     </div>
                 </div>
-                <a href="{{ url_for('billing.manage') }}" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">Manage Subscription</a>
+                <div class="flex items-center gap-2">
+                    {% if current_user.subscription_plan == 'basic' %}
+                    <a href="{{ url_for('billing.topup') }}" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">Buy Top-Up</a>
+                    {% endif %}
+                    <a href="{{ url_for('billing.manage') }}" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">Manage Subscription</a>
+                </div>
             </div>
         </div>
         {% endif %}
