@@ -579,6 +579,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=16000,
+            temperature=0,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
         )
@@ -852,6 +853,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=8000,
+            temperature=0,
             system=system_prompt,
             messages=[
                 {"role": "user", "content": user_content}
@@ -997,6 +999,7 @@ Response: [Check preferences and answer — no JSON block needed]
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=1500,
+            temperature=0.3,
             system=system_prompt,
             messages=messages
         )
@@ -2357,6 +2360,7 @@ IMPORTANT:
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=4000,
+            temperature=0,
             messages=[{
                 "role": "user",
                 "content": [
