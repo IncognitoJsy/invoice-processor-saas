@@ -497,10 +497,18 @@ def parse_job(job_id):
         if not texts_to_parse:
             return jsonify({'error': 'All transcriptions already parsed'}), 400
     
-    combined_text = ""
+    # Build sections (one per transcription)
+    sections = []
     for t in texts_to_parse:
         label = t.title or f"Recording {t.id}"
-        combined_text += f"\n--- {label} ---\n{t.text}\n"
+        sections.append({'label': label, 'text': t.text})
+    
+    combined_text = ""
+    for s in sections:
+        combined_text += f"\n--- {s['label']} ---\n{s['text']}\n"
+    
+    word_count = len(combined_text.split())
+    logger.info(f"Total transcription: {word_count} words across {len(sections)} sections")
     
     # Build prompt and call Claude (reuse existing logic)
     knowledge_base = get_knowledge_base()
@@ -546,24 +554,27 @@ def parse_job(job_id):
             logger.warning(f"Failed to parse floor plan rooms: {e}")
             room_context = ""
     
-    user_content = [{
-        "type": "text",
-        "text": f"""Parse this site visit transcription into a structured materials list:
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'Claude API key not configured'}), 500
+    
+    CHUNK_WORD_LIMIT = 4000
+    
+    def call_parse_api(text_chunk, chunk_label=""):
+        """Call Claude API to parse a text chunk. Returns parsed dict."""
+        user_content = [{
+            "type": "text",
+            "text": f"""Parse this site visit transcription into a structured materials list:
 
 ---
-{combined_text}
+{text_chunk}
 ---
 {room_context}
 Return the full structured JSON output with all materials, quantities, cable estimates, and flags.
 Use the floor plan room dimensions (if provided above) to calculate accurate cable runs and do not flag room sizes as missing for rooms that have measurements from the floor plan.
 Return ONLY valid JSON — no markdown, no backticks, no explanation before or after."""
-    }]
-    
-    api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not api_key:
-        return jsonify({'error': 'Claude API key not configured'}), 500
-    
-    try:
+        }]
+        
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
@@ -586,14 +597,113 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         
         repaired = repair_json(response_text)
         try:
-            parsed_data = json.loads(repaired)
+            return json.loads(repaired)
         except json.JSONDecodeError as je:
-            # Log the area around the error for debugging
             pos = je.pos or 0
             snippet = repaired[max(0, pos-100):pos+100]
-            logger.error(f"JSON error at position {pos}: {je.msg}")
-            logger.error(f"Context around error: ...{snippet}...")
+            logger.error(f"JSON error in chunk '{chunk_label}' at pos {pos}: {je.msg}")
+            logger.error(f"Context: ...{snippet}...")
             raise
+    
+    def merge_parsed_results(results):
+        """Merge multiple parsed results into one unified result."""
+        merged = {
+            'rooms': [],
+            'combined_materials': [],
+            'cable_estimates': [],
+            'flags': [],
+            'summary': {}
+        }
+        
+        seen_rooms = set()
+        
+        for result in results:
+            # Merge rooms
+            for room in result.get('rooms', []):
+                room_name = room.get('name', room.get('room', ''))
+                if room_name and room_name not in seen_rooms:
+                    seen_rooms.add(room_name)
+                    merged['rooms'].append(room)
+                elif room_name in seen_rooms:
+                    # Room already exists — merge materials into existing room
+                    for existing in merged['rooms']:
+                        if existing.get('name', existing.get('room', '')) == room_name:
+                            existing_materials = existing.get('materials', existing.get('items', []))
+                            new_materials = room.get('materials', room.get('items', []))
+                            existing_materials.extend(new_materials)
+                            break
+            
+            # Merge combined materials
+            merged['combined_materials'].extend(result.get('combined_materials', result.get('materials', [])))
+            
+            # Merge cable estimates
+            merged['cable_estimates'].extend(result.get('cable_estimates', []))
+            
+            # Merge flags
+            merged['flags'].extend(result.get('flags', []))
+        
+        # Deduplicate flags
+        seen_flags = set()
+        unique_flags = []
+        for flag in merged['flags']:
+            flag_text = flag.get('message', flag.get('text', str(flag)))
+            if flag_text not in seen_flags:
+                seen_flags.add(flag_text)
+                unique_flags.append(flag)
+        merged['flags'] = unique_flags
+        
+        # Copy any other top-level keys from the first result
+        if results:
+            for key in results[0]:
+                if key not in merged:
+                    merged[key] = results[0][key]
+        
+        return merged
+    
+    try:
+        if word_count <= CHUNK_WORD_LIMIT:
+            # Single call — existing behaviour
+            logger.info(f"Single parse call ({word_count} words)")
+            parsed_data = call_parse_api(combined_text)
+        else:
+            # Chunked parsing — split by sections and group into chunks
+            logger.info(f"Chunked parsing: {word_count} words exceeds {CHUNK_WORD_LIMIT} limit")
+            
+            chunks = []
+            current_chunk = ""
+            current_words = 0
+            
+            for s in sections:
+                section_text = f"\n--- {s['label']} ---\n{s['text']}\n"
+                section_words = len(section_text.split())
+                
+                if current_words + section_words > CHUNK_WORD_LIMIT and current_chunk:
+                    # Save current chunk and start new one
+                    chunks.append(current_chunk)
+                    current_chunk = section_text
+                    current_words = section_words
+                else:
+                    current_chunk += section_text
+                    current_words += section_words
+            
+            if current_chunk:
+                chunks.append(current_chunk)
+            
+            # If a single section exceeds the limit, it goes as one chunk anyway
+            # (Claude can handle it, just might be slower)
+            
+            logger.info(f"Split into {len(chunks)} chunks")
+            
+            results = []
+            for i, chunk in enumerate(chunks):
+                chunk_words = len(chunk.split())
+                logger.info(f"Parsing chunk {i+1}/{len(chunks)} ({chunk_words} words)...")
+                result = call_parse_api(chunk, f"chunk_{i+1}")
+                results.append(result)
+                logger.info(f"Chunk {i+1} parsed successfully")
+            
+            parsed_data = merge_parsed_results(results)
+            logger.info(f"Merged {len(results)} chunks into final result")
         
         # Save to job
         job.set_parsed_data(parsed_data)
