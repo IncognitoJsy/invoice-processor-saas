@@ -33,17 +33,21 @@ def create_app(config_name='default'):
         for attempt in range(max_retries):
             try:
                 db.create_all()
-                # Add new columns if they don't exist (safe migrations)
+                # Add new columns if they don't exist (safe for both SQLite and PostgreSQL)
                 with db.engine.connect() as conn:
-                    conn.execute(db.text("""
-                        ALTER TABLE vtq_jobs 
-                        ADD COLUMN IF NOT EXISTS floor_plan_path VARCHAR(500),
-                        ADD COLUMN IF NOT EXISTS floor_plan_filename VARCHAR(300),
-                        ADD COLUMN IF NOT EXISTS floor_plan_scale VARCHAR(20),
-                        ADD COLUMN IF NOT EXISTS floor_plan_paper VARCHAR(10),
-                        ADD COLUMN IF NOT EXISTS floor_plan_orientation VARCHAR(10),
-                        ADD COLUMN IF NOT EXISTS floor_plan_rooms TEXT
-                    """))
+                    columns_to_add = [
+                        ('floor_plan_path', 'VARCHAR(500)'),
+                        ('floor_plan_filename', 'VARCHAR(300)'),
+                        ('floor_plan_scale', 'VARCHAR(20)'),
+                        ('floor_plan_paper', 'VARCHAR(10)'),
+                        ('floor_plan_orientation', 'VARCHAR(10)'),
+                        ('floor_plan_rooms', 'TEXT'),
+                    ]
+                    for col_name, col_type in columns_to_add:
+                        try:
+                            conn.execute(db.text(f"ALTER TABLE vtq_jobs ADD COLUMN {col_name} {col_type}"))
+                        except Exception:
+                            pass  # Column already exists
                     conn.commit()
                 app.logger.info('Database connection established')
                 break
