@@ -1271,6 +1271,9 @@ function selectProduct(i, j) {
     const product = div?._products?.[j];
     if (!product) return;
     
+    const oldProduct = matchResults[i].selected?.product;
+    const materialName = matchResults[i].material?.part_number || matchResults[i].material?.description || '';
+    
     matchResults[i].selected = { product, confidence: 1.0, match_type: 'manual_search' };
     matchResults[i].status = 'matched';
     
@@ -1278,6 +1281,12 @@ function selectProduct(i, j) {
     if (cb) cb.checked = true;
     
     renderMatchRows();
+    
+    // Offer to save as preference for future parses
+    const oldCode = oldProduct?.code || materialName;
+    if (oldCode && product.code && oldCode !== product.code) {
+        showSavePreferencePrompt(i, oldCode, product.code, product.name, materialName);
+    }
 }
 
 function selectFirstResult(i) {
