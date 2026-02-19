@@ -1760,6 +1760,15 @@ def send_to_quote_builder():
             )
             
             material.calculate_totals(markup_percent=markup)
+            
+            # Override with QB sales price if available (higher than markup calculation)
+            if sale_price > 0 and sale_price > float(material.unit_sell or 0):
+                material.unit_sell = round(sale_price, 4)
+                material.total_sell = round(float(material.quantity or 0) * sale_price, 2)
+                # Back-calculate the actual markup
+                if purchase_price > 0:
+                    material.markup_percent = round(((sale_price - purchase_price) / purchase_price) * 100, 2)
+            
             db.session.add(material)
         
         # Recalculate project totals
