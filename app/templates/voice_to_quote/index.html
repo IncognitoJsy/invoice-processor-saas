@@ -1809,6 +1809,9 @@ function makeEditable(span, dataPath, fieldType, roomIndex, accIndex) {
         if (v && v !== originalValue && originalValue !== '—' && originalValue !== 'TBC') {
             logCorrection(fieldType, originalValue, v, roomIndex, accIndex);
         }
+        // Rebuild combined materials from rooms (so re-matching uses updated data)
+        rebuildCombinedMaterials();
+        
         // Auto-save to job
         if (currentJob && parsedData) {
             fetch(`/voice-to-quote/jobs/${currentJob.id}/save-parsed`, {
