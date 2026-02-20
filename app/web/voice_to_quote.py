@@ -1918,34 +1918,55 @@ def push_estimate():
         if not materials:
             return jsonify({'error': 'No materials in project'}), 400
         
-        # Build line items for QB Estimate
+        # Build line items for QB Estimate, grouped by room/category
         line_items = []
         items_without_qb = []
         
+        # Group materials by category (room name from VTQ)
+        materials_by_cat = {}
         for mat in materials:
-            if mat.qb_item_id:
+            cat = mat.category or 'General'
+            if cat not in materials_by_cat:
+                materials_by_cat[cat] = []
+            materials_by_cat[cat].append(mat)
+        
+        # Only add room headers if there are 2+ categories
+        show_room_headers = len(materials_by_cat) > 1
+        
+        for cat, cat_materials in materials_by_cat.items():
+            # Insert room header as description-only line
+            if show_room_headers:
                 line_items.append({
-                    'item_id': mat.qb_item_id,
-                    'quantity': float(mat.quantity),
-                    'unit_price': float(mat.unit_sell or mat.unit_cost or 0),
-                    'description': mat.description or mat.part_number or '',
+                    'description_only': True,
+                    'description': f'── {cat} ──',
                 })
-            else:
-                # Try to find by SKU in QuickBooks
-                found = qb.find_item_by_sku(qb_connection, mat.part_number) if mat.part_number else None
-                if found:
-                    mat.qb_item_id = str(found['Id'])
-                    mat.qb_item_name = found.get('Name', '')
+            
+            for mat in cat_materials:
+                if mat.qb_item_id:
                     line_items.append({
-                        'item_id': str(found['Id']),
+                        'item_id': mat.qb_item_id,
                         'quantity': float(mat.quantity),
                         'unit_price': float(mat.unit_sell or mat.unit_cost or 0),
                         'description': mat.description or mat.part_number or '',
                     })
                 else:
-                    items_without_qb.append(mat.part_number or mat.description)
+                    # Try to find by SKU in QuickBooks
+                    found = qb.find_item_by_sku(qb_connection, mat.part_number) if mat.part_number else None
+                    if found:
+                        mat.qb_item_id = str(found['Id'])
+                        mat.qb_item_name = found.get('Name', '')
+                        line_items.append({
+                            'item_id': str(found['Id']),
+                            'quantity': float(mat.quantity),
+                            'unit_price': float(mat.unit_sell or mat.unit_cost or 0),
+                            'description': mat.description or mat.part_number or '',
+                        })
+                    else:
+                        items_without_qb.append(mat.part_number or mat.description)
         
-        if not line_items:
+        # Check we have actual product lines (not just description headers)
+        product_lines = [li for li in line_items if not li.get('description_only')]
+        if not product_lines:
             return jsonify({
                 'error': 'No materials could be matched to QuickBooks items',
                 'missing_items': items_without_qb

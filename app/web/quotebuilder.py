@@ -1256,15 +1256,17 @@ def generate_quote_pdf(project_id):
             y -= 18
 
             total_materials_sell = 0
+            show_cat_headers = len(materials_by_cat) > 1  # Only show room/category headers if 2+
 
             for cat, cat_materials in materials_by_cat.items():
                 y, page_num = check_space(c, y, 25, page_num)
 
-                # Category header
-                c.setFont('Helvetica-Bold', 8)
-                c.setFillColor(primary)
-                c.drawString(margin_left + 4, y, cat)
-                y -= 14
+                # Category/room header (only when multiple categories)
+                if show_cat_headers:
+                    c.setFont('Helvetica-Bold', 8)
+                    c.setFillColor(primary)
+                    c.drawString(margin_left + 4, y, cat)
+                    y -= 14
 
                 for m in cat_materials:
                     y, page_num = check_space(c, y, 14, page_num)

@@ -1080,6 +1080,17 @@ Rules:
         # Build line items with GST
         lines = []
         for idx, item in enumerate(line_items):
+            # Description-only line (room header)
+            if item.get('description_only'):
+                line = {
+                    "Id": str(idx + 1),
+                    "DetailType": "DescriptionOnly",
+                    "Description": item.get('description', '')[:4000],
+                    "Amount": 0
+                }
+                lines.append(line)
+                continue
+            
             qty = float(item.get('quantity', 1))
             unit_price = round(float(item.get('unit_price', 0)), 2)
             amount = round(qty * unit_price, 2)
@@ -1099,8 +1110,6 @@ Rules:
             # Add tax code if found
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
-            
-
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
@@ -1372,6 +1381,17 @@ Rules:
         # Build line items with GST
         lines = []
         for idx, item in enumerate(line_items):
+            # Description-only line (room header)
+            if item.get('description_only'):
+                line = {
+                    "Id": str(idx + 1),
+                    "DetailType": "DescriptionOnly",
+                    "Description": item.get('description', '')[:4000],
+                    "Amount": 0
+                }
+                lines.append(line)
+                continue
+            
             qty = float(item.get('quantity', 1))
             unit_price = round(float(item.get('unit_price', 0)), 2)
             amount = round(qty * unit_price, 2)
@@ -1391,8 +1411,6 @@ Rules:
             # Add tax code if found
             if tax_code:
                 line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
-            
-
             
             if item.get('description'):
                 line["Description"] = item['description'][:4000]
