@@ -79,7 +79,12 @@
             // pxPerMetre will be set after image loads (image pixels / real-world metres)
         }
         
-        rooms = existingRooms || [];
+        // Restore existing rooms with colors
+        rooms = (existingRooms || []).map((r, idx) => ({
+            ...r,
+            color: r.color || ROOM_COLORS[idx % ROOM_COLORS.length],
+            border: r.border || ROOM_BORDERS[idx % ROOM_BORDERS.length],
+        }));
         selectedRoomIdx = -1;
         currentPoints = [];
         isDrawing = false;
@@ -311,7 +316,7 @@
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
         
-        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        const zoomFactor = e.deltaY < 0 ? 1.03 : 0.97;
         const newScale = viewScale * zoomFactor;
         
         if (newScale < 0.05 || newScale > 20) return;
