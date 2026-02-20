@@ -3,6 +3,8 @@
    
    Data structure:
    levels: [{
+     ...
+     heatMatZones: [{name, points, area_sqm, part_number}]
      name: "Ground Floor",
      pageIndex: 0,
      image: Image object (loaded),
@@ -108,6 +110,7 @@
                     color: r.color || COLORS[ri % COLORS.length].fill,
                     border: r.border || COLORS[ri % COLORS.length].border,
                 })),
+                heatMatZones: (lv.heatMatZones || []),
             }));
         } else {
             levels = sources.map((_, i) => ({
@@ -115,6 +118,7 @@
                 pageIndex: i,
                 buildingOutline: null,
                 rooms: [],
+                heatMatZones: [],
             }));
         }
         
@@ -258,8 +262,8 @@
             return;
         }
         
-        // ── Room or Outline tool ──
-        if (activeTool === 'room' || activeTool === 'outline') {
+        // ── Room, Outline, or Heat Mat tool ──
+        if (activeTool === 'room' || activeTool === 'outline' || activeTool === 'heatmat') {
             if (isDrawing) {
                 // Check close on first point
                 if (currentPoints.length >= 3) {
@@ -291,6 +295,12 @@
                         canvas.style.cursor = 'crosshair';
                         render();
                     }
+                } else if (activeTool === 'heatmat') {
+                    // Start heat mat polygon
+                    isDrawing = true;
+                    currentPoints = [imgPt];
+                    canvas.style.cursor = 'crosshair';
+                    render();
                 } else {
                     // Start outline polygon
                     isDrawing = true;
@@ -331,7 +341,7 @@
             ctx.beginPath();
             ctx.moveTo(last.x, last.y);
             ctx.lineTo(sx, sy);
-            ctx.strokeStyle = activeTool === 'outline' ? 'rgba(255,255,255,0.5)' : 'rgba(99, 102, 241, 0.6)';
+            ctx.strokeStyle = activeTool === 'outline' ? 'rgba(255,255,255,0.5)' : activeTool === 'heatmat' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(99, 102, 241, 0.6)';
             ctx.lineWidth = 2;
             ctx.setLineDash([6, 4]);
             ctx.stroke();
@@ -470,6 +480,28 @@
         
         const lv = activeLevel();
         
+        if (activeTool === 'heatmat') {
+            // Heat mat zone
+            const hmName = prompt('Heat mat location:', 'En-suite Heat Mat');
+            if (hmName === null) { currentPoints = []; isDrawing = false; render(); return; }
+            const hmPart = prompt('Part number (optional):', '');
+            
+            lv.heatMatZones = lv.heatMatZones || [];
+            lv.heatMatZones.push({
+                name: hmName.trim() || 'Heat Mat',
+                points: [...currentPoints],
+                area_sqm: Math.round(areaSqm * 100) / 100,
+                width_m: Math.round(widthM * 100) / 100,
+                length_m: Math.round(lengthM * 100) / 100,
+                perimeter_m: Math.round(perimM * 100) / 100,
+                part_number: hmPart ? hmPart.trim() : '',
+            });
+            
+            currentPoints = []; isDrawing = false;
+            updateUI(); render();
+            return;
+        }
+        
         if (activeTool === 'outline') {
             // Building outline
             lv.buildingOutline = {
@@ -603,6 +635,31 @@
             ctx.fillText(sub, sc.x, sc.y + 12);
         });
         
+        // Draw heat mat zones
+        (lv.heatMatZones || []).forEach((hm, idx) => {
+            drawPoly(hm.points, 'rgba(239, 68, 68, 0.2)', 'rgba(239, 68, 68, 0.7)', 2, [4, 3]);
+            
+            const c = polygonCentroid(hm.points);
+            const sc = imageToScreen(c.x, c.y);
+            const fs = Math.max(9, 11 * viewScale);
+            
+            ctx.font = 'bold ' + fs + 'px system-ui';
+            const label = '🔥 ' + hm.name;
+            const sub = hm.area_sqm + 'm²' + (hm.part_number ? ' · ' + hm.part_number : '');
+            const tw = Math.max(ctx.measureText(label).width, ctx.measureText(sub).width);
+            
+            ctx.fillStyle = 'rgba(220, 38, 38, 0.8)';
+            ctx.beginPath(); ctx.roundRect(sc.x - tw/2 - 6, sc.y - 18, tw + 12, 34, 6); ctx.fill();
+            
+            ctx.textAlign = 'center';
+            ctx.font = 'bold ' + Math.max(8, 10 * viewScale) + 'px system-ui';
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label, sc.x, sc.y - 3);
+            ctx.font = Math.max(7, 9 * viewScale) + 'px system-ui';
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.fillText(sub, sc.x, sc.y + 12);
+        });
+        
         // Draw in-progress polygon
         if (currentPoints.length > 0) {
             const isOutline = activeTool === 'outline';
@@ -622,7 +679,8 @@
                 const sp = imageToScreen(pt.x, pt.y);
                 ctx.beginPath();
                 ctx.arc(sp.x, sp.y, idx === 0 && hoveredPoint === 0 ? 8 : 5, 0, Math.PI * 2);
-                ctx.fillStyle = idx === 0 ? (hoveredPoint === 0 ? '#22c55e' : (isOutline ? '#fff' : '#6366f1')) : (isOutline ? '#fff' : '#6366f1');
+                const ptColor = activeTool === 'heatmat' ? '#ef4444' : (isOutline ? '#fff' : '#6366f1');
+                ctx.fillStyle = idx === 0 ? (hoveredPoint === 0 ? '#22c55e' : ptColor) : ptColor;
                 ctx.fill();
                 ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
             });
@@ -674,12 +732,14 @@
             hint = isMeasuring ? `${measurePoints.length} points · Esc to clear · Ctrl+Z to undo` : 'Click to start measuring · Scroll to zoom · Alt+drag to pan';
         } else if (isDrawing) {
             const minPts = currentPoints.length >= 3;
-            hint = minPts ? `${currentPoints.length} points · Click first point or double-click to close · Esc to cancel` : `Click around the ${activeTool === 'outline' ? 'building' : 'room'} edges · ${currentPoints.length}/3 min`;
+            const areaName = activeTool === 'outline' ? 'building' : activeTool === 'heatmat' ? 'heat mat area' : 'room';
+            hint = minPts ? `${currentPoints.length} points · Click first point or double-click to close · Esc to cancel` : `Click around the ${areaName} edges · ${currentPoints.length}/3 min`;
         } else {
             hint = 'Click to start marking · Scroll to zoom · Alt+drag to pan';
         }
         
         const barColor = activeTool === 'measure' ? 'rgba(245, 158, 11, 0.7)' : 
+                         activeTool === 'heatmat' ? 'rgba(239, 68, 68, 0.7)' :
                          activeTool === 'outline' ? 'rgba(255,255,255,0.4)' : 'rgba(99, 102, 241, 0.7)';
         ctx.fillStyle = barColor;
         ctx.fillRect(canvas.width/2 - 250, canvas.height - 50, 500, 32);
@@ -742,12 +802,16 @@
     }
     
     function updateToolButtons() {
-        const tools = ['room', 'outline', 'measure'];
+        const tools = ['room', 'outline', 'heatmat', 'measure'];
         tools.forEach(t => {
             const btn = document.getElementById('rm-tool-' + t);
             if (!btn) return;
             const isActive = activeTool === t;
-            if (t === 'measure') {
+            if (t === 'heatmat') {
+                btn.className = isActive
+                    ? 'px-3 py-2 bg-red-600 text-white text-xs font-semibold rounded-lg shadow-lg transition flex items-center gap-1.5'
+                    : 'px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition flex items-center gap-1.5';
+            } else if (t === 'measure') {
                 btn.className = isActive
                     ? 'px-3 py-2 bg-amber-600 text-white text-xs font-semibold rounded-lg shadow-lg transition flex items-center gap-1.5'
                     : 'px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition flex items-center gap-1.5';
@@ -796,6 +860,22 @@
                     <button onclick="event.stopPropagation(); deleteRoomAt(${idx})" class="text-gray-500 hover:text-red-400 text-[10px]" title="Delete">🗑️</button>
                 </div>
             `;
+            list.appendChild(div);
+        });
+        
+        // Heat mat zones
+        (lv.heatMatZones || []).forEach((hm, idx) => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between px-3 py-2 rounded-lg bg-red-900/20 border border-red-800/30';
+            div.innerHTML = '<div class="flex items-center gap-2 min-w-0">' +
+                '<span class="text-xs">🔥</span>' +
+                '<span class="text-xs font-medium text-red-300 truncate">' + hm.name + '</span>' +
+                '</div>' +
+                '<div class="flex items-center gap-2 flex-shrink-0">' +
+                '<span class="text-[10px] font-mono font-semibold text-red-400">' + hm.area_sqm + 'm²</span>' +
+                (hm.part_number ? '<span class="text-[10px] text-gray-500 font-mono">' + hm.part_number + '</span>' : '') +
+                '<button onclick="event.stopPropagation(); deleteHeatMat(' + idx + ')" class="text-gray-500 hover:text-red-400 text-[10px]" title="Delete">🗑️</button>' +
+                '</div>';
             list.appendChild(div);
         });
         
@@ -848,7 +928,7 @@
         activeTool = tool;
         if (isDrawing) { currentPoints = []; isDrawing = false; }
         if (tool !== 'measure') { measurePoints = []; isMeasuring = false; }
-        canvas.style.cursor = (tool === 'measure' || tool === 'outline') ? 'crosshair' : 'default';
+        canvas.style.cursor = (tool === 'measure' || tool === 'outline' || tool === 'heatmat') ? 'crosshair' : 'default';
         updateUI(); render();
     };
     
@@ -902,6 +982,14 @@
         updateRoomsList(); render();
     };
     
+    window.deleteHeatMat = function(idx) {
+        const lv = activeLevel();
+        if (!lv || !lv.heatMatZones || idx < 0 || idx >= lv.heatMatZones.length) return;
+        if (!confirm('Delete "' + lv.heatMatZones[idx].name + '"?')) return;
+        lv.heatMatZones.splice(idx, 1);
+        updateRoomsList(); render();
+    };
+    
     window.renameRoomAt = function(idx) {
         const lv = activeLevel();
         if (!lv || idx < 0 || idx >= lv.rooms.length) return;
@@ -945,6 +1033,7 @@
             pageIndex: nextPage,
             buildingOutline: null,
             rooms: [],
+            heatMatZones: [],
         });
         switchLevel(levels.length - 1);
     }
@@ -967,6 +1056,15 @@
                 length_m: r.length_m,
                 perimeter_m: r.perimeter_m,
             })),
+            heatMatZones: (lv.heatMatZones || []).map(hm => ({
+                name: hm.name,
+                points: hm.points,
+                area_sqm: hm.area_sqm,
+                width_m: hm.width_m,
+                length_m: hm.length_m,
+                perimeter_m: hm.perimeter_m,
+                part_number: hm.part_number,
+            })),
         }));
         
         // Flatten rooms for backward compatibility with the parser
@@ -988,6 +1086,19 @@
             if (lv.buildingOutline) {
                 totalArea = Math.max(totalArea, lv.buildingOutline.area_sqm);
             }
+            (lv.heatMatZones || []).forEach(hm => {
+                allRooms.push({
+                    name: hm.name + ' (' + lv.name + ')',
+                    width_m: hm.width_m,
+                    length_m: hm.length_m,
+                    area_sqm: hm.area_sqm,
+                    perimeter_m: hm.perimeter_m,
+                    level: lv.name,
+                    type: 'heat_mat',
+                    part_number: hm.part_number,
+                    notes: 'Electric underfloor heat mat required: ' + hm.area_sqm + 'm²' + (hm.part_number ? ', part: ' + hm.part_number : ''),
+                });
+            });
         });
         
         try {
