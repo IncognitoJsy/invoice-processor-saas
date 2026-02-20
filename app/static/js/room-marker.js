@@ -39,6 +39,7 @@
     
     // ── Selection ──
     let selectedRoomIdx = -1;
+    let selectedHeatMatIdx = -1;
     
     // ── Scale ──
     let pxPerMetre = 0;
@@ -277,14 +278,29 @@
                 render();
             } else {
                 if (activeTool === 'room') {
-                    // Check click inside existing room
+                    // Check click inside existing room or heat mat
                     const lv = activeLevel();
                     let clicked = -1;
-                    for (let i = lv.rooms.length - 1; i >= 0; i--) {
-                        if (pointInPolygon(imgPt, lv.rooms[i].points)) { clicked = i; break; }
+                    let clickedHM = -1;
+                    
+                    // Check heat mats first (drawn on top)
+                    for (let i = (lv.heatMatZones || []).length - 1; i >= 0; i--) {
+                        if (pointInPolygon(imgPt, lv.heatMatZones[i].points)) { clickedHM = i; break; }
                     }
-                    if (clicked >= 0) {
+                    if (clickedHM < 0) {
+                        for (let i = lv.rooms.length - 1; i >= 0; i--) {
+                            if (pointInPolygon(imgPt, lv.rooms[i].points)) { clicked = i; break; }
+                        }
+                    }
+                    
+                    if (clickedHM >= 0) {
+                        selectedHeatMatIdx = clickedHM;
+                        selectedRoomIdx = -1;
+                        updateRoomsList();
+                        render();
+                    } else if (clicked >= 0) {
                         selectedRoomIdx = clicked;
+                        selectedHeatMatIdx = -1;
                         updateRoomsList();
                         render();
                     } else {
@@ -296,11 +312,24 @@
                         render();
                     }
                 } else if (activeTool === 'heatmat') {
-                    // Start heat mat polygon
-                    isDrawing = true;
-                    currentPoints = [imgPt];
-                    canvas.style.cursor = 'crosshair';
-                    render();
+                    // Check click inside existing heat mat first
+                    const lv2 = activeLevel();
+                    let clickedHM2 = -1;
+                    for (let i = (lv2.heatMatZones || []).length - 1; i >= 0; i--) {
+                        if (pointInPolygon(imgPt, lv2.heatMatZones[i].points)) { clickedHM2 = i; break; }
+                    }
+                    if (clickedHM2 >= 0) {
+                        selectedHeatMatIdx = clickedHM2;
+                        selectedRoomIdx = -1;
+                        updateRoomsList(); render();
+                    } else {
+                        // Start heat mat polygon
+                        isDrawing = true;
+                        currentPoints = [imgPt];
+                        selectedHeatMatIdx = -1;
+                        canvas.style.cursor = 'crosshair';
+                        render();
+                    }
                 } else {
                     // Start outline polygon
                     isDrawing = true;
@@ -385,7 +414,14 @@
             }
         }
         if ((e.key === 'Delete' || e.key === 'Backspace') && !isDrawing) {
-            if (selectedRoomIdx >= 0) {
+            if (selectedHeatMatIdx >= 0) {
+                const lv = activeLevel();
+                if (lv.heatMatZones && confirm('Delete "' + lv.heatMatZones[selectedHeatMatIdx].name + '"?')) {
+                    lv.heatMatZones.splice(selectedHeatMatIdx, 1);
+                    selectedHeatMatIdx = -1;
+                    updateRoomsList(); render();
+                }
+            } else if (selectedRoomIdx >= 0) {
                 const lv = activeLevel();
                 lv.rooms.splice(selectedRoomIdx, 1);
                 selectedRoomIdx = -1;
@@ -637,7 +673,8 @@
         
         // Draw heat mat zones
         (lv.heatMatZones || []).forEach((hm, idx) => {
-            drawPoly(hm.points, 'rgba(239, 68, 68, 0.2)', 'rgba(239, 68, 68, 0.7)', 2, [4, 3]);
+            const hmSelected = idx === selectedHeatMatIdx;
+            drawPoly(hm.points, hmSelected ? 'rgba(239, 68, 68, 0.35)' : 'rgba(239, 68, 68, 0.2)', 'rgba(239, 68, 68, 0.7)', hmSelected ? 3 : 2, [4, 3]);
             
             const c = polygonCentroid(hm.points);
             const sc = imageToScreen(c.x, c.y);
@@ -1004,6 +1041,7 @@
         currentPoints = []; isDrawing = false;
         measurePoints = []; isMeasuring = false;
         selectedRoomIdx = -1;
+        selectedHeatMatIdx = -1;
         activeLevelIdx = idx;
         fitImageToView();
         calculatePxPerMetre();
