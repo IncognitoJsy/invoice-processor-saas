@@ -415,51 +415,86 @@
         
         <!-- Top toolbar -->
         <div class="absolute top-4 left-4 flex items-center gap-2">
-            <button onclick="startNewRoom()" id="rm-new-room-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-lg transition flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                New Room
+            <button onclick="setTool('room')" id="rm-tool-room" class="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg shadow-lg transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"/></svg>
+                Room
             </button>
-            <button onclick="fitAllRooms()" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded-lg shadow-lg transition" title="Fit all">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            <button onclick="setTool('outline')" id="rm-tool-outline" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+                Building
+            </button>
+            <button onclick="setTool('measure')" id="rm-tool-measure" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M3 6v12m0-12l3 3m-3-3l3-3m15 3l-3-3m3 3l-3 3M3 18h18m0 0V6"/></svg>
+                Measure
+            </button>
+            <div class="h-6 w-px bg-gray-600"></div>
+            <button onclick="startNewRoom()" class="px-2 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition" title="Add new room">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </button>
+            <button onclick="fitAllRooms()" class="px-2 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg shadow-lg transition" title="Fit to view">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
             </button>
         </div>
         
-        <!-- Scale info badge -->
+        <!-- Scale badge -->
         <div class="absolute top-4 right-[320px] bg-gray-800/80 backdrop-blur-sm text-xs text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700">
             Scale: <span id="rm-scale-display" class="font-mono text-amber-400">1:50</span>
         </div>
     </div>
     
     <!-- Side panel -->
-    <div class="w-[300px] bg-gray-800 border-l border-gray-700 flex flex-col">
+    <div class="w-[300px] bg-gray-800 border-l border-gray-700 flex flex-col overflow-hidden">
         
-        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
-            <h3 class="text-sm font-bold text-white flex items-center gap-2">📐 Room Marker</h3>
-            <button onclick="RoomMarker.close()" class="text-gray-400 hover:text-white transition" title="Close">
+        <!-- Header -->
+        <div class="p-3 border-b border-gray-700 flex items-center justify-between flex-shrink-0">
+            <h3 class="text-sm font-bold text-white">\U0001f4d0 Room Marker</h3>
+            <button onclick="RoomMarker.close()" class="text-gray-400 hover:text-white transition" title="Save & Close">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
         
-        <div class="p-3 mx-3 mt-3 bg-indigo-900/20 border border-indigo-800/30 rounded-lg">
-            <p class="text-xs text-indigo-300 leading-relaxed">
-                <strong>Click</strong> around a room's walls to trace its outline. 
-                <strong>Click the first point</strong> or <strong>double-click</strong> to close. 
-                <strong>Scroll</strong> to zoom. <strong>Alt+drag</strong> to pan.
-                <strong>Esc</strong> to cancel. <strong>Ctrl+Z</strong> to undo last point.
+        <!-- Level tabs -->
+        <div class="px-3 pt-3 pb-2 border-b border-gray-700/50 flex-shrink-0">
+            <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Levels</span>
+                <span class="text-[10px] text-gray-500">Double-click to rename</span>
+            </div>
+            <div id="rm-level-tabs" class="flex flex-wrap gap-1.5"></div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="p-2.5 mx-3 mt-2 bg-indigo-900/20 border border-indigo-800/30 rounded-lg flex-shrink-0">
+            <p class="text-[10px] text-indigo-300 leading-relaxed">
+                <strong>Click</strong> around walls to trace. <strong>Click first point</strong> or <strong>dbl-click</strong> to close.
+                <strong>Scroll</strong> = zoom. <strong>Alt+drag</strong> = pan. <strong>Esc</strong> = cancel. <strong>\u2318Z</strong> = undo.
             </p>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-3">
+        <!-- Building outline info -->
+        <div id="rm-outline-info" class="mx-3 mt-2 p-2.5 bg-gray-700/30 border border-gray-600/30 rounded-lg flex-shrink-0" style="display:none"></div>
+        
+        <!-- Measure tool info -->
+        <div id="rm-measure-info" class="mx-3 mt-2 p-2.5 bg-amber-900/20 border border-amber-800/30 rounded-lg flex-shrink-0" style="display:none">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs text-amber-300 font-semibold">\U0001f4cf Measure</span>
+                <button onclick="clearMeasure()" class="text-[10px] text-amber-400 hover:text-amber-200">Clear</button>
+            </div>
+            <div class="text-lg font-bold font-mono text-amber-400" id="rm-measure-length">0.00m</div>
+        </div>
+        
+        <!-- Rooms list -->
+        <div class="flex-1 overflow-y-auto p-3 min-h-0">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Rooms</span>
                 <span id="rm-total-area" class="text-[10px] text-amber-400 font-mono"></span>
             </div>
             <div id="rm-rooms-list" class="space-y-1">
-                <div class="text-center py-4 text-gray-500 text-sm">No rooms marked yet. Click on the drawing to start.</div>
+                <div class="text-center py-3 text-gray-500 text-xs">No rooms marked yet</div>
             </div>
         </div>
         
-        <div class="p-3 border-t border-gray-700 space-y-2">
+        <!-- Footer -->
+        <div class="p-3 border-t border-gray-700 flex-shrink-0">
             <button onclick="RoomMarker.close()" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 Save & Close
@@ -1658,16 +1693,18 @@ function openRoomMarker() {
         return;
     }
     
+    // Build image sources — single image for now, multi-page PDF support via page param
     const imageSrc = '/voice-to-quote/jobs/' + currentJob.id + '/floor-plan-image';
     
-    // Load existing rooms if any
-    let existingRooms = [];
+    // Load existing levels if any
+    let existingLevels = null;
     if (currentJob.floor_plan_rooms) {
         const fpData = typeof currentJob.floor_plan_rooms === 'string' 
             ? JSON.parse(currentJob.floor_plan_rooms) 
             : currentJob.floor_plan_rooms;
-        const rawRooms = fpData.rooms || fpData || [];
-        existingRooms = rawRooms.filter(r => r.points && r.points.length >= 3);
+        if (fpData.levels && fpData.levels.length > 0) {
+            existingLevels = fpData.levels;
+        }
     }
     
     const scaleSettings = {
@@ -1679,7 +1716,7 @@ function openRoomMarker() {
     const scaleDisp = document.getElementById('rm-scale-display');
     if (scaleDisp) scaleDisp.textContent = scaleSettings.scale_ratio;
     
-    RoomMarker.open(imageSrc, existingRooms, scaleSettings);
+    RoomMarker.open(imageSrc, existingLevels, scaleSettings);
 }
 
 async function analyseFloorPlan() {
