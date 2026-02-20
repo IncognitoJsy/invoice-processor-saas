@@ -520,7 +520,7 @@
             // Heat mat zone
             const hmName = prompt('Heat mat location:', 'En-suite Heat Mat');
             if (hmName === null) { currentPoints = []; isDrawing = false; render(); return; }
-            const hmPart = prompt('Part number (optional):', '');
+            const roundedArea = Math.round(areaSqm * 100) / 100; const hmPart = prompt('Area: ' + roundedArea + 'm²\n\nPart number (optional):', '');
             
             lv.heatMatZones = lv.heatMatZones || [];
             lv.heatMatZones.push({
