@@ -1391,9 +1391,6 @@ function buildMatchRow(i, roomQty) {
             <td class="text-right px-4 py-3"><span class="editable text-gray-700 dark:text-gray-300" onclick="editPrice(this, ${i})">${price > 0 ? '£' + price.toFixed(2) : '—'}</span></td>
             <td class="text-right px-4 py-3 font-semibold text-gray-900 dark:text-white row-total">${price > 0 ? '£' + (price * qty).toFixed(2) : '—'}</td>
         </tr>`;
-    }).join('');
-    
-    updateMatchTotal();
 }
 
 // ─── Product Search ──────────────────────────────────────
