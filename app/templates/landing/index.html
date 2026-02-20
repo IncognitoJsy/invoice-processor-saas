@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoZappify - Invoice Processing for Electrical Contractors</title>
-    <meta name="description" content="Stop wasting hours on supplier invoices. GoZappify uses AI to automatically process, markup, and sync your electrical supplier invoices to QuickBooks.">
+    <title>GoZappify — AI-Powered Quoting & Invoicing for Electrical Contractors</title>
+    <meta name="description" content="Record your site visit, let AI build your quote. GoZappify turns voice recordings into priced, room-by-room estimates pushed straight to QuickBooks — built for UK electrical contractors.">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        primary: {"50":"#eff6ff","100":"#dbeafe","200":"#bfdbfe","300":"#93c5fd","400":"#60a5fa","500":"#3b82f6","600":"#2563eb","700":"#1d4ed8","800":"#1e40af","900":"#1e3a8a","950":"#172554"}
+                        dark: { 900: '#0b0f1a', 800: '#111827', 700: '#1a2035', 600: '#243049' },
+                        accent: { DEFAULT: '#22d3a7', light: '#34eabd', dim: '#1aad88' },
+                        indigo: { DEFAULT: '#6366f1', light: '#818cf8' }
                     }
                 }
             }
@@ -20,419 +21,640 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .gradient-bg {
-            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Outfit', sans-serif; background: #0b0f1a; color: #e2e8f0; overflow-x: hidden; }
+        
+        /* Grain overlay */
+        body::after {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
         }
-        .hero-pattern {
-            background-color: #1e3a8a;
-            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233b82f6' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        
+        /* Glow effects */
+        .glow-green { box-shadow: 0 0 80px rgba(34, 211, 167, 0.15), 0 0 200px rgba(34, 211, 167, 0.05); }
+        .glow-indigo { box-shadow: 0 0 80px rgba(99, 102, 241, 0.15), 0 0 200px rgba(99, 102, 241, 0.05); }
+        .glow-text { text-shadow: 0 0 40px rgba(34, 211, 167, 0.3); }
+        
+        /* Hero gradient mesh */
+        .hero-mesh {
+            background: 
+                radial-gradient(ellipse 60% 50% at 20% 50%, rgba(34, 211, 167, 0.08) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 60% at 80% 30%, rgba(99, 102, 241, 0.08) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 40% at 50% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
+        }
+        
+        /* Grid pattern for sections */
+        .grid-pattern {
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+        
+        /* Animated border gradient */
+        .border-glow {
+            position: relative; border-radius: 1rem; overflow: hidden;
+        }
+        .border-glow::before {
+            content: ''; position: absolute; inset: 0; border-radius: 1rem; padding: 1px;
+            background: linear-gradient(135deg, rgba(34, 211, 167, 0.3), rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.2));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        
+        /* Feature card hover */
+        .feature-card { transition: transform 0.3s, box-shadow 0.3s; }
+        .feature-card:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        
+        /* Mono font for numbers/codes */
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Smooth scroll */
+        html { scroll-behavior: smooth; }
+        
+        /* Fade in animation */
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-up { animation: fadeUp 0.8s ease-out forwards; }
+        .fade-up-d1 { animation-delay: 0.1s; opacity: 0; }
+        .fade-up-d2 { animation-delay: 0.2s; opacity: 0; }
+        .fade-up-d3 { animation-delay: 0.3s; opacity: 0; }
+        .fade-up-d4 { animation-delay: 0.4s; opacity: 0; }
+        
+        /* Pricing card highlight */
+        .pricing-best {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.08));
+            border: 1.5px solid rgba(99, 102, 241, 0.3);
+        }
+        
+        /* Step connector line */
+        .step-line { position: relative; }
+        .step-line::after {
+            content: ''; position: absolute; top: 28px; left: calc(50% + 28px); width: calc(100% - 56px);
+            height: 2px; background: linear-gradient(90deg, rgba(34, 211, 167, 0.4), rgba(99, 102, 241, 0.4));
+        }
+        
+        /* Pill badge */
+        .pill { 
+            display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+            border-radius: 100px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em;
         }
     </style>
 </head>
-<body class="bg-white">
-    <!-- Navigation -->
-    <nav class="fixed top-0 w-full bg-white/95 backdrop-blur-sm z-50 border-b border-gray-100">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-3">
-                    <!-- GoZappify Hexagon Logo - Matching app branding -->
-                    <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <!-- Outer hexagon - teal/green gradient top -->
-                        <defs>
-                            <linearGradient id="navIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#4DD4AC"/>
-                                <stop offset="50%" style="stop-color:#5BC88F"/>
-                                <stop offset="100%" style="stop-color:#3B82C4"/>
-                            </linearGradient>
-                            <linearGradient id="navBottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" style="stop-color:#3B82C4"/>
-                                <stop offset="100%" style="stop-color:#2563A8"/>
-                            </linearGradient>
-                        </defs>
-                        <!-- Top hexagon part -->
-                        <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#navIconGradient)"/>
-                        <!-- Bottom hexagon extension -->
-                        <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#navBottomGradient)"/>
-                        <!-- Inner cutout -->
-                        <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="white"/>
-                        <!-- Checkmark -->
-                        <path d="M38 42 L48 52 L68 28" stroke="#5BC88F" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="text-2xl font-bold text-gray-900">GoZappify</span>
-                </div>
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#features" class="text-gray-600 hover:text-primary-600 font-medium transition">Features</a>
-                    <a href="#how-it-works" class="text-gray-600 hover:text-primary-600 font-medium transition">How It Works</a>
-                    <a href="#pricing" class="text-gray-600 hover:text-primary-600 font-medium transition">Pricing</a>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/auth/login" class="text-gray-600 hover:text-primary-600 font-medium transition">Log In</a>
-                    <a href="/auth/register" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold transition shadow-lg shadow-primary-600/25">
-                        Start Free Trial
-                    </a>
-                </div>
+<body>
+    <!-- ─── NAV ─────────────────────────────────────────────── -->
+    <nav class="fixed top-0 w-full z-50 backdrop-blur-xl bg-dark-900/80 border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#4DD4AC"/>
+                            <stop offset="100%" style="stop-color:#3B82C4"/>
+                        </linearGradient>
+                        <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#3B82C4"/>
+                            <stop offset="100%" style="stop-color:#2563A8"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#g1)"/>
+                    <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#g2)"/>
+                    <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="#0b0f1a"/>
+                    <path d="M38 42 L48 52 L68 28" stroke="#22d3a7" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="text-xl font-bold text-white tracking-tight">Go<span class="text-accent">Zappify</span></span>
+            </a>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+                <a href="#features" class="hover:text-white transition">Features</a>
+                <a href="#how-it-works" class="hover:text-white transition">How It Works</a>
+                <a href="#pricing" class="hover:text-white transition">Pricing</a>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/auth/login" class="hidden sm:inline-flex text-sm font-medium text-gray-300 hover:text-white transition px-4 py-2">Log In</a>
+                <a href="/auth/register" class="text-sm font-semibold bg-accent text-dark-900 px-5 py-2.5 rounded-lg hover:bg-accent-light transition">Start Free Trial</a>
             </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="hero-pattern pt-32 pb-20 lg:pt-40 lg:pb-32">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid lg:grid-cols-2 gap-12 items-center">
+    <!-- ─── HERO ────────────────────────────────────────────── -->
+    <section class="hero-mesh min-h-screen flex items-center pt-16">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 py-24 lg:py-32">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
                 <div>
-                    <div class="inline-flex items-center px-4 py-2 bg-primary-500/20 rounded-full mb-6">
-                        <span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
-                        <span class="text-primary-100 text-sm font-medium">Built for Electrical Contractors</span>
+                    <div class="pill bg-accent/10 text-accent border border-accent/20 mb-6 fade-up">
+                        <span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                        Built for UK Electrical Contractors
                     </div>
-                    <h1 class="text-4xl lg:text-6xl font-extrabold text-white leading-tight mb-6">
-                        Stop Wasting Hours on
-                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-cyan-200">Supplier Invoices</span>
+                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-900 text-white leading-[1.1] mb-6 fade-up fade-up-d1">
+                        Walk the job.<br>
+                        <span class="text-accent glow-text">Talk the quote.</span><br>
+                        Push to QuickBooks.
                     </h1>
-                    <p class="text-xl text-blue-100 mb-8 leading-relaxed">
-                        GoZappify uses AI to automatically process your electrical supplier invoices, calculate markups, and sync everything to QuickBooks — in seconds, not hours.
+                    <p class="text-lg text-gray-400 max-w-xl mb-8 leading-relaxed fade-up fade-up-d2">
+                        Record your site visit on your phone. GoZappify's AI parses every socket, switch, and cable — 
+                        prices it against your supplier catalogue — and pushes a room-by-room estimate straight to QuickBooks. In minutes, not hours.
                     </p>
-                    <div class="flex flex-col sm:flex-row gap-4">
-                        <a href="/auth/register" class="px-8 py-4 bg-white text-primary-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition shadow-xl text-center">
+                    <div class="flex flex-col sm:flex-row gap-4 fade-up fade-up-d3">
+                        <a href="/auth/register" class="inline-flex items-center justify-center gap-2 bg-accent text-dark-900 font-bold text-lg px-8 py-4 rounded-xl hover:bg-accent-light transition shadow-lg shadow-accent/20">
                             Start 7-Day Free Trial
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                         </a>
-                        <a href="#how-it-works" class="px-8 py-4 bg-primary-500/30 text-white rounded-xl font-semibold text-lg hover:bg-primary-500/40 transition text-center border border-primary-400/30">
+                        <a href="#how-it-works" class="inline-flex items-center justify-center gap-2 text-gray-300 font-semibold text-lg px-8 py-4 rounded-xl border border-white/10 hover:border-white/20 hover:text-white transition">
                             See How It Works
                         </a>
                     </div>
-                    <p class="mt-6 text-blue-200 text-sm">7-day free trial • Up to 25 invoices • No credit card required</p>
+                    <p class="mt-5 text-sm text-gray-500 fade-up fade-up-d4">No credit card required • Works with QuickBooks & Xero</p>
                 </div>
-                <div class="relative hidden lg:block">
-                    <div class="bg-white rounded-2xl shadow-2xl p-6 transform rotate-2 hover:rotate-0 transition-transform duration-300">
+                
+                <!-- Hero visual — mock VTQ flow -->
+                <div class="hidden lg:block relative fade-up fade-up-d2">
+                    <!-- Card 1: Voice recording -->
+                    <div class="absolute -top-4 -left-4 bg-dark-700 border border-white/10 rounded-xl p-4 shadow-2xl z-10 w-56" style="transform: rotate(-3deg);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                            </div>
+                            <span class="text-xs font-medium text-gray-400">Recording...</span>
+                        </div>
+                        <p class="text-xs text-gray-500 italic leading-relaxed">"Kitchen needs five double sockets, two ceiling roses, and a fused spur for the hob..."</p>
+                    </div>
+                    
+                    <!-- Card 2: Main — parsed results -->
+                    <div class="bg-dark-700 border border-white/10 rounded-2xl p-6 shadow-2xl glow-green relative z-20 ml-12 mt-16">
                         <div class="flex items-center justify-between mb-4">
-                            <span class="text-sm font-semibold text-gray-500">Invoice Processing</span>
-                            <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">AI Powered</span>
+                            <span class="text-sm font-semibold text-white">Parsed Materials</span>
+                            <span class="pill bg-accent/15 text-accent text-xs">AI Matched</span>
                         </div>
-                        <div class="space-y-3">
-                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="space-y-2.5">
+                            <div class="flex justify-between items-center p-2.5 bg-dark-800/60 rounded-lg">
                                 <div>
-                                    <p class="font-semibold text-gray-900">YESSS Electrical</p>
-                                    <p class="text-sm text-gray-500">INV-47669 • TLC Home</p>
+                                    <p class="text-sm font-medium text-white">2G 13A DP Switched Socket</p>
+                                    <p class="mono text-xs text-indigo-light">WMSS82 × 5</p>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-bold text-gray-900">£2,788.74</p>
-                                    <p class="text-sm text-green-600">+£1,310 profit</p>
-                                </div>
+                                <p class="mono text-sm font-bold text-accent">£19.75</p>
                             </div>
-                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div class="flex justify-between items-center p-2.5 bg-dark-800/60 rounded-lg">
                                 <div>
-                                    <p class="font-semibold text-gray-900">CEF</p>
-                                    <p class="text-sm text-gray-500">INV-98234 • 22 West Park</p>
+                                    <p class="text-sm font-medium text-white">Ceiling Rose</p>
+                                    <p class="mono text-xs text-indigo-light">WPS6 × 2</p>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-bold text-gray-900">£456.20</p>
-                                    <p class="text-sm text-green-600">+£228 profit</p>
-                                </div>
+                                <p class="mono text-sm font-bold text-accent">£4.30</p>
                             </div>
-                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div class="flex justify-between items-center p-2.5 bg-dark-800/60 rounded-lg">
                                 <div>
-                                    <p class="font-semibold text-gray-900">Wholesale Electrics</p>
-                                    <p class="text-sm text-gray-500">INV-12890 • Clarence Apt</p>
+                                    <p class="text-sm font-medium text-white">13A Fused Spur</p>
+                                    <p class="mono text-xs text-indigo-light">WMFS83 × 1</p>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-bold text-gray-900">£1,234.50</p>
-                                    <p class="text-sm text-green-600">+£617 profit</p>
-                                </div>
+                                <p class="mono text-sm font-bold text-accent">£4.12</p>
                             </div>
                         </div>
-                        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                            <span class="text-sm text-gray-500">3 invoices processed</span>
-                            <span class="flex items-center text-green-600 text-sm font-medium">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                </svg>
-                                Synced to QuickBooks
+                        <div class="mt-4 pt-3 border-t border-white/5 flex justify-between items-center">
+                            <span class="text-xs text-gray-500">Kitchen — 8 items</span>
+                            <span class="flex items-center gap-1.5 text-xs font-medium text-accent">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                Pushed to QB
                             </span>
                         </div>
                     </div>
+                    
+                    <!-- Card 3: Profit badge -->
+                    <div class="absolute -bottom-2 right-4 bg-dark-700 border border-accent/20 rounded-xl p-4 shadow-2xl z-30" style="transform: rotate(2deg);">
+                        <p class="text-xs text-gray-400 mb-1">Estimated Profit</p>
+                        <p class="text-2xl font-bold text-accent mono">+£1,184</p>
+                        <p class="text-xs text-gray-500">49% margin</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section id="features" class="py-20 bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">Everything You Need to Process Invoices Faster</h2>
-                <p class="text-xl text-gray-600 max-w-3xl mx-auto">Built specifically for electrical contractors working with UK suppliers</p>
+    <!-- ─── FEATURES ────────────────────────────────────────── -->
+    <section id="features" class="py-24 grid-pattern">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-3xl lg:text-4xl font-800 text-white mb-4">Three Tools. One Platform.</h2>
+                <p class="text-lg text-gray-400 max-w-2xl mx-auto">Everything an electrical contractor needs to quote jobs, process invoices, and protect profit margins.</p>
             </div>
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="p-6 rounded-2xl bg-gray-50 hover:bg-gray-100 transition">
-                    <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">AI-Powered Parsing</h3>
-                    <p class="text-gray-600">Automatically extracts line items, prices, and job references from YESSS, CEF, Wholesale, and more.</p>
+            
+            <!-- Feature 1: Voice to Quote -->
+            <div class="grid lg:grid-cols-2 gap-12 items-center mb-24">
+                <div>
+                    <div class="pill bg-accent/10 text-accent border border-accent/20 mb-4">🎙️ Voice to Quote</div>
+                    <h3 class="text-2xl lg:text-3xl font-bold text-white mb-4">Record your site visit. Get a priced quote.</h3>
+                    <p class="text-gray-400 mb-6 leading-relaxed">Walk through the property talking into your phone. GoZappify's AI understands electrical terminology — sockets, switches, cable runs, UFH mats — and builds a complete material list with UK part numbers, quantities, and your supplier prices.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs">✓</span> Room-by-room breakdown with quantities</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs">✓</span> Auto-matches to your QuickBooks catalogue</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs">✓</span> Push estimates to QB with room description lines</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs">✓</span> Self-learning — corrects get smarter over time</li>
+                    </ul>
                 </div>
-                <div class="p-6 rounded-2xl bg-gray-50 hover:bg-gray-100 transition">
-                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                <div class="bg-dark-700 border border-white/10 rounded-2xl p-6 glow-green">
+                    <div class="flex gap-2 mb-4">
+                        <div class="px-3 py-1.5 bg-accent/15 text-accent text-xs font-semibold rounded-lg">Per Room</div>
+                        <div class="px-3 py-1.5 bg-dark-600 text-gray-500 text-xs font-semibold rounded-lg">Supplier List</div>
+                        <div class="px-3 py-1.5 bg-dark-600 text-gray-500 text-xs font-semibold rounded-lg">Flags</div>
                     </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Automatic Markup</h3>
-                    <p class="text-gray-600">Set your markup percentages once and see instant profit calculations on every invoice.</p>
-                </div>
-                <div class="p-6 rounded-2xl bg-gray-50 hover:bg-gray-100 transition">
-                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                        </svg>
+                    <div class="bg-dark-800/60 rounded-xl p-4 mb-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-white">Kitchen</span>
+                            <span class="text-xs text-gray-500">8 accessories, 4 switch positions</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-sm"><span class="text-gray-400">5 × 2G DP Socket</span><span class="mono text-gray-300">WMSS82</span></div>
+                            <div class="flex justify-between text-sm"><span class="text-gray-400">2 × Ceiling Rose</span><span class="mono text-gray-300">WPS6</span></div>
+                            <div class="flex justify-between text-sm"><span class="text-gray-400">1 × FCU Spur</span><span class="mono text-gray-300">WMFS83</span></div>
+                        </div>
                     </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">QuickBooks & Xero Sync</h3>
-                    <p class="text-gray-600">One-click sync creates bills, products, and invoices in your accounting software automatically.</p>
+                    <div class="bg-dark-800/60 rounded-xl p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-white">Ensuite</span>
+                            <span class="text-xs text-gray-500">4 accessories, 2 switch positions</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-sm"><span class="text-gray-400">1 × Shaver Socket</span><span class="mono text-gray-300">WMSO100</span></div>
+                            <div class="flex justify-between text-sm"><span class="text-gray-400">1 × Fan Isolator</span><span class="mono text-gray-300">WMFIS</span></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Supported Suppliers -->
-            <div class="mt-16 text-center">
-                <p class="text-gray-500 text-sm mb-4">Supports invoices from leading UK electrical wholesalers</p>
-                <p class="text-gray-700 font-medium">YESSS Electrical • CEF • Wholesale Electrics • Edmundson Electrical • and more</p>
+            <!-- Feature 2: Invoice Processing -->
+            <div class="grid lg:grid-cols-2 gap-12 items-center mb-24">
+                <div class="order-2 lg:order-1 bg-dark-700 border border-white/10 rounded-2xl p-6 glow-indigo">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-white">Invoice Queue</span>
+                        <span class="pill bg-indigo/15 text-indigo-light text-xs">Auto-Processing</span>
+                    </div>
+                    <div class="space-y-2.5">
+                        <div class="flex justify-between items-center p-3 bg-dark-800/60 rounded-lg">
+                            <div>
+                                <p class="text-sm font-medium text-white">YESSS Electrical</p>
+                                <p class="text-xs text-gray-500">INV-47669 • TLC Home</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="mono text-sm font-bold text-white">£2,788.74</p>
+                                <p class="mono text-xs text-accent">+£1,310 profit</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-dark-800/60 rounded-lg">
+                            <div>
+                                <p class="text-sm font-medium text-white">CEF</p>
+                                <p class="text-xs text-gray-500">INV-98234 • 22 West Park</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="mono text-sm font-bold text-white">£456.20</p>
+                                <p class="mono text-xs text-accent">+£228 profit</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-dark-800/60 rounded-lg">
+                            <div>
+                                <p class="text-sm font-medium text-white">Wholesale Electrics</p>
+                                <p class="text-xs text-gray-500">INV-12890 • Clarence Apt</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="mono text-sm font-bold text-white">£1,234.50</p>
+                                <p class="mono text-xs text-accent">+£617 profit</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+                        <span class="text-xs text-gray-500">3 invoices processed today</span>
+                        <span class="flex items-center gap-1.5 text-xs font-medium text-accent">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            Synced to QuickBooks
+                        </span>
+                    </div>
+                </div>
+                <div class="order-1 lg:order-2">
+                    <div class="pill bg-indigo/10 text-indigo-light border border-indigo/20 mb-4">📄 Invoice Processing</div>
+                    <h3 class="text-2xl lg:text-3xl font-bold text-white mb-4">Supplier invoices processed in seconds, not hours.</h3>
+                    <p class="text-gray-400 mb-6 leading-relaxed">Forward your YESSS, CEF, or Wholesale invoice. AI extracts every line item, applies your markup, detects price increases, and syncs to QuickBooks as a bill — with profit calculated automatically.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-indigo/15 text-indigo-light flex items-center justify-center text-xs">✓</span> Automatic price increase detection</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-indigo/15 text-indigo-light flex items-center justify-center text-xs">✓</span> Email forwarding — zero manual upload</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-indigo/15 text-indigo-light flex items-center justify-center text-xs">✓</span> Markup protection keeps your margins safe</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-indigo/15 text-indigo-light flex items-center justify-center text-xs">✓</span> YESSS, CEF, Wholesale & more supported</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Feature 3: Quote Builder -->
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="pill bg-purple-500/10 text-purple-400 border border-purple-500/20 mb-4">📐 Quote Builder</div>
+                    <h3 class="text-2xl lg:text-3xl font-bold text-white mb-4">Floor plans to priced quotes with room-by-room detail.</h3>
+                    <p class="text-gray-400 mb-6 leading-relaxed">Upload floor plans, mark rooms, trace building outlines, and define UFH zones. Materials get grouped per room with automatic area calculations. Generate professional PDF quotes or push estimates to QuickBooks.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs">✓</span> Multi-level floor plan support</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs">✓</span> Room marking with area calculation</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs">✓</span> Heat mat / UFH zone tool</li>
+                        <li class="flex items-center gap-3 text-gray-300"><span class="w-6 h-6 rounded-full bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs">✓</span> Materials markup & profit tracking</li>
+                    </ul>
+                </div>
+                <div class="bg-dark-700 border border-white/10 rounded-2xl p-6" style="box-shadow: 0 0 80px rgba(139, 92, 246, 0.1);">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-white">Quote Builder — West Grove</span>
+                        <span class="pill bg-green-500/15 text-green-400 text-xs">3 rooms</span>
+                    </div>
+                    <div class="grid grid-cols-5 gap-2 text-xs text-gray-500 mb-2 px-2">
+                        <span class="col-span-2">Item</span><span class="text-right">Qty</span><span class="text-right">Cost</span><span class="text-right">Sell</span>
+                    </div>
+                    <div class="bg-indigo/10 rounded-lg px-3 py-1.5 mb-1"><span class="text-xs font-semibold text-indigo-light">Bedroom 2</span></div>
+                    <div class="space-y-1 mb-3 px-2">
+                        <div class="grid grid-cols-5 gap-2 text-xs"><span class="col-span-2 text-gray-400">2G DP Socket</span><span class="text-right text-gray-400">5</span><span class="text-right mono text-gray-500">£1.85</span><span class="text-right mono text-accent">£3.95</span></div>
+                        <div class="grid grid-cols-5 gap-2 text-xs"><span class="col-span-2 text-gray-400">Ceiling Rose</span><span class="text-right text-gray-400">2</span><span class="text-right mono text-gray-500">£1.08</span><span class="text-right mono text-accent">£2.15</span></div>
+                    </div>
+                    <div class="bg-indigo/10 rounded-lg px-3 py-1.5 mb-1"><span class="text-xs font-semibold text-indigo-light">Ensuite 2</span></div>
+                    <div class="space-y-1 mb-3 px-2">
+                        <div class="grid grid-cols-5 gap-2 text-xs"><span class="col-span-2 text-gray-400">Shaver Socket</span><span class="text-right text-gray-400">1</span><span class="text-right mono text-gray-500">£6.50</span><span class="text-right mono text-accent">£12.85</span></div>
+                        <div class="grid grid-cols-5 gap-2 text-xs"><span class="col-span-2 text-gray-400">Fan Isolator</span><span class="text-right text-gray-400">1</span><span class="text-right mono text-gray-500">£3.20</span><span class="text-right mono text-accent">£6.40</span></div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-white/5 flex justify-between">
+                        <span class="text-xs text-gray-500">85 line items</span>
+                        <div class="text-right">
+                            <p class="mono text-sm font-bold text-white">£3,960.08</p>
+                            <p class="text-xs text-accent">49% profit margin</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- How It Works -->
-    <section id="how-it-works" class="py-20 bg-gray-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- ─── HOW IT WORKS ────────────────────────────────────── -->
+    <section id="how-it-works" class="py-24 bg-dark-800">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
-                <p class="text-xl text-gray-600">Three simple steps to transform your invoice workflow</p>
+                <h2 class="text-3xl lg:text-4xl font-800 text-white mb-4">From Site Visit to QuickBooks in Minutes</h2>
+                <p class="text-lg text-gray-400">No typing. No spreadsheets. No mistakes.</p>
             </div>
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">1</div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Upload Invoices</h3>
-                    <p class="text-gray-600">Drop your PDF invoices or forward them via email. We support all major electrical suppliers.</p>
+            <div class="grid md:grid-cols-4 gap-8">
+                <div class="text-center step-line">
+                    <div class="w-14 h-14 rounded-2xl bg-accent/15 border border-accent/20 flex items-center justify-center mx-auto mb-5">
+                        <span class="text-2xl">🎙️</span>
+                    </div>
+                    <h4 class="font-bold text-white mb-2">1. Record</h4>
+                    <p class="text-sm text-gray-400">Walk the site, talk through each room. Use any recorder — phone, Plaud, Otter.</p>
+                </div>
+                <div class="text-center step-line">
+                    <div class="w-14 h-14 rounded-2xl bg-indigo/15 border border-indigo/20 flex items-center justify-center mx-auto mb-5">
+                        <span class="text-2xl">🤖</span>
+                    </div>
+                    <h4 class="font-bold text-white mb-2">2. AI Parses</h4>
+                    <p class="text-sm text-gray-400">AI extracts every material, assigns UK part numbers, calculates quantities per room.</p>
+                </div>
+                <div class="text-center step-line">
+                    <div class="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-500/20 flex items-center justify-center mx-auto mb-5">
+                        <span class="text-2xl">💰</span>
+                    </div>
+                    <h4 class="font-bold text-white mb-2">3. Price Match</h4>
+                    <p class="text-sm text-gray-400">Materials auto-match to your QuickBooks catalogue with live cost and sell prices.</p>
                 </div>
                 <div class="text-center">
-                    <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">2</div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">AI Processes Everything</h3>
-                    <p class="text-gray-600">Our AI extracts all line items, applies your markup rules, and matches to job references.</p>
-                </div>
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">3</div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Sync to Accounting</h3>
-                    <p class="text-gray-600">Review the results and sync directly to QuickBooks with one click. Products and invoices are created automatically.</p>
+                    <div class="w-14 h-14 rounded-2xl bg-green-500/15 border border-green-500/20 flex items-center justify-center mx-auto mb-5">
+                        <span class="text-2xl">📤</span>
+                    </div>
+                    <h4 class="font-bold text-white mb-2">4. Push to QB</h4>
+                    <p class="text-sm text-gray-400">One click creates a room-grouped estimate in QuickBooks, ready to send to your client.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Pricing -->
-    <section id="pricing" class="py-20 bg-gray-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">Simple, Transparent Pricing</h2>
-                <p class="text-xl text-gray-600">Start free, upgrade when you're ready</p>
+    <!-- ─── SUPPLIERS ───────────────────────────────────────── -->
+    <section class="py-16 border-y border-white/5">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 text-center">
+            <p class="text-sm text-gray-500 mb-6 uppercase tracking-wider font-medium">Works with leading UK electrical wholesalers</p>
+            <div class="flex flex-wrap justify-center gap-x-12 gap-y-4 text-lg font-semibold text-gray-600">
+                <span>YESSS Electrical</span>
+                <span>CEF</span>
+                <span>Wholesale Electrics</span>
+                <span>Edmundson</span>
+                <span>Rexel</span>
             </div>
-            <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div class="flex justify-center gap-8 mt-8">
+                <div class="flex items-center gap-2 text-sm text-gray-500">
+                    <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    QuickBooks
+                </div>
+                <div class="flex items-center gap-2 text-sm text-gray-500">
+                    <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    Xero
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── PRICING ─────────────────────────────────────────── -->
+    <section id="pricing" class="py-24 grid-pattern">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl lg:text-4xl font-800 text-white mb-4">Simple, Transparent Pricing</h2>
+                <p class="text-lg text-gray-400">Start with a 7-day free trial. No credit card required.</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
                 <!-- Basic -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Basic</h3>
-                    <p class="text-gray-500 mb-6">Perfect for small contractors</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-bold text-gray-900">£39</span>
+                <div class="bg-dark-700 border border-white/10 rounded-2xl p-8 feature-card">
+                    <h3 class="text-lg font-bold text-white mb-1">Basic</h3>
+                    <p class="text-sm text-gray-500 mb-6">Invoice processing</p>
+                    <div class="mb-8">
+                        <span class="text-4xl font-800 text-white">£39</span>
                         <span class="text-gray-500">/month</span>
                     </div>
                     <ul class="space-y-3 mb-8">
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            <span><strong>100 invoices</strong>/month</span>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>100</strong>&nbsp;invoices/quotes per month
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            AI invoice parsing
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            AI-powered invoice parsing
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            QuickBooks sync
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            QuickBooks & Xero integration
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                             Automatic markup calculation
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            Email support
+                        <li class="flex items-center gap-3 text-sm text-gray-500">
+                            <svg class="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            Quote Builder
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-gray-500">
+                            <svg class="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            Voice to Quote
                         </li>
                     </ul>
-                    <a href="/auth/register" class="block w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold text-center transition">
-                        Get Started
+                    <a href="/auth/register" class="block w-full py-3 text-center font-semibold rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 transition">
+                        Subscribe
                     </a>
                 </div>
                 
                 <!-- Pro -->
-                <div class="bg-white rounded-2xl shadow-lg border-2 border-purple-500 p-8 relative">
-                    <!-- Most Popular Badge -->
-                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <span class="bg-purple-500 text-white text-sm font-semibold px-4 py-1 rounded-full">Most Popular</span>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Pro</h3>
-                    <p class="text-gray-500 mb-6">For growing businesses</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-bold text-gray-900">£79</span>
+                <div class="bg-dark-700 border border-white/10 rounded-2xl p-8 feature-card">
+                    <h3 class="text-lg font-bold text-white mb-1">Pro</h3>
+                    <p class="text-sm text-gray-500 mb-6">Unlimited invoices</p>
+                    <div class="mb-8">
+                        <span class="text-4xl font-800 text-white">£79</span>
                         <span class="text-gray-500">/month</span>
                     </div>
                     <ul class="space-y-3 mb-8">
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            <span><strong>Unlimited</strong> invoices</span>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Unlimited</strong>&nbsp;invoices & quotes
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            AI invoice parsing
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            AI-powered invoice parsing
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            QuickBooks sync
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            QuickBooks & Xero integration
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                             Automatic markup calculation
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            <strong>Priority</strong> support
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            Priority email support
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-purple-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            <strong>Bulk upload</strong>
+                        <li class="flex items-center gap-3 text-sm text-gray-500">
+                            <svg class="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            Quote Builder
                         </li>
-                        <li class="flex items-center text-gray-600">
-                            <svg class="w-5 h-5 text-purple-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            <strong>Early access</strong> to new features
+                        <li class="flex items-center gap-3 text-sm text-gray-500">
+                            <svg class="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            Voice to Quote
                         </li>
                     </ul>
-                    <a href="/auth/register" class="block w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-center transition">
-                        Get Started
+                    <a href="/auth/register" class="block w-full py-3 text-center font-semibold rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 transition">
+                        Subscribe
+                    </a>
+                </div>
+                
+                <!-- Ultimate -->
+                <div class="pricing-best rounded-2xl p-8 feature-card relative">
+                    <div class="absolute -top-3 right-6">
+                        <span class="bg-indigo text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-1">Ultimate</h3>
+                    <p class="text-sm text-gray-400 mb-6">Full estimating suite</p>
+                    <div class="mb-8">
+                        <span class="text-4xl font-800 text-white">£99</span>
+                        <span class="text-gray-500">/month</span>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Unlimited</strong>&nbsp;invoices & quotes
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            AI-powered invoice parsing
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            QuickBooks & Xero integration
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            Automatic markup calculation
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-gray-300">
+                            <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            Priority email support
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-white font-medium">
+                            <svg class="w-4 h-4 text-indigo-light flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Quote Builder</strong>&nbsp;— takeoff from drawings
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-white font-medium">
+                            <svg class="w-4 h-4 text-indigo-light flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Voice to Quote</strong>&nbsp;— AI site visit parsing
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-white font-medium">
+                            <svg class="w-4 h-4 text-indigo-light flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Floor plan AI</strong>&nbsp;— room marking & areas
+                        </li>
+                        <li class="flex items-center gap-3 text-sm text-white font-medium">
+                            <svg class="w-4 h-4 text-indigo-light flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <strong>Push estimates</strong>&nbsp;to QuickBooks
+                        </li>
+                    </ul>
+                    <a href="/auth/register" class="block w-full py-3 text-center font-bold rounded-xl bg-indigo text-white hover:bg-indigo-light transition shadow-lg shadow-indigo/20">
+                        Subscribe
                     </a>
                 </div>
             </div>
-            
-            <!-- Integrations note -->
-            <div class="text-center mt-12">
-                <p class="text-gray-500 flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
-                    QuickBooks integration included
-                    <span class="mx-2">•</span>
-                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
-                    Xero integration included
-                </p>
-            </div>
         </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="py-20 gradient-bg">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 class="text-3xl lg:text-4xl font-bold text-white mb-6">Ready to Save Hours Every Week?</h2>
-            <p class="text-xl text-blue-100 mb-8">Join electrical contractors who've already streamlined their invoice processing.</p>
-            <a href="/auth/register" class="inline-flex items-center px-8 py-4 bg-white text-primary-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition shadow-xl">
+    <!-- ─── CTA ─────────────────────────────────────────────── -->
+    <section class="py-24 hero-mesh">
+        <div class="max-w-3xl mx-auto px-6 text-center">
+            <h2 class="text-3xl lg:text-4xl font-800 text-white mb-6">Ready to Quote Jobs in Minutes?</h2>
+            <p class="text-lg text-gray-400 mb-8">Join electrical contractors who've already ditched the spreadsheets.</p>
+            <a href="/auth/register" class="inline-flex items-center gap-2 bg-accent text-dark-900 font-bold text-lg px-10 py-4 rounded-xl hover:bg-accent-light transition shadow-lg shadow-accent/20">
                 Start Your Free Trial
-                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
-                </svg>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
             </a>
-            <p class="mt-4 text-blue-200 text-sm">7-day free trial • Up to 25 invoices • No credit card required</p>
+            <p class="mt-4 text-sm text-gray-500">7-day free trial • No credit card required</p>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="bg-gray-900 py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-4 gap-8">
+    <!-- ─── FOOTER ──────────────────────────────────────────── -->
+    <footer class="py-16 bg-dark-900 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-10">
                 <div>
-                    <div class="flex items-center space-x-3 mb-4">
-                        <!-- GoZappify Hexagon Logo - Footer version -->
-                        <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <div class="flex items-center gap-3 mb-4">
+                        <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <defs>
-                                <linearGradient id="footerIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#4DD4AC"/>
-                                    <stop offset="50%" style="stop-color:#5BC88F"/>
-                                    <stop offset="100%" style="stop-color:#3B82C4"/>
-                                </linearGradient>
-                                <linearGradient id="footerBottomGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#3B82C4"/>
-                                    <stop offset="100%" style="stop-color:#2563A8"/>
-                                </linearGradient>
+                                <linearGradient id="fg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#4DD4AC"/><stop offset="100%" style="stop-color:#3B82C4"/></linearGradient>
+                                <linearGradient id="fg2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#3B82C4"/><stop offset="100%" style="stop-color:#2563A8"/></linearGradient>
                             </defs>
-                            <!-- Top hexagon part -->
-                            <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#footerIconGradient)"/>
-                            <!-- Bottom hexagon extension -->
-                            <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#footerBottomGradient)"/>
-                            <!-- Inner cutout -->
-                            <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="#111827"/>
-                            <!-- Checkmark -->
-                            <path d="M38 42 L48 52 L68 28" stroke="#5BC88F" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M50 5 L85 25 L85 50 L50 70 L15 50 L15 25 Z" fill="url(#fg1)"/>
+                            <path d="M15 50 L50 70 L85 50 L85 75 L50 95 L15 75 Z" fill="url(#fg2)"/>
+                            <path d="M50 20 L70 32 L70 48 L50 60 L30 48 L30 32 Z" fill="#0b0f1a"/>
+                            <path d="M38 42 L48 52 L68 28" stroke="#22d3a7" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span class="text-2xl font-bold text-white">GoZappify</span>
+                        <span class="text-lg font-bold text-white">Go<span class="text-accent">Zappify</span></span>
                     </div>
-                    <p class="text-gray-400">AI-powered invoice processing for electrical contractors.</p>
+                    <p class="text-sm text-gray-500 leading-relaxed">AI-powered quoting and invoice processing for UK electrical contractors.</p>
                 </div>
                 <div>
-                    <h4 class="text-white font-semibold mb-4">Product</h4>
-                    <ul class="space-y-2">
-                        <li><a href="#features" class="text-gray-400 hover:text-white transition">Features</a></li>
-                        <li><a href="#pricing" class="text-gray-400 hover:text-white transition">Pricing</a></li>
-                        <li><a href="#how-it-works" class="text-gray-400 hover:text-white transition">How It Works</a></li>
+                    <h4 class="text-sm font-semibold text-white uppercase tracking-wider mb-4">Product</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#features" class="text-gray-500 hover:text-white transition">Features</a></li>
+                        <li><a href="#pricing" class="text-gray-500 hover:text-white transition">Pricing</a></li>
+                        <li><a href="#how-it-works" class="text-gray-500 hover:text-white transition">How It Works</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="text-white font-semibold mb-4">Support</h4>
-                    <ul class="space-y-2">
-                        <li><a href="/cdn-cgi/l/email-protection#eb989e9b9b84999fab8c84918a9b9b828d92c5888486" class="text-gray-400 hover:text-white transition">Contact Us</a></li>
-                        <li><a href="/help" class="text-gray-400 hover:text-white transition">Help Centre</a></li>
+                    <h4 class="text-sm font-semibold text-white uppercase tracking-wider mb-4">Support</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="mailto:support@gozappify.com" class="text-gray-500 hover:text-white transition">Contact Us</a></li>
+                        <li><a href="/help" class="text-gray-500 hover:text-white transition">Help Centre</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="text-white font-semibold mb-4">Legal</h4>
-                    <ul class="space-y-2">
-                        <li><a href="/privacy" class="text-gray-400 hover:text-white transition">Privacy Policy</a></li>
-                        <li><a href="/terms" class="text-gray-400 hover:text-white transition">Terms of Service</a></li>
-                        <li><a href="/refund-policy" class="text-gray-400 hover:text-white transition">Refund Policy</a></li>
+                    <h4 class="text-sm font-semibold text-white uppercase tracking-wider mb-4">Legal</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="/privacy" class="text-gray-500 hover:text-white transition">Privacy Policy</a></li>
+                        <li><a href="/terms" class="text-gray-500 hover:text-white transition">Terms of Service</a></li>
+                        <li><a href="/refund-policy" class="text-gray-500 hover:text-white transition">Refund Policy</a></li>
                     </ul>
                 </div>
             </div>
-            <div class="mt-12 pt-8 border-t border-gray-800 text-center">
-                <p class="text-gray-400">&copy; 2026 GoZappify. All rights reserved.</p>
+            <div class="mt-12 pt-8 border-t border-white/5 text-center">
+                <p class="text-sm text-gray-600">&copy; 2026 GoZappify. All rights reserved.</p>
             </div>
- 
+        </div>
+    </footer>
+</body>
+</html>
