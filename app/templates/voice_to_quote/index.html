@@ -224,10 +224,9 @@
                                     </select>
                                 </div>
                             </div>
-                            <button onclick="analyseFloorPlan()" id="fp-analyse-btn" class="w-full px-4 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 inline-flex items-center justify-center gap-2">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                                <span id="fp-analyse-text">Analyse Drawing</span>
-                                <span id="fp-analyse-loading" class="hidden"><svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg></span>
+                            <button onclick="openRoomMarker()" id="fp-analyse-btn" class="w-full px-4 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 inline-flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"/></svg>
+                                <span>Mark Rooms on Drawing</span>
                             </button>
                         </div>
                         
@@ -406,6 +405,70 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT -->
 <!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- Room Marker Full-Screen Overlay -->
+<div id="room-marker-overlay" class="hidden fixed inset-0 z-[100] bg-gray-900 flex">
+    
+    <!-- Canvas area -->
+    <div id="room-marker-container" class="flex-1 relative overflow-hidden">
+        <canvas id="room-marker-canvas" class="w-full h-full"></canvas>
+        
+        <!-- Top toolbar -->
+        <div class="absolute top-4 left-4 flex items-center gap-2">
+            <button onclick="startNewRoom()" id="rm-new-room-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-lg transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                New Room
+            </button>
+            <button onclick="fitAllRooms()" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded-lg shadow-lg transition" title="Fit all">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            </button>
+        </div>
+        
+        <!-- Scale info badge -->
+        <div class="absolute top-4 right-[320px] bg-gray-800/80 backdrop-blur-sm text-xs text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700">
+            Scale: <span id="rm-scale-display" class="font-mono text-amber-400">1:50</span>
+        </div>
+    </div>
+    
+    <!-- Side panel -->
+    <div class="w-[300px] bg-gray-800 border-l border-gray-700 flex flex-col">
+        
+        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">📐 Room Marker</h3>
+            <button onclick="RoomMarker.close()" class="text-gray-400 hover:text-white transition" title="Close">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        
+        <div class="p-3 mx-3 mt-3 bg-indigo-900/20 border border-indigo-800/30 rounded-lg">
+            <p class="text-xs text-indigo-300 leading-relaxed">
+                <strong>Click</strong> around a room's walls to trace its outline. 
+                <strong>Click the first point</strong> or <strong>double-click</strong> to close. 
+                <strong>Scroll</strong> to zoom. <strong>Alt+drag</strong> to pan.
+                <strong>Esc</strong> to cancel. <strong>Ctrl+Z</strong> to undo last point.
+            </p>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-3">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Rooms</span>
+                <span id="rm-total-area" class="text-[10px] text-amber-400 font-mono"></span>
+            </div>
+            <div id="rm-rooms-list" class="space-y-1">
+                <div class="text-center py-4 text-gray-500 text-sm">No rooms marked yet. Click on the drawing to start.</div>
+            </div>
+        </div>
+        
+        <div class="p-3 border-t border-gray-700 space-y-2">
+            <button onclick="RoomMarker.close()" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                Save & Close
+            </button>
+        </div>
+    </div>
+</div>
+
+
 <script>
 let currentJob = null;
 let parsedData = null;
@@ -1588,6 +1651,37 @@ function showFloorPlanUploaded(filename) {
     }
 }
 
+
+function openRoomMarker() {
+    if (!currentJob || !currentJob.floor_plan_filename) {
+        alert('Upload a floor plan first');
+        return;
+    }
+    
+    const imageSrc = '/voice-to-quote/jobs/' + currentJob.id + '/floor-plan-image';
+    
+    // Load existing rooms if any
+    let existingRooms = [];
+    if (currentJob.floor_plan_rooms) {
+        const fpData = typeof currentJob.floor_plan_rooms === 'string' 
+            ? JSON.parse(currentJob.floor_plan_rooms) 
+            : currentJob.floor_plan_rooms;
+        const rawRooms = fpData.rooms || fpData || [];
+        existingRooms = rawRooms.filter(r => r.points && r.points.length >= 3);
+    }
+    
+    const scaleSettings = {
+        scale_ratio: document.getElementById('fp-scale-ratio').value,
+        paper_size: document.getElementById('fp-paper-size').value,
+        orientation: document.getElementById('fp-orientation').value,
+    };
+    
+    const scaleDisp = document.getElementById('rm-scale-display');
+    if (scaleDisp) scaleDisp.textContent = scaleSettings.scale_ratio;
+    
+    RoomMarker.open(imageSrc, existingRooms, scaleSettings);
+}
+
 async function analyseFloorPlan() {
     if (!currentJob) return;
     
@@ -1698,6 +1792,7 @@ async function saveCorrectionPreference() {
 
 </script>
 
+<script src="/static/js/room-marker.js"></script>
 <style>
     .editable { cursor: pointer; border-bottom: 1px dashed transparent; transition: border-color 0.15s; }
     .editable:hover { border-bottom-color: #3b82f6; }
@@ -1705,4 +1800,3 @@ async function saveCorrectionPreference() {
     .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 </style>
 {% endblock %}
-        alert('Please enter a longer transcription (at least 20 characters)');

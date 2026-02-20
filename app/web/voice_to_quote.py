@@ -2484,3 +2484,63 @@ IMPORTANT:
     except Exception as e:
         logger.error(f"Floor plan analysis error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/jobs/<int:job_id>/save-floor-plan-rooms', methods=['POST'])
+@login_required
+def save_floor_plan_rooms(job_id):
+    """Save manually marked room data from the Room Marker canvas."""
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    data = request.get_json() or {}
+    rooms = data.get('rooms', [])
+    total_area = data.get('total_floor_area_sqm', 0)
+    
+    job.floor_plan_rooms = json.dumps({
+        'rooms': rooms,
+        'total_floor_area_sqm': total_area,
+        'source': 'manual',
+    })
+    db.session.commit()
+    
+    logger.info(f"Saved {len(rooms)} manually marked rooms for job {job_id}")
+    return jsonify({'success': True, 'room_count': len(rooms)})
+
+
+@bp.route('/jobs/<int:job_id>/floor-plan-image')
+@login_required
+def floor_plan_image(job_id):
+    """Serve the floor plan image for the Room Marker canvas."""
+    from flask import send_file
+    
+    job = VTQJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job or not job.floor_plan_path:
+        return '', 404
+    
+    if not os.path.exists(job.floor_plan_path):
+        return jsonify({'error': 'Floor plan file not found'}), 404
+    
+    import mimetypes
+    mime = mimetypes.guess_type(job.floor_plan_path)[0] or 'image/png'
+    
+    # For PDFs, convert first page to PNG
+    if job.floor_plan_path.lower().endswith('.pdf'):
+        import subprocess
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            subprocess.run([
+                'pdftoppm', '-png', '-r', '200', '-singlefile',
+                job.floor_plan_path, tmp_path.replace('.png', '')
+            ], check=True, capture_output=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            from pdf2image import convert_from_path
+            images = convert_from_path(job.floor_plan_path, first_page=1, last_page=1, dpi=200)
+            images[0].save(tmp_path, 'PNG')
+        
+        return send_file(tmp_path, mimetype='image/png')
+    
+    return send_file(job.floor_plan_path, mimetype=mime)
