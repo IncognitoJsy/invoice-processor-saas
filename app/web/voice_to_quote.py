@@ -1975,7 +1975,7 @@ def push_estimate():
         # Add contingency line if project has contingency > 0
         contingency_pct = float(project.contingency_percent or 0)
         if contingency_pct > 0:
-            materials_total = sum(item['unit_price'] * item['quantity'] for item in line_items)
+            materials_total = sum(item.get('unit_price', 0) * item.get('quantity', 0) for item in line_items if not item.get('description_only'))
             contingency_amount = round(materials_total * contingency_pct / 100, 2)
             
             # Find or note contingency item in QB
