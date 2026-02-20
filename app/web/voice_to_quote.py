@@ -1733,7 +1733,6 @@ def send_to_quote_builder():
         db.session.flush()  # Get the project ID
         
         markup = float(project.materials_markup_percent)
-        
         # Add each matched material
         for match in matches:
             purchase_price = float(match.get('purchase_price', 0) or 0)
@@ -1745,7 +1744,7 @@ def send_to_quote_builder():
             material = ProjectMaterial(
                 project_id=project.id,
                 manually_added=False,
-                category=match.get('category', 'Accessories'),
+                category=match.get('room_name') or match.get('category', 'Accessories'),
                 part_number=match.get('product_code', '') or match.get('part_number', ''),
                 description=match.get('clean_description') or match.get('description', ''),
                 manufacturer=match.get('manufacturer', ''),

@@ -1033,7 +1033,7 @@ function renderRooms(rooms) {
             <div id="room-${ri}" class="px-5 py-4">
                 <table class="w-full text-sm">
                     <thead><tr class="text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
-                        <th class="pb-2 pr-3">Qty</th><th class="pb-2 pr-3">Description</th><th class="pb-2 pr-3">Part No.</th><th class="pb-2 pr-3">Back Box</th><th class="pb-2">Info</th>
+                        <th class="pb-2 pr-3">Qty</th><th class="pb-2 pr-3">Description</th><th class="pb-2 pr-3">Part No.</th><th class="pb-2 pr-3">Back Box</th><th class="pb-2">Info</th><th class="pb-2 w-8"></th>
                     </tr></thead>
                     <tbody>${accs.map((a, ai) => `
                         <tr class="border-t border-gray-50 dark:border-gray-700/50">
@@ -1042,6 +1042,7 @@ function renderRooms(rooms) {
                             <td class="py-2 pr-3"><span class="editable font-mono text-xs text-gray-700 dark:text-gray-300" onclick="makeEditable(this, 'rooms[${ri}].accessories[${ai}].part_number', 'part_number', ${ri}, ${ai})">${a.part_number || '<span class=\\"text-amber-600 dark:text-amber-400\\">TBC</span>'}</span></td>
                             <td class="py-2 pr-3 text-xs text-gray-500 dark:text-gray-400">${a.back_box || '—'}</td>
                             <td class="py-2 text-xs text-gray-400">${a.notes ? `<span title="${escapeHtml(a.notes)}" class="cursor-help">ℹ</span>` : ''}</td>
+                            <td class="py-2 text-xs"><button onclick="removeAccessory(${ri}, ${ai})" class="text-gray-400 hover:text-red-500 transition" title="Remove">🗑️</button></td>
                         </tr>
                     `).join('')}</tbody>
                 </table>
@@ -1134,6 +1135,32 @@ async function goToMatching() {
     content.innerHTML = '<div class="text-center py-8"><svg class="animate-spin mx-auto h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><p class="mt-2 text-sm text-gray-500">Matching products...</p></div>';
     
     try {
+        // Build room map: which rooms use each material (by part_number+description)
+        const roomMap = {};
+        (parsedData.rooms || []).forEach(room => {
+            (room.accessories || []).forEach(acc => {
+                const key = (acc.part_number || '') + '|' + (acc.description || '');
+                if (!roomMap[key]) roomMap[key] = [];
+                if (!roomMap[key].includes(room.name)) roomMap[key].push(room.name);
+            });
+            (room.switching || []).forEach(sw => {
+                (sw.components || []).forEach(c => {
+                    const key = (c.part_number || '') + '|' + (c.description || '');
+                    if (!roomMap[key]) roomMap[key] = [];
+                    if (!roomMap[key].includes(room.name)) roomMap[key].push(room.name);
+                });
+            });
+        });
+        
+        // Attach room info to combined materials
+        const materialsWithRooms = (parsedData.combined_materials || []).map(m => {
+            const key = (m.part_number || '') + '|' + (m.description || '');
+            return { ...m, rooms: roomMap[key] || ['Unassigned'] };
+        });
+        
+        // Store for later use
+        window._materialsRoomMap = roomMap;
+        
         const response = await fetch('/voice-to-quote/match-products', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1234,11 +1261,89 @@ function renderMatchRows() {
     const tbody = document.getElementById('match-tbody');
     if (!tbody || !matchResults) return;
     
-    tbody.innerHTML = matchResults.map((item, i) => {
-        const mat = item.material || {};
-        const sel = item.selected;
-        const price = sel?.product?.sale_price || 0;
-        const qty = mat.total_quantity || 0;
+    // Build room grouping from parsedData
+    const roomMaterials = {};  // roomName -> [{matchIdx, roomQty}]
+    const materialRoomQty = {}; // matchIdx -> {roomName: qty}
+    
+    if (parsedData && parsedData.rooms) {
+        parsedData.rooms.forEach(room => {
+            if (!roomMaterials[room.name]) roomMaterials[room.name] = [];
+            
+            // Collect all items from this room
+            const roomItems = [];
+            (room.accessories || []).forEach(acc => {
+                roomItems.push({ part: acc.part_number || '', desc: acc.description || '', qty: acc.quantity || 0 });
+            });
+            (room.switching || []).forEach(sw => {
+                (sw.components || []).forEach(c => {
+                    roomItems.push({ part: c.part_number || '', desc: c.description || '', qty: c.quantity || 0 });
+                });
+            });
+            
+            // Map room items to match results
+            roomItems.forEach(ri => {
+                for (let i = 0; i < matchResults.length; i++) {
+                    const mat = matchResults[i].material || {};
+                    if ((mat.part_number === ri.part || mat.description === ri.desc) && ri.part) {
+                        if (!materialRoomQty[i]) materialRoomQty[i] = {};
+                        materialRoomQty[i][room.name] = (materialRoomQty[i][room.name] || 0) + ri.qty;
+                        if (!roomMaterials[room.name].some(x => x.matchIdx === i)) {
+                            roomMaterials[room.name].push({ matchIdx: i, roomQty: ri.qty });
+                        } else {
+                            const existing = roomMaterials[room.name].find(x => x.matchIdx === i);
+                            if (existing) existing.roomQty += ri.qty;
+                        }
+                        break;
+                    }
+                }
+            });
+        });
+    }
+    
+    // Check if we have room data
+    const hasRoomData = Object.keys(roomMaterials).length > 0;
+    
+    if (hasRoomData) {
+        // Render grouped by room
+        let html = '';
+        const renderedIdxs = new Set();
+        
+        Object.entries(roomMaterials).forEach(([roomName, items]) => {
+            if (!items.length) return;
+            
+            // Room header
+            html += '<tr class="bg-indigo-50 dark:bg-indigo-900/20 border-t-2 border-indigo-200 dark:border-indigo-800"><td colspan="8" class="px-4 py-3"><span class="font-bold text-indigo-700 dark:text-indigo-300 text-sm">' + roomName + '</span><span class="text-xs text-indigo-500 dark:text-indigo-400 ml-2">' + items.length + ' items</span></td></tr>';
+            
+            items.forEach(({ matchIdx, roomQty }) => {
+                renderedIdxs.add(matchIdx);
+                html += buildMatchRow(matchIdx, roomQty);
+            });
+        });
+        
+        // Any unassigned items
+        const unassigned = [];
+        matchResults.forEach((_, i) => { if (!renderedIdxs.has(i)) unassigned.push(i); });
+        if (unassigned.length) {
+            html += '<tr class="bg-gray-50 dark:bg-gray-700/30 border-t-2 border-gray-300 dark:border-gray-600"><td colspan="8" class="px-4 py-3"><span class="font-bold text-gray-600 dark:text-gray-400 text-sm">Other / Sundries</span><span class="text-xs text-gray-500 ml-2">' + unassigned.length + ' items</span></td></tr>';
+            unassigned.forEach(i => { html += buildMatchRow(i); });
+        }
+        
+        tbody.innerHTML = html;
+    } else {
+        // Flat list fallback
+        tbody.innerHTML = matchResults.map((_, i) => buildMatchRow(i)).join('');
+    }
+    
+    updateMatchTotal();
+}
+
+function buildMatchRow(i, roomQty) {
+    const item = matchResults[i];
+    if (!item) return '';
+    const mat = item.material || {};
+    const sel = item.selected;
+    const price = sel?.product?.sale_price || 0;
+    const qty = mat.total_quantity || 0;
         
         const statusBadge = {
             'matched': '<span class="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">✓</span>',
@@ -1266,7 +1371,7 @@ function renderMatchRows() {
         `;
         
         return `
-        <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-750/50">
+        <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-750/50" data-match-idx="${i}">
             <td class="px-4 py-3"><input type="checkbox" class="match-cb rounded border-gray-300 dark:border-gray-600 text-indigo-600" data-idx="${i}" ${item.status !== 'unmatched' ? 'checked' : ''} onchange="updateMatchTotal()"></td>
             <td class="px-4 py-3">${statusBadge}</td>
             <td class="px-4 py-3">
@@ -1493,27 +1598,93 @@ function downloadCSV(csv, name) {
 async function sendToQuoteBuilder() {
     if (!matchResults?.length) { alert('Match products first'); return; }
     
+    // Build room-grouped materials
+    const roomOrder = [];
+    const roomItems = {};
+    
+    if (parsedData && parsedData.rooms) {
+        parsedData.rooms.forEach(room => {
+            if (!roomOrder.includes(room.name)) roomOrder.push(room.name);
+            if (!roomItems[room.name]) roomItems[room.name] = [];
+        });
+    }
+    
     const confirmed = [];
+    const processedIdxs = new Set();
+    
+    // First pass: assign items to rooms
     document.querySelectorAll('.match-cb:checked').forEach(cb => {
         const idx = parseInt(cb.dataset.idx);
         const item = matchResults[idx];
         const m = item.material || {}, sel = item.selected;
-        confirmed.push({
+        
+        // Find which rooms this material belongs to
+        let itemRooms = [];
+        if (parsedData && parsedData.rooms) {
+            parsedData.rooms.forEach(room => {
+                const inRoom = (room.accessories || []).some(a => 
+                    (a.part_number && a.part_number === m.part_number) || a.description === m.description
+                ) || (room.switching || []).some(sw => 
+                    (sw.components || []).some(c => c.part_number === m.part_number)
+                );
+                if (inRoom) itemRooms.push(room.name);
+            });
+        }
+        
+        const baseItem = {
             product_code: sel?.product?.code || m.part_number || '',
             product_id: sel?.product?.product_id || sel?.product?.id || '',
             part_number: m.part_number || '',
             description: m.description || '',
             supplier_description: sel?.product?.purchase_description || m.description || '',
             clean_description: item.clean_description || m.description || '',
-            quantity: m.total_quantity || 0,
             sale_price: parseFloat(sel?.product?.sale_price) || 0,
             purchase_price: parseFloat(sel?.product?.purchase_price) || 0,
             unit: m.unit || 'each',
             category: m.category || 'Accessories',
-        });
+        };
+        
+        if (itemRooms.length > 0) {
+            // Split quantity per room from accessories data
+            itemRooms.forEach(roomName => {
+                let roomQty = 0;
+                const room = parsedData.rooms.find(r => r.name === roomName);
+                if (room) {
+                    (room.accessories || []).forEach(a => {
+                        if ((a.part_number && a.part_number === m.part_number) || a.description === m.description) {
+                            roomQty += (a.quantity || 0);
+                        }
+                    });
+                    (room.switching || []).forEach(sw => {
+                        (sw.components || []).forEach(c => {
+                            if (c.part_number === m.part_number) roomQty += (c.quantity || 0);
+                        });
+                    });
+                }
+                if (roomQty > 0) {
+                    if (!roomItems[roomName]) roomItems[roomName] = [];
+                    roomItems[roomName].push({ ...baseItem, quantity: roomQty, room_name: roomName });
+                }
+            });
+            processedIdxs.add(idx);
+        } else {
+            confirmed.push({ ...baseItem, quantity: m.total_quantity || 0, room_name: 'Other' });
+        }
     });
     
-    if (!confirmed.length) { alert('Select at least one item'); return; }
+    // Build final array with room ordering
+    const roomGrouped = [];
+    roomOrder.forEach(roomName => {
+        if (roomItems[roomName] && roomItems[roomName].length) {
+            roomGrouped.push(...roomItems[roomName]);
+        }
+    });
+    // Add unassigned
+    confirmed.forEach(c => roomGrouped.push(c));
+    
+    const finalMatches = roomGrouped.length ? roomGrouped : confirmed;
+    
+    if (!finalMatches.length) { alert('Select at least one item'); return; }
     
     const btn = event?.target?.closest('button');
     if (btn) { btn.disabled = true; btn.textContent = 'Creating project...'; }
@@ -1524,7 +1695,8 @@ async function sendToQuoteBuilder() {
             body: JSON.stringify({
                 job_title: currentJob?.title || 'Voice to Quote Project',
                 client_name: currentJob?.client_name || '',
-                matches: confirmed
+                matches: finalMatches,
+                room_grouped: true
             })
         });
         const result = await response.json();
@@ -1549,6 +1721,74 @@ async function sendToQuoteBuilder() {
 }
 
 // ─── Inline Editing ──────────────────────────────────────
+
+function addAccessoryToRoom(roomIndex) {
+    if (!parsedData || !parsedData.rooms || !parsedData.rooms[roomIndex]) return;
+    const room = parsedData.rooms[roomIndex];
+    if (!room.accessories) room.accessories = [];
+    
+    room.accessories.push({
+        quantity: 1,
+        description: 'New item',
+        part_number: '',
+        back_box: '',
+        notes: ''
+    });
+    
+    // Re-render
+    renderRooms(parsedData.rooms);
+}
+
+function removeAccessory(roomIndex, accIndex) {
+    if (!parsedData || !parsedData.rooms || !parsedData.rooms[roomIndex]) return;
+    const room = parsedData.rooms[roomIndex];
+    if (!room.accessories || accIndex >= room.accessories.length) return;
+    
+    room.accessories.splice(accIndex, 1);
+    
+    // Rebuild combined materials from rooms
+    rebuildCombinedMaterials();
+    
+    // Re-render
+    renderRooms(parsedData.rooms);
+}
+
+function rebuildCombinedMaterials() {
+    if (!parsedData || !parsedData.rooms) return;
+    
+    const combined = {};
+    parsedData.rooms.forEach(room => {
+        (room.accessories || []).forEach(acc => {
+            const key = (acc.part_number || '') + '|' + (acc.description || '');
+            if (!combined[key]) {
+                combined[key] = {
+                    part_number: acc.part_number || '',
+                    description: acc.description || '',
+                    total_quantity: 0,
+                    unit: acc.unit || 'each'
+                };
+            }
+            combined[key].total_quantity += (acc.quantity || 0);
+        });
+        (room.switching || []).forEach(sw => {
+            (sw.components || []).forEach(c => {
+                const key = (c.part_number || '') + '|' + (c.description || '');
+                if (!combined[key]) {
+                    combined[key] = {
+                        part_number: c.part_number || '',
+                        description: c.description || '',
+                        total_quantity: 0,
+                        unit: 'each'
+                    };
+                }
+                combined[key].total_quantity += (c.quantity || 0);
+            });
+        });
+    });
+    
+    parsedData.combined_materials = Object.values(combined);
+    renderCombined(parsedData.combined_materials);
+}
 
 function makeEditable(span, dataPath, fieldType, roomIndex, accIndex) {
     if (span.querySelector('input')) return;
