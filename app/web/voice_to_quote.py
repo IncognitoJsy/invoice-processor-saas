@@ -2495,18 +2495,20 @@ def save_floor_plan_rooms(job_id):
         return jsonify({'error': 'Job not found'}), 404
     
     data = request.get_json() or {}
+    levels = data.get('levels', [])
     rooms = data.get('rooms', [])
     total_area = data.get('total_floor_area_sqm', 0)
     
     job.floor_plan_rooms = json.dumps({
+        'levels': levels,
         'rooms': rooms,
         'total_floor_area_sqm': total_area,
         'source': 'manual',
     })
     db.session.commit()
     
-    logger.info(f"Saved {len(rooms)} manually marked rooms for job {job_id}")
-    return jsonify({'success': True, 'room_count': len(rooms)})
+    logger.info(f"Saved {len(rooms)} rooms across {len(levels)} levels for job {job_id}")
+    return jsonify({'success': True, 'room_count': len(rooms), 'level_count': len(levels)})
 
 
 @bp.route('/jobs/<int:job_id>/floor-plan-image')
