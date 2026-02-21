@@ -453,20 +453,33 @@
             <div class="text-center mb-16">
                 <h2 class="text-3xl lg:text-4xl font-800 text-white mb-4">Simple, Transparent Pricing</h2>
                 <p class="text-lg text-gray-400">Start with a 7-day free trial. No credit card required.</p>
+                <!-- Monthly / Annual Toggle -->
+                <div class="flex items-center justify-center gap-3 mt-6">
+                    <span id="lp-label-monthly" class="text-sm font-semibold text-white">Monthly</span>
+                    <button id="lp-billing-toggle" onclick="toggleLpBilling()" class="relative w-14 h-7 bg-gray-600 rounded-full transition-colors duration-200 focus:outline-none">
+                        <span id="lp-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200"></span>
+                    </button>
+                    <span id="lp-label-annual" class="text-sm font-medium text-gray-500">Annual</span>
+                    <span class="px-2.5 py-1 bg-accent/15 text-accent text-xs font-semibold rounded-full border border-accent/20">1 month free</span>
+                </div>
             </div>
             <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
                 <!-- Basic -->
                 <div class="bg-dark-700 border border-white/10 rounded-2xl p-8 feature-card">
                     <h3 class="text-lg font-bold text-white mb-1">Basic</h3>
                     <p class="text-sm text-gray-500 mb-6">Invoice processing</p>
-                    <div class="mb-8">
-                        <span class="text-4xl font-800 text-white">£39</span>
-                        <span class="text-gray-500">/month</span>
+                    <div class="mb-2">
+                        <span class="lp-price-monthly text-4xl font-800 text-white">£39</span>
+                        <span class="lp-price-annual text-4xl font-800 text-white hidden">£429</span>
+                        <span class="lp-period-monthly text-gray-500">/month</span>
+                        <span class="lp-period-annual text-gray-500 hidden">/year</span>
                     </div>
+                    <p class="lp-annual-note text-xs text-accent mb-6 hidden">£35.75/mo — save £39/year</p>
+                    <p class="lp-monthly-note text-xs text-transparent mb-6">‎</p>
                     <ul class="space-y-3 mb-8">
                         <li class="flex items-center gap-3 text-sm text-gray-300">
                             <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            <strong>100</strong>&nbsp;invoices/quotes per month
+                            <strong class="lp-inv-monthly">100</strong><strong class="lp-inv-annual hidden">1,200</strong>&nbsp;invoices/quotes <span class="lp-invp-monthly">per month</span><span class="lp-invp-annual hidden">per year</span>
                         </li>
                         <li class="flex items-center gap-3 text-sm text-gray-300">
                             <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
@@ -498,10 +511,14 @@
                 <div class="bg-dark-700 border border-white/10 rounded-2xl p-8 feature-card">
                     <h3 class="text-lg font-bold text-white mb-1">Pro</h3>
                     <p class="text-sm text-gray-500 mb-6">Unlimited invoices</p>
-                    <div class="mb-8">
-                        <span class="text-4xl font-800 text-white">£79</span>
-                        <span class="text-gray-500">/month</span>
+                    <div class="mb-2">
+                        <span class="lp-price-monthly text-4xl font-800 text-white">£79</span>
+                        <span class="lp-price-annual text-4xl font-800 text-white hidden">£869</span>
+                        <span class="lp-period-monthly text-gray-500">/month</span>
+                        <span class="lp-period-annual text-gray-500 hidden">/year</span>
                     </div>
+                    <p class="lp-annual-note text-xs text-accent mb-6 hidden">£72.42/mo — save £79/year</p>
+                    <p class="lp-monthly-note text-xs text-transparent mb-6">‎</p>
                     <ul class="space-y-3 mb-8">
                         <li class="flex items-center gap-3 text-sm text-gray-300">
                             <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
@@ -544,10 +561,14 @@
                     </div>
                     <h3 class="text-lg font-bold text-white mb-1">Ultimate</h3>
                     <p class="text-sm text-gray-400 mb-6">Full estimating suite</p>
-                    <div class="mb-8">
-                        <span class="text-4xl font-800 text-white">£99</span>
-                        <span class="text-gray-500">/month</span>
+                    <div class="mb-2">
+                        <span class="lp-price-monthly text-4xl font-800 text-white">£99</span>
+                        <span class="lp-price-annual text-4xl font-800 text-white hidden">£1,089</span>
+                        <span class="lp-period-monthly text-gray-500">/month</span>
+                        <span class="lp-period-annual text-gray-500 hidden">/year</span>
                     </div>
+                    <p class="lp-annual-note text-xs text-accent mb-6 hidden">£90.75/mo — save £99/year</p>
+                    <p class="lp-monthly-note text-xs text-transparent mb-6">‎</p>
                     <ul class="space-y-3 mb-8">
                         <li class="flex items-center gap-3 text-sm text-gray-300">
                             <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
@@ -656,5 +677,40 @@
             </div>
         </div>
     </footer>
+<script>
+let lpAnnual = false;
+function toggleLpBilling() {
+    lpAnnual = !lpAnnual;
+    const dot = document.getElementById('lp-toggle-dot');
+    const toggle = document.getElementById('lp-billing-toggle');
+    const labelM = document.getElementById('lp-label-monthly');
+    const labelA = document.getElementById('lp-label-annual');
+    
+    if (lpAnnual) {
+        dot.style.transform = 'translateX(28px)';
+        toggle.classList.remove('bg-gray-600');
+        toggle.classList.add('bg-accent');
+        labelM.classList.remove('text-white', 'font-semibold');
+        labelM.classList.add('text-gray-500', 'font-medium');
+        labelA.classList.remove('text-gray-500', 'font-medium');
+        labelA.classList.add('text-white', 'font-semibold');
+    } else {
+        dot.style.transform = 'translateX(0)';
+        toggle.classList.add('bg-gray-600');
+        toggle.classList.remove('bg-accent');
+        labelM.classList.add('text-white', 'font-semibold');
+        labelM.classList.remove('text-gray-500', 'font-medium');
+        labelA.classList.add('text-gray-500', 'font-medium');
+        labelA.classList.remove('text-white', 'font-semibold');
+    }
+    
+    document.querySelectorAll('.lp-price-monthly, .lp-period-monthly, .lp-monthly-note, .lp-inv-monthly, .lp-invp-monthly').forEach(el => {
+        el.classList.toggle('hidden', lpAnnual);
+    });
+    document.querySelectorAll('.lp-price-annual, .lp-period-annual, .lp-annual-note, .lp-inv-annual, .lp-invp-annual').forEach(el => {
+        el.classList.toggle('hidden', !lpAnnual);
+    });
+}
+</script>
 </body>
 </html>
