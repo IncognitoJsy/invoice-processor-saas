@@ -51,11 +51,12 @@ def create_app(config_name='default'):
                     conn.commit()
                 
                 # Add billing_frequency to user table
-                try:
-                    conn.execute(db.text('ALTER TABLE "user" ADD COLUMN billing_frequency VARCHAR(10) DEFAULT \'monthly\''))
-                    conn.commit()
-                except Exception:
-                    pass  # Column already exists
+                with db.engine.connect() as conn2:
+                    try:
+                        conn2.execute(db.text('ALTER TABLE "user" ADD COLUMN billing_frequency VARCHAR(10) DEFAULT \'monthly\''))
+                        conn2.commit()
+                    except Exception:
+                        pass  # Column already exists
                 
                 app.logger.info('Database connection established')
                 break
