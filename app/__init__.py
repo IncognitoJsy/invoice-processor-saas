@@ -49,6 +49,14 @@ def create_app(config_name='default'):
                         except Exception:
                             pass  # Column already exists
                     conn.commit()
+                
+                # Add billing_frequency to user table
+                try:
+                    conn.execute(db.text("ALTER TABLE "user" ADD COLUMN billing_frequency VARCHAR(10) DEFAULT 'monthly'"))
+                    conn.commit()
+                except Exception:
+                    pass  # Column already exists
+                
                 app.logger.info('Database connection established')
                 break
             except Exception as e:
