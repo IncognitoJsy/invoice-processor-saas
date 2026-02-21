@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 from decimal import Decimal
+from app.utils.upload_validation import validate_upload, sanitize_filename
 
 bp = Blueprint('upload', __name__)
 
@@ -114,6 +115,11 @@ def api_upload_single():
         
         if not file or not file.filename:
             return jsonify({'error': 'No file selected'}), 400
+        
+        # Security validation: extension, MIME type, magic bytes, size
+        upload_error = validate_upload(file)
+        if upload_error:
+            return jsonify({'error': upload_error}), 400
         
         if not allowed_file(file.filename):
             return jsonify({'error': 'Only PDF and image files (JPG, PNG, GIF, WEBP) are allowed'}), 400
@@ -309,6 +315,12 @@ def api_upload():
         
         for file in files:
             if file and file.filename and allowed_file(file.filename):
+                # Security validation: extension, MIME type, magic bytes, size
+                upload_error = validate_upload(file)
+                if upload_error:
+                    errors.append(f"{file.filename}: {upload_error}")
+                    continue
+                
                 # Re-check quota before each file
                 if not current_user.can_upload_invoice:
                     errors.append(f"{file.filename}: Quota exceeded")

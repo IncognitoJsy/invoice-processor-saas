@@ -10,6 +10,11 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # Session security (base settings - overridden in Production)
+    SESSION_COOKIE_HTTPONLY = True      # Prevent JS access to session cookie
+    SESSION_COOKIE_SAMESITE = 'Lax'    # CSRF protection
+    PERMANENT_SESSION_LIFETIME = 86400  # 24 hours
+    
     # Redis
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
     
@@ -47,9 +52,12 @@ class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
     TESTING = False
-    SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = True        # HTTPS only
+    SESSION_COOKIE_HTTPONLY = True       # Prevent JS access
+    SESSION_COOKIE_SAMESITE = 'Lax'     # CSRF protection
+    REMEMBER_COOKIE_SECURE = True       # "Remember me" cookie also HTTPS only
+    REMEMBER_COOKIE_HTTPONLY = True      # "Remember me" cookie no JS access
+    REMEMBER_COOKIE_SAMESITE = 'Lax'    # "Remember me" CSRF protection
 
 class TestingConfig(Config):
     """Testing configuration"""

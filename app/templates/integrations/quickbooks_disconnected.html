@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickBooks Disconnected - GoZappify</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 560px;
+            margin: 2rem;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            padding: 3rem;
+            text-align: center;
+        }
+        .logo { margin-bottom: 1.5rem; }
+        .logo img { height: 48px; }
+        .icon {
+            width: 64px; height: 64px;
+            background: #FEF3C7;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 28px;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: #1a1a1a;
+        }
+        p {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+        .actions { margin-top: 2rem; }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #2563eb;
+            color: #fff;
+            margin-bottom: 0.75rem;
+        }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-secondary {
+            background: transparent;
+            color: #2563eb;
+            border: 1px solid #2563eb;
+        }
+        .btn-secondary:hover { background: #eff6ff; }
+        .help-text {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e5e7eb;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="/static/images/gozappify-logo.svg" alt="GoZappify" onerror="this.outerHTML='<strong style=\'font-size:1.5rem;color:#2563eb;\'>GoZappify</strong>'">
+        </div>
+        
+        <div class="icon">🔌</div>
+        
+        <h1>QuickBooks Online Disconnected</h1>
+        
+        <p>
+            Your GoZappify account has been disconnected from QuickBooks Online.
+            Your GoZappify account and data remain intact &mdash; only the
+            connection to QuickBooks has been removed.
+        </p>
+        
+        <p>
+            If this was unintentional, or you'd like to reconnect, you can
+            do so at any time from within GoZappify.
+        </p>
+        
+        <div class="actions">
+            <a href="/auth/login" class="btn btn-primary">Log in to GoZappify</a>
+            <br>
+            <a href="/" class="btn btn-secondary">Learn more about GoZappify</a>
+        </div>
+        
+        <div class="help-text">
+            <p>
+                Need help? Contact us at
+                <a href="mailto:support@gozappify.com">support@gozappify.com</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

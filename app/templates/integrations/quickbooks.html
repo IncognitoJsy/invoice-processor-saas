@@ -57,12 +57,14 @@
                                 </button>
                             </form>
                         {% else %}
-                            <a href="{{ url_for('integrations.quickbooks_connect') }}" 
-                               class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition inline-flex items-center">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                                </svg>
-                                Connect to QuickBooks
+                            <!-- Official Intuit "Connect to QuickBooks" button (required for App Store listing) -->
+                            <!-- See: https://developer.intuit.com/app/developer/qbo/docs/go-live/list-on-the-app-store/naming-and-logo-guidelines -->
+                            <a href="{{ url_for('integrations.quickbooks_connect') }}">
+                                <img src="{{ url_for('static', filename='images/intuit/C2QB_green_btn_lg_default.svg') }}"
+                                     alt="Connect to QuickBooks"
+                                     style="height: 40px; cursor: pointer;"
+                                     onmouseover="this.style.opacity='0.85'"
+                                     onmouseout="this.style.opacity='1'">
                             </a>
                         {% endif %}
                     </div>
@@ -204,12 +206,13 @@
                 <p class="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
                     Link your QuickBooks Online account to sync products and create customer invoices automatically.
                 </p>
-                <a href="{{ url_for('integrations.quickbooks_connect') }}" 
-                   class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition inline-flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                    </svg>
-                    Connect to QuickBooks
+                <!-- Official Intuit "Connect to QuickBooks" button (required for App Store listing) -->
+                <a href="{{ url_for('integrations.quickbooks_connect') }}">
+                    <img src="{{ url_for('static', filename='images/intuit/C2QB_green_btn_lg_default.svg') }}"
+                         alt="Connect to QuickBooks"
+                         style="height: 40px; cursor: pointer;"
+                         onmouseover="this.style.opacity='0.85'"
+                         onmouseout="this.style.opacity='1'">
                 </a>
             </div>
         </div>

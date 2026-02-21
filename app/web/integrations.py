@@ -128,6 +128,28 @@ def verify_oauth_state(state):
         return None
 
 
+@bp.route('/quickbooks/disconnected')
+def quickbooks_disconnected():
+    """
+    Static disconnect landing page for Intuit App Store.
+    
+    When a user disconnects GoZappify from within QuickBooks Online or
+    the QuickBooks App Store, Intuit redirects them to this URL.
+    
+    This is DIFFERENT from the webhook-based app-disconnect endpoint.
+    This is a user-facing page, not an API endpoint.
+    
+    Requirements (Intuit Technical Requirement Section 2.3 / 5.3):
+    - Must be a static, publicly accessible page (no login required)
+    - Should explain that the connection has been removed
+    - Should provide a way to reconnect
+    - Should NOT require authentication to view
+    
+    Set this URL in Developer Portal → App Settings → Disconnect URL
+    """
+    return render_template('integrations/quickbooks_disconnected.html')
+
+
 # =============================================================================
 # QUICKBOOKS ROUTES
 # =============================================================================

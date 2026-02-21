@@ -64,7 +64,11 @@ class QuickBooksService:
         return None
     
     def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Optional[Dict]:
-        """Make HTTP request to QuickBooks API"""
+        """Make HTTP request to QuickBooks API.
+        
+        Captures and logs the intuit_tid header from every response for
+        troubleshooting with Intuit support (required for App Store listing).
+        """
         url = f"{self.base_url}{endpoint.format(self.realm_id)}"
         headers = {
             'Authorization': f'Bearer {self.access_token}',
@@ -77,13 +81,30 @@ class QuickBooksService:
                 response = requests.get(url, headers=headers, timeout=30)
             elif method == 'POST':
                 response = requests.post(url, headers=headers, json=data, timeout=30)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            # Capture intuit_tid for Intuit support troubleshooting
+            intuit_tid = response.headers.get('intuit_tid', 'N/A')
             
             if response.status_code == 200:
+                logger.debug(f"QB API success: {method} {endpoint} intuit_tid={intuit_tid}")
                 return response.json()
             else:
-                raise RequestException(f"HTTP {response.status_code}")
+                # Log full error context including intuit_tid for support
+                error_body = response.text[:500] if response.text else 'No body'
+                logger.error(
+                    f"QB API error: {method} {endpoint} "
+                    f"status={response.status_code} intuit_tid={intuit_tid} "
+                    f"body={error_body}"
+                )
+                raise RequestException(
+                    f"HTTP {response.status_code} (intuit_tid={intuit_tid})"
+                )
+        except RequestException:
+            raise
         except Exception as e:
-            logger.error(f"Request failed: {str(e)}")
+            logger.error(f"Request failed: {type(e).__name__}: {str(e)}")
             raise
     
     def _get_income_account(self) -> Optional[Dict]:
@@ -94,8 +115,8 @@ class QuickBooksService:
                 accounts = result['QueryResponse'].get('Account', [])
                 if accounts:
                     return {'value': accounts[0]['Id'], 'name': accounts[0]['Name']}
-        except:
-            pass
+        except (RequestException, KeyError, IndexError) as e:
+            logger.warning(f"Failed to get income account: {type(e).__name__}: {e}")
         return None
     
     def _get_expense_account(self) -> Optional[Dict]:
@@ -106,8 +127,8 @@ class QuickBooksService:
                 accounts = result['QueryResponse'].get('Account', [])
                 if accounts:
                     return {'value': accounts[0]['Id'], 'name': accounts[0]['Name']}
-        except:
-            pass
+        except (RequestException, KeyError, IndexError) as e:
+            logger.warning(f"Failed to get expense account: {type(e).__name__}: {e}")
         return None
     
     def _get_tax_code(self) -> Optional[Dict]:
@@ -118,6 +139,6 @@ class QuickBooksService:
                 codes = result['QueryResponse'].get('TaxCode', [])
                 if codes:
                     return {'value': codes[0]['Id'], 'name': codes[0]['Name']}
-        except:
-            pass
+        except (RequestException, KeyError, IndexError) as e:
+            logger.warning(f"Failed to get tax code: {type(e).__name__}: {e}")
         return None
