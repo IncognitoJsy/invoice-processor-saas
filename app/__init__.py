@@ -93,6 +93,15 @@ def create_app(config_name='default'):
     # Register error handlers
     register_error_handlers(app)
 
+    # Force HTTPS redirect in production (fixes ZAP "HTTPS Content Available via HTTP")
+    if not app.debug:
+        @app.before_request
+        def redirect_to_https():
+            from flask import request, redirect
+            if request.headers.get('X-Forwarded-Proto', 'http') == 'http':
+                url = request.url.replace('http://', 'https://', 1)
+                return redirect(url, code=301)
+
     # Security headers
     register_security_headers(app)
 
@@ -215,7 +224,7 @@ def register_security_headers(app):
         # - Added explicit fallback for default-src
         csp_directives = [
             "default-src 'none'",
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: blob:",
