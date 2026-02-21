@@ -98,7 +98,17 @@
         </div>
         {% endif %}
         
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-8">Choose Your Plan</h2>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-4">Choose Your Plan</h2>
+        
+        <!-- Monthly / Annual Toggle -->
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <span id="label-monthly" class="text-sm font-semibold text-gray-900 dark:text-white">Monthly</span>
+            <button id="billing-toggle" onclick="toggleBillingFrequency()" class="relative w-14 h-7 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors duration-200 focus:outline-none">
+                <span id="toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200"></span>
+            </button>
+            <span id="label-annual" class="text-sm font-medium text-gray-500 dark:text-gray-400">Annual</span>
+            <span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">Save 1 month</span>
+        </div>
         
         <!-- Pricing Cards -->
         <div class="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
@@ -109,9 +119,15 @@
                 <div class="p-6">
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Basic</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Invoice processing</p>
-                    <div class="mt-4"><span class="text-3xl font-bold text-gray-900 dark:text-white">£39</span><span class="text-gray-500">/month</span></div>
+                    <div class="mt-4">
+                        <span class="price-monthly text-3xl font-bold text-gray-900 dark:text-white">£39</span>
+                        <span class="price-annual text-3xl font-bold text-gray-900 dark:text-white hidden">£429</span>
+                        <span class="period-monthly text-gray-500">/month</span>
+                        <span class="period-annual text-gray-500 hidden">/year</span>
+                    </div>
+                    <p class="price-annual-note text-xs text-green-600 dark:text-green-400 mt-1 hidden">£35.75/mo — save £39/year</p>
                     <ul class="mt-6 space-y-3 text-sm">
-                        <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300"><strong>100</strong> invoices/quotes per month</span></li>
+                        <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300"><strong class="inv-limit-monthly">100</strong><strong class="inv-limit-annual hidden">1,200</strong> invoices/quotes <span class="inv-period-monthly">per month</span><span class="inv-period-annual hidden">per year</span></span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">AI-powered invoice parsing</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">QuickBooks & Xero integration</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">Automatic markup calculation</span></li>
@@ -123,7 +139,8 @@
                         {% if current_user.subscription_plan == 'basic' %}
                         <button disabled class="w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-lg font-semibold cursor-not-allowed">Current Plan</button>
                         {% else %}
-                        <a href="{{ url_for('billing.subscribe', plan='basic') }}" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='basic') }}" class="sub-link-monthly block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='basic-annual') }}" class="sub-link-annual hidden block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition text-center">Subscribe Annually</a>
                         {% endif %}
                     </div>
                 </div>
@@ -135,7 +152,13 @@
                 <div class="p-6">
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Unlimited invoices</p>
-                    <div class="mt-4"><span class="text-3xl font-bold text-gray-900 dark:text-white">£79</span><span class="text-gray-500">/month</span></div>
+                    <div class="mt-4">
+                        <span class="price-monthly text-3xl font-bold text-gray-900 dark:text-white">£79</span>
+                        <span class="price-annual text-3xl font-bold text-gray-900 dark:text-white hidden">£869</span>
+                        <span class="period-monthly text-gray-500">/month</span>
+                        <span class="period-annual text-gray-500 hidden">/year</span>
+                    </div>
+                    <p class="price-annual-note text-xs text-green-600 dark:text-green-400 mt-1 hidden">£72.42/mo — save £79/year</p>
                     <ul class="mt-6 space-y-3 text-sm">
                         <li class="flex items-center"><svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300"><strong>Unlimited</strong> invoices & quotes</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">AI-powered invoice parsing</span></li>
@@ -149,7 +172,8 @@
                         {% if current_user.subscription_plan == 'pro' %}
                         <button disabled class="w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-lg font-semibold cursor-not-allowed">Current Plan</button>
                         {% else %}
-                        <a href="{{ url_for('billing.subscribe', plan='pro') }}" class="block w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='pro') }}" class="sub-link-monthly block w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='pro-annual') }}" class="sub-link-annual hidden block w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition text-center">Subscribe Annually</a>
                         {% endif %}
                     </div>
                 </div>
@@ -162,7 +186,13 @@
                 <div class="p-6">
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Ultimate</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Full estimating suite</p>
-                    <div class="mt-4"><span class="text-3xl font-bold text-gray-900 dark:text-white">£99</span><span class="text-gray-500">/month</span></div>
+                    <div class="mt-4">
+                        <span class="price-monthly text-3xl font-bold text-gray-900 dark:text-white">£99</span>
+                        <span class="price-annual text-3xl font-bold text-gray-900 dark:text-white hidden">£1,089</span>
+                        <span class="period-monthly text-gray-500">/month</span>
+                        <span class="period-annual text-gray-500 hidden">/year</span>
+                    </div>
+                    <p class="price-annual-note text-xs text-green-600 dark:text-green-400 mt-1 hidden">£90.75/mo — save £99/year</p>
                     <ul class="mt-6 space-y-3 text-sm">
                         <li class="flex items-center"><svg class="w-4 h-4 text-amber-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300"><strong>Unlimited</strong> invoices & quotes</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-amber-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">AI-powered invoice parsing</span></li>
@@ -178,7 +208,8 @@
                         {% if current_user.subscription_plan == 'ultimate' %}
                         <button disabled class="w-full py-3 px-4 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-lg font-semibold cursor-not-allowed">Current Plan</button>
                         {% else %}
-                        <a href="{{ url_for('billing.subscribe', plan='ultimate') }}" class="block w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='ultimate') }}" class="sub-link-monthly block w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-lg font-semibold transition text-center">Subscribe</a>
+                        <a href="{{ url_for('billing.subscribe', plan='ultimate-annual') }}" class="sub-link-annual hidden block w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-lg font-semibold transition text-center">Subscribe Annually</a>
                         {% endif %}
                     </div>
                 </div>
@@ -213,4 +244,40 @@
         </div>
     </div>
 </div>
+<script>
+let billingAnnual = false;
+
+function toggleBillingFrequency() {
+    billingAnnual = !billingAnnual;
+    const dot = document.getElementById('toggle-dot');
+    const toggle = document.getElementById('billing-toggle');
+    const labelM = document.getElementById('label-monthly');
+    const labelA = document.getElementById('label-annual');
+    
+    if (billingAnnual) {
+        dot.style.transform = 'translateX(28px)';
+        toggle.classList.remove('bg-gray-300', 'dark:bg-gray-600');
+        toggle.classList.add('bg-green-500');
+        labelM.classList.remove('text-gray-900', 'dark:text-white', 'font-semibold');
+        labelM.classList.add('text-gray-500', 'dark:text-gray-400', 'font-medium');
+        labelA.classList.remove('text-gray-500', 'dark:text-gray-400', 'font-medium');
+        labelA.classList.add('text-gray-900', 'dark:text-white', 'font-semibold');
+    } else {
+        dot.style.transform = 'translateX(0)';
+        toggle.classList.add('bg-gray-300', 'dark:bg-gray-600');
+        toggle.classList.remove('bg-green-500');
+        labelM.classList.add('text-gray-900', 'dark:text-white', 'font-semibold');
+        labelM.classList.remove('text-gray-500', 'dark:text-gray-400', 'font-medium');
+        labelA.classList.add('text-gray-500', 'dark:text-gray-400', 'font-medium');
+        labelA.classList.remove('text-gray-900', 'dark:text-white', 'font-semibold');
+    }
+    
+    document.querySelectorAll('.price-monthly, .period-monthly, .inv-limit-monthly, .inv-period-monthly, .sub-link-monthly').forEach(el => {
+        el.classList.toggle('hidden', billingAnnual);
+    });
+    document.querySelectorAll('.price-annual, .period-annual, .price-annual-note, .inv-limit-annual, .inv-period-annual, .sub-link-annual').forEach(el => {
+        el.classList.toggle('hidden', !billingAnnual);
+    });
+}
+</script>
 {% endblock %}

@@ -16,6 +16,7 @@ class User(db.Model, UserMixin):
     
     # Subscription fields
     subscription_plan = db.Column(db.String(20), default='trial')  # trial, basic, pro, cancelled
+    billing_frequency = db.Column(db.String(10), default='monthly')  # monthly, annual
     subscription_status = db.Column(db.String(20), default='active')  # active, past_due, suspended, cancelled, expired
     
     # PayPal fields
@@ -61,8 +62,9 @@ class User(db.Model, UserMixin):
         self.subscription_status = 'active'
         self.trial_ends_at = datetime.utcnow() + timedelta(days=7)
     
-    def start_paid_subscription(self, plan='basic'):
+    def start_paid_subscription(self, plan='basic', frequency='monthly'):
         self.subscription_plan = plan
+        self.billing_frequency = frequency
         self.subscription_status = 'active'
         self.subscription_started_at = datetime.utcnow()
         self.bonus_invoices = 0
@@ -117,7 +119,9 @@ class User(db.Model, UserMixin):
     def monthly_invoice_limit(self):
         if self.is_admin:
             return float('inf')
-        limits = {'trial': 25, 'basic': 100, 'pro': float('inf'), 'cancelled': 0}
+        if self.subscription_plan == 'basic' and self.billing_frequency == 'annual':
+            return 1200  # Annual basic gets 1200 per year
+        limits = {'trial': 25, 'basic': 100, 'pro': float('inf'), 'ultimate': float('inf'), 'cancelled': 0}
         return limits.get(self.subscription_plan, 0)
     
     @property
@@ -128,6 +132,18 @@ class User(db.Model, UserMixin):
         if self.subscription_started_at:
             now = datetime.utcnow()
             start = self.subscription_started_at
+            
+            # Annual billing: period is 365 days
+            if self.billing_frequency == 'annual':
+                years_elapsed = 0
+                while True:
+                    next_period = start + timedelta(days=365 * (years_elapsed + 1))
+                    if next_period > now:
+                        break
+                    years_elapsed += 1
+                return start + timedelta(days=365 * years_elapsed)
+            
+            # Monthly billing: period is 30 days
             months_elapsed = 0
             while True:
                 next_period = start + timedelta(days=30 * (months_elapsed + 1))

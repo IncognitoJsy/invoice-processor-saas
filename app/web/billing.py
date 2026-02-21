@@ -20,6 +20,9 @@ def get_paypal_config():
         'plan_basic': os.getenv('PAYPAL_PLAN_BASIC'),
         'plan_pro': os.getenv('PAYPAL_PLAN_PRO'),
         'plan_ultimate': os.getenv('PAYPAL_PLAN_ULTIMATE'),
+        'plan_basic_annual': os.getenv('PAYPAL_PLAN_BASIC_ANNUAL'),
+        'plan_pro_annual': os.getenv('PAYPAL_PLAN_PRO_ANNUAL'),
+        'plan_ultimate_annual': os.getenv('PAYPAL_PLAN_ULTIMATE_ANNUAL'),
     }
 
 
@@ -69,12 +72,27 @@ def topup():
 def subscribe(plan):
     config = get_paypal_config()
     
-    plan_ids = {'basic': config['plan_basic'], 'pro': config['plan_pro'], 'ultimate': config['plan_ultimate']}
+    # Support annual plans: basic-annual, pro-annual, ultimate-annual
+    frequency = 'annual' if plan.endswith('-annual') else 'monthly'
+    base_plan = plan.replace('-annual', '')
     
-    if plan not in plan_ids:
+    if frequency == 'annual':
+        plan_ids = {
+            'basic': config['plan_basic_annual'],
+            'pro': config['plan_pro_annual'],
+            'ultimate': config['plan_ultimate_annual']
+        }
+    else:
+        plan_ids = {
+            'basic': config['plan_basic'],
+            'pro': config['plan_pro'],
+            'ultimate': config['plan_ultimate']
+        }
+    
+    if base_plan not in plan_ids:
         return jsonify({'error': 'Invalid plan'}), 400
     
-    plan_id = plan_ids[plan]
+    plan_id = plan_ids[base_plan]
     if not plan_id:
         return jsonify({'error': 'Plan not configured'}), 500
     
@@ -84,9 +102,9 @@ def subscribe(plan):
     result = paypal.create_subscription(
         plan_id=plan_id,
         user_id=current_user.id,
-        return_url=f"{base_url}/billing/subscription/success?plan={plan}",
+        return_url=f"{base_url}/billing/subscription/success?plan={base_plan}&frequency={frequency}",
         cancel_url=f"{base_url}/billing/subscription/cancel",
-        custom_id=f"user_{current_user.id}_plan_{plan}"
+        custom_id=f"user_{current_user.id}_plan_{base_plan}_{frequency}"
     )
     
     if not result:
@@ -112,6 +130,7 @@ def subscribe(plan):
 def subscription_success():
     subscription_id = request.args.get('subscription_id') or current_user.pending_subscription_id
     plan = request.args.get('plan', 'basic')
+    frequency = request.args.get('frequency', 'monthly')
     
     if subscription_id:
         paypal = get_paypal_service()
@@ -120,19 +139,22 @@ def subscription_success():
         if subscription and subscription.get('status') == 'ACTIVE':
             current_user.paypal_subscription_id = subscription_id
             current_user.subscription_plan = plan
+            current_user.billing_frequency = frequency
             current_user.subscription_status = 'active'
             current_user.subscription_started_at = datetime.utcnow()
             current_user.pending_subscription_id = None
             current_user.bonus_invoices = 0
             db.session.commit()
             
-            current_app.logger.info(f"Subscription activated for user {current_user.id}: {plan}")
+            freq_label = 'Annual' if frequency == 'annual' else 'Monthly'
+            current_app.logger.info(f"Subscription activated for user {current_user.id}: {plan} ({freq_label})")
             
             try:
                 from app.services.email_service import get_email_service
                 email_service = get_email_service()
                 base_url = os.getenv('APP_URL', 'https://gozappify.com')
-                plan_name = 'Basic' if plan == 'basic' else 'Pro'
+                plan_names = {'basic': 'Basic', 'pro': 'Pro', 'ultimate': 'Ultimate'}
+                plan_name = f"{plan_names.get(plan, 'Basic')} ({freq_label})"
                 email_service.send_welcome_paid(current_user, plan_name, f"{base_url}/dashboard")
             except Exception as e:
                 current_app.logger.error(f"Failed to send welcome email: {str(e)}")
