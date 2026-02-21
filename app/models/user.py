@@ -224,8 +224,11 @@ class User(db.Model, UserMixin):
     
     @property 
     def plan_display_name(self):
-        names = {'trial': 'Free Trial', 'basic': 'Basic', 'pro': 'Pro', 'cancelled': 'Cancelled'}
-        return names.get(self.subscription_plan, 'Unknown')
+        names = {'trial': 'Free Trial', 'basic': 'Basic', 'pro': 'Pro', 'ultimate': 'Ultimate', 'cancelled': 'Cancelled'}
+        name = names.get(self.subscription_plan, 'Unknown')
+        if self.billing_frequency == 'annual' and self.subscription_plan in ('basic', 'pro', 'ultimate'):
+            name += ' (Annual)'
+        return name
     
     @property
     def status_display_name(self):
@@ -237,7 +240,8 @@ class User(db.Model, UserMixin):
         if not self.subscription_started_at:
             return None
         period_start = self.billing_period_start
-        next_renewal = period_start + timedelta(days=30)
+        period_days = 365 if self.billing_frequency == 'annual' else 30
+        next_renewal = period_start + timedelta(days=period_days)
         return max(0, (next_renewal - datetime.utcnow()).days)
     
     def __repr__(self):

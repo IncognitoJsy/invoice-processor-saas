@@ -312,6 +312,7 @@ def webhook():
             user = None
             plan = 'basic'
             
+            frequency = 'monthly'
             if custom_id and '_' in custom_id:
                 parts = custom_id.split('_')
                 if len(parts) >= 4:
@@ -320,6 +321,8 @@ def webhook():
                         plan = parts[3]
                     except:
                         pass
+                if len(parts) >= 5:
+                    frequency = parts[4]
             
             if not user:
                 user = User.query.filter_by(pending_subscription_id=subscription_id).first()
@@ -327,10 +330,12 @@ def webhook():
             if user:
                 user.paypal_subscription_id = subscription_id
                 user.subscription_plan = plan
+                user.billing_frequency = frequency
                 user.subscription_status = 'active'
                 user.subscription_started_at = datetime.utcnow()
                 user.pending_subscription_id = None
                 db.session.commit()
+                current_app.logger.info(f"Subscription activated: user {user.id}, plan {plan}, frequency {frequency}")
         
         elif event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
             subscription_id = resource.get('id')
