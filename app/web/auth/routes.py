@@ -6,6 +6,37 @@ from app.web.auth import bp
 from app.utils.password_validation import validate_password
 from app.models.user import User
 from app.extensions import db
+import re
+
+
+def sanitize_input(value, max_length=255, allow_email=False):
+    """
+    Sanitize user input to prevent SQL injection and XSS.
+    
+    SQLAlchemy ORM already uses parameterised queries, but this adds
+    defence-in-depth for Intuit's security review (Synopsys pen test).
+    """
+    if not value or not isinstance(value, str):
+        return value
+    
+    # Strip whitespace
+    value = value.strip()
+    
+    # Truncate to max length
+    value = value[:max_length]
+    
+    # Remove null bytes
+    value = value.replace('\x00', '')
+    
+    if allow_email:
+        # For email: only allow valid email characters
+        value = re.sub(r'[^\w.@+\-]', '', value)
+    else:
+        # For names: allow letters, spaces, hyphens, apostrophes
+        # Strip anything that looks like SQL or script injection
+        value = re.sub(r'[;<>\'\"\\\/\(\)\{\}\[\]]', '', value)
+    
+    return value
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -14,9 +45,13 @@ def login():
         return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email = sanitize_input(request.form.get('email'), max_length=255, allow_email=True)
+        password = request.form.get('password')  # Don't sanitize password (would break valid passwords)
         remember = request.form.get('remember', False)
+        
+        if not email:
+            flash('Please enter a valid email address', 'error')
+            return render_template('auth/login.html')
         
         user = User.query.filter_by(email=email).first()
         
@@ -46,11 +81,11 @@ def register():
         return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email = sanitize_input(request.form.get('email'), max_length=255, allow_email=True)
+        password = request.form.get('password')  # Don't sanitize (would break valid passwords)
         password_confirm = request.form.get('password_confirm')
-        first_name = request.form.get('first_name')
-        last_name = request.form.get('last_name')
+        first_name = sanitize_input(request.form.get('first_name'), max_length=100)
+        last_name = sanitize_input(request.form.get('last_name'), max_length=100)
         
         if not email or not password:
             flash('Email and password are required', 'error')
