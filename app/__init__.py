@@ -120,27 +120,6 @@ def create_app(config_name='default'):
     def favicon():
         return app.send_static_file('images/favicon.ico')
 
-    @app.route('/serve-takeoff-js')
-    def serve_takeoff_js():
-        import os
-        js_path = '/app/app/static/js/takeoff-canvas.js'
-        if os.path.exists(js_path):
-            with open(js_path, 'r') as f:
-                js_content = f.read()
-            from flask import Response
-            return Response(js_content, mimetype='application/javascript')
-        return 'File not found', 404
-
-    @app.route('/debug-files')
-    def debug_files():
-        import os
-        result = []
-        for root, dirs, files in os.walk('/app'):
-            for f in files:
-                if 'static' in root or f.endswith('.js'):
-                    result.append(os.path.join(root, f))
-        return '<br>'.join(sorted(result)[:100]) or 'No files found'
-
     # Wrap with WhiteNoise for static files in production
     app.wsgi_app = WhiteNoise(app.wsgi_app, root='/app/app/static/', prefix='static/')
 
@@ -222,10 +201,21 @@ def register_security_headers(app):
         if not app.debug:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         
+        # Cache-control for authenticated pages (prevent back-button info leak)
+        # ZAP flags: "Re-examine Cache-control Directives"
+        if response.content_type and 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        
         # Content Security Policy
+        # Tightened to address ZAP findings:
+        # - Removed 'unsafe-eval' from script-src (was flagged as medium)
+        # - Added nonce support would be ideal but requires template changes
+        # - Added explicit fallback for default-src
         csp_directives = [
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
+            "default-src 'none'",
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: blob:",
@@ -234,6 +224,8 @@ def register_security_headers(app):
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self' https://appcenter.intuit.com",
+            "manifest-src 'self'",
+            "media-src 'self'",
         ]
         response.headers['Content-Security-Policy'] = '; '.join(csp_directives)
         
