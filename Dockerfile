@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN echo "build-bust-v2"nCOPY . .
 
 RUN mkdir -p logs uploads temp_uploads integration_data/queue data
 
