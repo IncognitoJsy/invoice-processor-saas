@@ -43,6 +43,10 @@ class Config:
     # Rate limiting
     RATELIMIT_STORAGE_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
 
+    # reCAPTCHA v3
+    RECAPTCHA_SITE_KEY = os.environ.get('RECAPTCHA_SITE_KEY')
+    RECAPTCHA_SECRET_KEY = os.environ.get('RECAPTCHA_SECRET_KEY')
+
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
