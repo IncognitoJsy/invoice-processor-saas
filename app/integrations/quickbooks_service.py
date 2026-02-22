@@ -646,7 +646,7 @@ class QuickBooksService:
                 # Priority 1: Look for standard VAT rate (UK - 20% standard rate)
                 for tax_code in tax_codes:
                     name = tax_code.get('Name', '').lower()
-                    if any(x in name for x in ['20%', 'standard rate', 'standard vat']):
+                    if any(x in name for x in ['20.0%', '20%', 'standard rate', 'standard vat', 'standard']):
                         self._tax_code_cache = {
                             'value': tax_code['Id'],
                             'name': tax_code.get('Name', '')
