@@ -1,0 +1,65 @@
+{% extends "base/layout.html" %}
+{% block title %}Verify Identity - GoZappify{% endblock %}
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 py-12 px-4">
+    <div class="max-w-md w-full">
+        <div class="text-center mb-8">
+            <div class="mx-auto w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-8 h-8 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Two-Factor Authentication</h2>
+            <p class="text-gray-600 dark:text-gray-400 mt-2">Enter the code from your authenticator app</p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-400{% elif category == 'info' %}bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400{% else %}bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-400{% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+            
+            <form method="POST" class="space-y-6" id="mfaForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Authentication Code</label>
+                    <input type="text" name="mfa_code" id="mfa_code" required autofocus
+                           maxlength="8" autocomplete="one-time-code" inputmode="numeric"
+                           placeholder="000000"
+                           class="w-full px-4 py-4 text-center text-2xl tracking-widest font-mono border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white transition">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Enter the 6-digit code from your authenticator app, or a recovery code.</p>
+                </div>
+                
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition">
+                    Verify
+                </button>
+                
+                <div class="text-center">
+                    <a href="{{ url_for('auth.login') }}" class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                        Back to login
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-submit when 6 digits entered
+document.getElementById('mfa_code').addEventListener('input', function(e) {
+    // Strip non-alphanumeric characters
+    this.value = this.value.replace(/[^a-zA-Z0-9]/g, '');
+    
+    // Auto-submit for 6-digit TOTP codes
+    if (/^\d{6}$/.test(this.value)) {
+        document.getElementById('mfaForm').submit();
+    }
+});
+</script>
+{% endblock %}

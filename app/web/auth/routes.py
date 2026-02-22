@@ -1,5 +1,5 @@
 """Authentication routes"""
-from flask import render_template, redirect, url_for, flash, request, current_app
+from flask import render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, current_user
 from datetime import datetime
 from app.web.auth import bp
@@ -91,6 +91,14 @@ def login():
                 flash('Your account has been deactivated. Please contact support.', 'error')
                 return render_template('auth/login.html')
             
+            # Check if MFA is enabled
+            if user.mfa_enabled:
+                # Store user ID in session for MFA verification step
+                session['mfa_user_id'] = user.id
+                session['mfa_remember'] = bool(remember)
+                return redirect(url_for('auth.mfa_verify'))
+            
+            # No MFA - log in directly
             user.last_login = datetime.utcnow()
             db.session.commit()
             login_user(user, remember=remember)
@@ -104,6 +112,62 @@ def login():
             flash('Invalid email or password', 'error')
     
     return render_template('auth/login.html')
+
+
+@bp.route('/mfa-verify', methods=['GET', 'POST'])
+def mfa_verify():
+    """MFA verification page - shown after successful password entry"""
+    user_id = session.get('mfa_user_id')
+    if not user_id:
+        return redirect(url_for('auth.login'))
+    
+    user = User.query.get(user_id)
+    if not user or not user.mfa_enabled:
+        session.pop('mfa_user_id', None)
+        session.pop('mfa_remember', None)
+        return redirect(url_for('auth.login'))
+    
+    if request.method == 'POST':
+        code = request.form.get('mfa_code', '').strip()
+        
+        if not code:
+            flash('Please enter your authentication code.', 'error')
+            return render_template('auth/mfa_verify.html')
+        
+        # Try TOTP code first
+        if user.verify_mfa_code(code):
+            # MFA verified - complete login
+            remember = session.pop('mfa_remember', False)
+            session.pop('mfa_user_id', None)
+            
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            login_user(user, remember=remember)
+            
+            if not user.setup_completed:
+                return redirect(url_for('setup.index'))
+            
+            return redirect(url_for('dashboard.index'))
+        
+        # Try recovery code
+        if user.use_recovery_code(code):
+            remember = session.pop('mfa_remember', False)
+            session.pop('mfa_user_id', None)
+            
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            login_user(user, remember=remember)
+            
+            flash('Recovery code used. You have limited recovery codes remaining.', 'info')
+            
+            if not user.setup_completed:
+                return redirect(url_for('setup.index'))
+            
+            return redirect(url_for('dashboard.index'))
+        
+        flash('Invalid code. Please try again or use a recovery code.', 'error')
+    
+    return render_template('auth/mfa_verify.html')
 
 
 @bp.route('/register', methods=['GET', 'POST'])
