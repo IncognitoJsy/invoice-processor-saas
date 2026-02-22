@@ -24,3 +24,4 @@ EXPOSE 8000
 
 # Create tables then start gunicorn
 CMD python -c "from app import create_app; from app.extensions import db; app = create_app(); app.app_context().push(); db.create_all(); print('Tables created!')" && gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
+
