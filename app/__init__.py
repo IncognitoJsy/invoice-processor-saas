@@ -224,15 +224,15 @@ def register_security_headers(app):
         # - Added explicit fallback for default-src
         csp_directives = [
             "default-src 'none'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://appcenter.intuit.com https://www.google.com https://www.gstatic.com",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: blob:",
-            "connect-src 'self' https://appcenter.intuit.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com https://accounts.google.com",
-            "frame-src 'self' https://js.stripe.com https://appcenter.intuit.com",
+            "connect-src 'self' https://appcenter.intuit.com https://www.google.com https://www.gstatic.com https://oauth.platform.intuit.com https://sandbox-quickbooks.api.intuit.com https://quickbooks.api.intuit.com https://api.stripe.com https://accounts.google.com",
+            "frame-src 'self' https://js.stripe.com https://appcenter.intuit.com https://www.google.com https://www.gstatic.com",
             "object-src 'none'",
             "base-uri 'self'",
-            "form-action 'self' https://appcenter.intuit.com",
+            "form-action 'self' https://appcenter.intuit.com https://www.google.com https://www.gstatic.com",
             "manifest-src 'self'",
             "media-src 'self'",
         ]
