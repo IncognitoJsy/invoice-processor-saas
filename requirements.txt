@@ -75,3 +75,4 @@ resend
 whitenoise
 pytesseract
 reportlab
+# cache bust
