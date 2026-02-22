@@ -11,15 +11,8 @@ import time
 class QuickBooksService:
     """Handle QuickBooks OAuth and API interactions"""
     
-    # Intuit Discovery Document - source of truth for all OAuth endpoints
-    # Required by Intuit for App Store listing (avoids hardcoded URLs that may change)
-    DISCOVERY_DOCUMENT_URL = "https://developer.api.intuit.com/.well-known/openid_configuration"
-    
-    # Fallback URLs (used if discovery document is unreachable)
-    _FALLBACK_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2"
-    _FALLBACK_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
-    _FALLBACK_REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
-    
+    AUTH_URL = "https://appcenter.intuit.com/connect/oauth2"
+    TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
     API_BASE_URL = "https://quickbooks.api.intuit.com"
     SANDBOX_API_BASE_URL = "https://sandbox-quickbooks.api.intuit.com"
     
@@ -28,11 +21,6 @@ class QuickBooksService:
     RETRY_BACKOFF_BASE = 1  # seconds - will be multiplied: 1s, 2s, 4s
     RATE_LIMIT_WAIT = 60  # seconds to wait on 429
     
-    # Cache discovery document endpoints (refreshed once per app startup)
-    _discovery_cache = None
-    _discovery_cache_time = None
-    DISCOVERY_CACHE_TTL = 86400  # 24 hours
-    
     def __init__(self, user=None):
         self.user = user
         self.client_id = current_app.config.get('QUICKBOOKS_CLIENT_ID')
@@ -40,68 +28,6 @@ class QuickBooksService:
         self.redirect_uri = current_app.config.get('QUICKBOOKS_REDIRECT_URI')
         self.environment = current_app.config.get('QUICKBOOKS_ENVIRONMENT', 'production')
         self._tax_code_cache = None  # Cache tax code per request
-    
-    @classmethod
-    def _fetch_discovery_document(cls):
-        """
-        Fetch Intuit's OpenID Connect discovery document.
-        
-        Intuit requires apps to use the discovery document to obtain the latest
-        OAuth endpoints rather than hardcoding URLs. This is checked during the
-        App Store technical review (questionnaire: "Did you use the Intuit 
-        discovery document to get the latest endpoints required in the OAuth2.0 flow?")
-        
-        The document is cached for 24 hours to avoid excessive requests.
-        """
-        import time as _time
-        
-        # Return cached version if still valid
-        if (cls._discovery_cache is not None and 
-            cls._discovery_cache_time is not None and
-            _time.time() - cls._discovery_cache_time < cls.DISCOVERY_CACHE_TTL):
-            return cls._discovery_cache
-        
-        try:
-            response = requests.get(cls.DISCOVERY_DOCUMENT_URL, timeout=10)
-            if response.status_code == 200:
-                cls._discovery_cache = response.json()
-                cls._discovery_cache_time = _time.time()
-                current_app.logger.info("Intuit discovery document refreshed successfully")
-                return cls._discovery_cache
-            else:
-                current_app.logger.warning(
-                    f"Discovery document fetch returned {response.status_code}, using fallback URLs"
-                )
-        except Exception as e:
-            current_app.logger.warning(
-                f"Discovery document fetch failed ({type(e).__name__}), using fallback URLs"
-            )
-        
-        return None
-    
-    @classmethod
-    def get_auth_endpoint(cls):
-        """Get the authorization endpoint from discovery document"""
-        doc = cls._fetch_discovery_document()
-        if doc:
-            return doc.get('authorization_endpoint', cls._FALLBACK_AUTH_URL)
-        return cls._FALLBACK_AUTH_URL
-    
-    @classmethod
-    def get_token_endpoint(cls):
-        """Get the token endpoint from discovery document"""
-        doc = cls._fetch_discovery_document()
-        if doc:
-            return doc.get('token_endpoint', cls._FALLBACK_TOKEN_URL)
-        return cls._FALLBACK_TOKEN_URL
-    
-    @classmethod
-    def get_revocation_endpoint(cls):
-        """Get the token revocation endpoint from discovery document"""
-        doc = cls._fetch_discovery_document()
-        if doc:
-            return doc.get('revocation_endpoint', cls._FALLBACK_REVOKE_URL)
-        return cls._FALLBACK_REVOKE_URL
     
     @property
     def api_base_url(self):
@@ -167,8 +93,7 @@ class QuickBooksService:
     # =========================================================================
     
     def get_auth_url(self, state=None):
-        """Generate QuickBooks OAuth authorization URL using discovery document endpoints"""
-        auth_endpoint = self.get_auth_endpoint()
+        """Generate QuickBooks OAuth authorization URL"""
         params = {
             'client_id': self.client_id,
             'response_type': 'code',
@@ -176,7 +101,7 @@ class QuickBooksService:
             'redirect_uri': self.redirect_uri,
             'state': state or 'random_state'
         }
-        return f"{auth_endpoint}?{urlencode(params)}"
+        return f"{self.AUTH_URL}?{urlencode(params)}"
     
     def exchange_code_for_tokens(self, auth_code):
         """Exchange authorization code for access and refresh tokens"""
@@ -196,7 +121,7 @@ class QuickBooksService:
             'redirect_uri': self.redirect_uri
         }
         
-        response = requests.post(self.get_token_endpoint(), headers=headers, data=data)
+        response = requests.post(self.TOKEN_URL, headers=headers, data=data)
         
         if response.status_code == 200:
             return response.json()
@@ -224,7 +149,7 @@ class QuickBooksService:
             'refresh_token': decrypted_refresh
         }
         
-        response = requests.post(self.get_token_endpoint(), headers=headers, data=data)
+        response = requests.post(self.TOKEN_URL, headers=headers, data=data)
         
         if response.status_code == 200:
             return response.json()
@@ -255,7 +180,7 @@ class QuickBooksService:
         
         try:
             response = requests.post(
-                self.get_revocation_endpoint(),
+                'https://developer.api.intuit.com/v2/oauth2/tokens/revoke',
                 headers=headers,
                 json=data
             )
@@ -342,18 +267,12 @@ class QuickBooksService:
                 
                 # --- SUCCESS ---
                 if response.status_code == 200:
-                    # Log intuit_tid for Intuit support troubleshooting (required for App Store)
-                    intuit_tid = response.headers.get('intuit_tid', 'N/A')
-                    current_app.logger.debug(f"QB API success: {method} {endpoint} intuit_tid={intuit_tid}")
                     return response.json()
-                
-                # Capture intuit_tid for error logging
-                intuit_tid = response.headers.get('intuit_tid', 'N/A')
                 
                 # --- 401 UNAUTHORIZED: Token expired, refresh and retry once ---
                 if response.status_code == 401:
                     if attempt == 0:  # Only try refresh once
-                        current_app.logger.info(f"QB API 401 - refreshing access token (intuit_tid={intuit_tid})")
+                        current_app.logger.info("QB API 401 - refreshing access token")
                         tokens = self.refresh_access_token(qb_connection.refresh_token)
                         if tokens:
                             from app.extensions import db
@@ -388,7 +307,7 @@ class QuickBooksService:
                     
                     current_app.logger.warning(
                         f"QB API rate limited (429). Attempt {attempt + 1}/{self.MAX_RETRIES}. "
-                        f"Waiting {wait_time}s before retry. intuit_tid={intuit_tid}"
+                        f"Waiting {wait_time}s before retry."
                     )
                     
                     if attempt < self.MAX_RETRIES - 1:
@@ -406,7 +325,7 @@ class QuickBooksService:
                     
                     current_app.logger.warning(
                         f"QB API unavailable (503). Attempt {attempt + 1}/{self.MAX_RETRIES}. "
-                        f"Waiting {wait_time}s before retry. intuit_tid={intuit_tid}"
+                        f"Waiting {wait_time}s before retry."
                     )
                     
                     if attempt < self.MAX_RETRIES - 1:
@@ -424,8 +343,7 @@ class QuickBooksService:
                     
                     current_app.logger.warning(
                         f"QB API server error ({response.status_code}). "
-                        f"Attempt {attempt + 1}/{self.MAX_RETRIES}. Waiting {wait_time}s. "
-                        f"intuit_tid={intuit_tid}"
+                        f"Attempt {attempt + 1}/{self.MAX_RETRIES}. Waiting {wait_time}s."
                     )
                     
                     if attempt < self.MAX_RETRIES - 1:
@@ -442,8 +360,7 @@ class QuickBooksService:
                     # Parse error details safely without exposing raw response
                     error_detail = self._parse_qb_error(response)
                     current_app.logger.error(
-                        f"QB API client error: {response.status_code} on {endpoint} — {error_detail} "
-                        f"intuit_tid={intuit_tid}"
+                        f"QB API client error: {response.status_code} on {endpoint} — {error_detail}"
                     )
                     return {
                         'error': error_detail,
@@ -453,8 +370,7 @@ class QuickBooksService:
                 
                 # --- UNEXPECTED STATUS ---
                 current_app.logger.error(
-                    f"QB API unexpected status: {response.status_code} on {endpoint} "
-                    f"intuit_tid={intuit_tid}"
+                    f"QB API unexpected status: {response.status_code} on {endpoint}"
                 )
                 last_error = f"Unexpected response from QuickBooks (status {response.status_code})"
                 
@@ -514,7 +430,15 @@ class QuickBooksService:
                 elif 'Stale Object' in message:
                     return 'The record was modified by another process. Please refresh and try again.'
                 elif 'Business Validation' in message:
-                    return f'QuickBooks validation error: {detail[:200] if detail else message[:200]}'
+                    # Provide actionable guidance for common validation issues
+                    detail_lower = (detail or '').lower()
+                    if any(x in detail_lower for x in ['tax', 'taxcode', 'tax code', 'vat', 'gst']):
+                        return 'QuickBooks tax settings error. Please check your tax settings in QuickBooks are configured correctly for your region (VAT/GST).'
+                    elif any(x in detail_lower for x in ['account', 'income', 'expense']):
+                        return 'QuickBooks account mapping error. Please check your Income and Expense account settings in GoZappify under Settings > Integrations > Manage Settings.'
+                    else:
+                        friendly_detail = detail[:200] if detail else message[:200]
+                        return f'QuickBooks validation error: {friendly_detail}. Please check your QuickBooks settings (tax codes, accounts) are configured correctly.'
                 elif 'Required' in detail:
                     return f'Missing required field: {detail[:200]}'
                 else:
@@ -700,7 +624,8 @@ class QuickBooksService:
     
     def get_default_tax_code(self, qb_connection):
         """
-        Get the default GST tax code from QuickBooks.
+        Get the default tax code from QuickBooks.
+        Handles GST (Jersey/AU/NZ), VAT (UK/EU), and tax-exempt companies.
         Caches the result for the duration of the request.
         """
         # Return cached result if available
@@ -714,42 +639,82 @@ class QuickBooksService:
             if result.get('QueryResponse', {}).get('TaxCode'):
                 tax_codes = result['QueryResponse']['TaxCode']
                 
-                # First look for GST specifically
+                current_app.logger.info(
+                    f"Available tax codes: {[(tc.get('Name'), tc.get('Id')) for tc in tax_codes]}"
+                )
+                
+                # Priority 1: Look for standard VAT rate (UK - 20% standard rate)
                 for tax_code in tax_codes:
-                    name = tax_code.get('Name', '')
-                    if 'GST' in name.upper():
+                    name = tax_code.get('Name', '').lower()
+                    if any(x in name for x in ['20%', 'standard rate', 'standard vat']):
                         self._tax_code_cache = {
                             'value': tax_code['Id'],
-                            'name': name
+                            'name': tax_code.get('Name', '')
                         }
-                        current_app.logger.info(f"Found GST tax code: {name} (ID: {tax_code['Id']})")
+                        current_app.logger.info(f"Found UK standard VAT tax code: {tax_code.get('Name')} (ID: {tax_code['Id']})")
                         return self._tax_code_cache
                 
-                # If no GST found, look for standard rate tax codes
+                # Priority 2: Look for GST (Jersey/AU/NZ - typically 5%)
                 for tax_code in tax_codes:
-                    name = tax_code.get('Name', '')
-                    if name.startswith('S') or 'standard' in name.lower():
+                    name = tax_code.get('Name', '').upper()
+                    if 'GST' in name and 'NO GST' not in name:
                         self._tax_code_cache = {
                             'value': tax_code['Id'],
-                            'name': name
+                            'name': tax_code.get('Name', '')
                         }
-                        current_app.logger.info(f"Found standard tax code: {name} (ID: {tax_code['Id']})")
+                        current_app.logger.info(f"Found GST tax code: {tax_code.get('Name')} (ID: {tax_code['Id']})")
                         return self._tax_code_cache
                 
-                # If still no match, take the first taxable code (not exempt/zero)
+                # Priority 3: Look for any standard/default taxable code
                 for tax_code in tax_codes:
-                    name = tax_code.get('Name', '')
-                    # Skip exempt/zero/none codes
-                    if any(x in name.lower() for x in ['exempt', 'zero', 'none', 'no tax']):
+                    name = tax_code.get('Name', '').lower()
+                    if any(x in name for x in ['standard', 'default', 'taxable']):
+                        # Skip if it's explicitly an exempt or zero code
+                        if any(x in name for x in ['exempt', 'zero', 'none', 'no tax', 'non-taxable']):
+                            continue
+                        self._tax_code_cache = {
+                            'value': tax_code['Id'],
+                            'name': tax_code.get('Name', '')
+                        }
+                        current_app.logger.info(f"Found standard tax code: {tax_code.get('Name')} (ID: {tax_code['Id']})")
+                        return self._tax_code_cache
+                
+                # Priority 4: Take the first taxable code that isn't zero/exempt
+                for tax_code in tax_codes:
+                    name = tax_code.get('Name', '').lower()
+                    # Skip exempt/zero/none codes and ECG (Jersey-specific)
+                    if any(x in name for x in ['exempt', 'zero', 'none', 'no tax', 'non-taxable', 'out of scope', 'ecg']):
                         continue
                     self._tax_code_cache = {
                         'value': tax_code['Id'],
-                        'name': name
+                        'name': tax_code.get('Name', '')
                     }
-                    current_app.logger.info(f"Using first available tax code: {name} (ID: {tax_code['Id']})")
+                    current_app.logger.info(f"Using first taxable code: {tax_code.get('Name')} (ID: {tax_code['Id']})")
+                    return self._tax_code_cache
+                
+                # Priority 5: If all codes are exempt/zero, use exempt (company is tax-exempt)
+                # This handles companies that don't charge VAT/GST
+                for tax_code in tax_codes:
+                    name = tax_code.get('Name', '').lower()
+                    if any(x in name for x in ['exempt', 'no vat', 'no gst', 'zero']):
+                        self._tax_code_cache = {
+                            'value': tax_code['Id'],
+                            'name': tax_code.get('Name', '')
+                        }
+                        current_app.logger.info(f"Company appears tax-exempt, using: {tax_code.get('Name')} (ID: {tax_code['Id']})")
+                        return self._tax_code_cache
+                
+                # Last resort: use first available code
+                if tax_codes:
+                    first = tax_codes[0]
+                    self._tax_code_cache = {
+                        'value': first['Id'],
+                        'name': first.get('Name', '')
+                    }
+                    current_app.logger.info(f"Fallback to first tax code: {first.get('Name')} (ID: {first['Id']})")
                     return self._tax_code_cache
                     
-            current_app.logger.warning("No suitable tax code found in QuickBooks")
+            current_app.logger.warning("No tax codes found in QuickBooks")
             return None
             
         except Exception as e:
