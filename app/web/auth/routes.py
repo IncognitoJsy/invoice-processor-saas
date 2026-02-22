@@ -6,37 +6,65 @@ from app.web.auth import bp
 from app.utils.password_validation import validate_password
 from app.models.user import User
 from app.extensions import db
-import re
+import requests as http_requests
 
 
-def sanitize_input(value, max_length=255, allow_email=False):
+def verify_recaptcha(token, expected_action=None):
     """
-    Sanitize user input to prevent SQL injection and XSS.
+    Verify reCAPTCHA v3 token with Google.
     
-    SQLAlchemy ORM already uses parameterised queries, but this adds
-    defence-in-depth for Intuit's security review (Synopsys pen test).
+    Returns (success: bool, score: float or None)
+    - success=True if token is valid and score >= 0.5
+    - If RECAPTCHA_SECRET_KEY is not configured, always returns True (graceful degradation)
     """
-    if not value or not isinstance(value, str):
-        return value
+    secret_key = current_app.config.get('RECAPTCHA_SECRET_KEY')
     
-    # Strip whitespace
-    value = value.strip()
+    # If reCAPTCHA is not configured, skip verification (allows dev/staging without keys)
+    if not secret_key:
+        return True, None
     
-    # Truncate to max length
-    value = value[:max_length]
+    if not token:
+        current_app.logger.warning('reCAPTCHA token missing from form submission')
+        return False, 0.0
     
-    # Remove null bytes
-    value = value.replace('\x00', '')
-    
-    if allow_email:
-        # For email: only allow valid email characters
-        value = re.sub(r'[^\w.@+\-]', '', value)
-    else:
-        # For names: allow letters, spaces, hyphens, apostrophes
-        # Strip anything that looks like SQL or script injection
-        value = re.sub(r'[;<>\'\"\\\/\(\)\{\}\[\]]', '', value)
-    
-    return value
+    try:
+        response = http_requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret_key,
+                'response': token,
+                'remoteip': request.remote_addr
+            },
+            timeout=5
+        )
+        result = response.json()
+        
+        success = result.get('success', False)
+        score = result.get('score', 0.0)
+        action = result.get('action', '')
+        
+        current_app.logger.info(
+            f"reCAPTCHA verification: success={success}, score={score}, action={action}"
+        )
+        
+        # Verify action matches expected action (prevents token reuse across forms)
+        if expected_action and action != expected_action:
+            current_app.logger.warning(
+                f"reCAPTCHA action mismatch: expected={expected_action}, got={action}"
+            )
+            return False, score
+        
+        # Score threshold: 0.5 is Google's recommended threshold
+        if success and score >= 0.5:
+            return True, score
+        else:
+            current_app.logger.warning(f"reCAPTCHA failed: success={success}, score={score}")
+            return False, score
+            
+    except Exception as e:
+        current_app.logger.error(f"reCAPTCHA verification error: {str(e)}")
+        # On network error, allow the request (don't block users due to Google outage)
+        return True, None
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -45,12 +73,15 @@ def login():
         return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
-        email = sanitize_input(request.form.get('email'), max_length=255, allow_email=True)
-        password = request.form.get('password')  # Don't sanitize password (would break valid passwords)
+        email = request.form.get('email')
+        password = request.form.get('password')
         remember = request.form.get('remember', False)
         
-        if not email:
-            flash('Please enter a valid email address', 'error')
+        # Verify reCAPTCHA
+        recaptcha_token = request.form.get('recaptcha_token')
+        recaptcha_ok, recaptcha_score = verify_recaptcha(recaptcha_token, expected_action='login')
+        if not recaptcha_ok:
+            flash('Security verification failed. Please try again.', 'error')
             return render_template('auth/login.html')
         
         user = User.query.filter_by(email=email).first()
@@ -81,11 +112,18 @@ def register():
         return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
-        email = sanitize_input(request.form.get('email'), max_length=255, allow_email=True)
-        password = request.form.get('password')  # Don't sanitize (would break valid passwords)
+        email = request.form.get('email')
+        password = request.form.get('password')
         password_confirm = request.form.get('password_confirm')
-        first_name = sanitize_input(request.form.get('first_name'), max_length=100)
-        last_name = sanitize_input(request.form.get('last_name'), max_length=100)
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        
+        # Verify reCAPTCHA
+        recaptcha_token = request.form.get('recaptcha_token')
+        recaptcha_ok, recaptcha_score = verify_recaptcha(recaptcha_token, expected_action='register')
+        if not recaptcha_ok:
+            flash('Security verification failed. Please try again.', 'error')
+            return render_template('auth/register.html')
         
         if not email or not password:
             flash('Email and password are required', 'error')
@@ -95,8 +133,10 @@ def register():
             flash('Passwords do not match', 'error')
             return render_template('auth/register.html')
         
-        if len(password) < 8:
-            flash('Password must be at least 8 characters', 'error')
+        # Validate password strength (Intuit password policy compliance)
+        is_valid, error_msg = validate_password(password)
+        if not is_valid:
+            flash(error_msg, 'error')
             return render_template('auth/register.html')
         
         if User.query.filter_by(email=email).first():
@@ -137,6 +177,13 @@ def forgot_password():
         return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
+        # Verify reCAPTCHA
+        recaptcha_token = request.form.get('recaptcha_token')
+        recaptcha_ok, recaptcha_score = verify_recaptcha(recaptcha_token, expected_action='forgot_password')
+        if not recaptcha_ok:
+            flash('Security verification failed. Please try again.', 'error')
+            return render_template('auth/forgot_password.html')
+        
         email = request.form.get('email')
         user = User.query.filter_by(email=email).first()
         
@@ -195,6 +242,12 @@ def reset_password(token):
         
         if password != password_confirm:
             flash('Passwords do not match', 'error')
+            return render_template('auth/reset_password.html', token=token)
+        
+        # Validate password strength (same rules as registration)
+        is_valid, error_msg = validate_password(password)
+        if not is_valid:
+            flash(error_msg, 'error')
             return render_template('auth/reset_password.html', token=token)
         
         # Update password
