@@ -21,6 +21,7 @@
             
             <form method="POST" class="space-y-6" id="registerForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="recaptcha_token" id="recaptcha_token">
                 <div>
                     <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Email</label>
                     <input type="email" name="email" required 
@@ -58,7 +59,7 @@
                             </svg>
                         </button>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum 8 characters</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Min 8 chars, uppercase, lowercase, number & special character</p>
                 </div>
                 
                 <!-- Confirm Password Field -->
@@ -106,6 +107,13 @@
                     <a href="{{ url_for('auth.login') }}" class="text-primary-600 font-medium hover:text-primary-700 dark:text-primary-400 ml-1">Sign in</a>
                 </div>
             </form>
+            
+            <!-- reCAPTCHA branding (required by Google ToS for v3) -->
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-4 text-center">
+                Protected by reCAPTCHA. Google 
+                <a href="https://policies.google.com/privacy" class="underline" target="_blank">Privacy</a> & 
+                <a href="https://policies.google.com/terms" class="underline" target="_blank">Terms</a>.
+            </p>
         </div>
         
         <!-- Trial info -->
@@ -114,6 +122,38 @@
         </p>
     </div>
 </div>
+
+{% if config.RECAPTCHA_SITE_KEY %}
+<script src="https://www.google.com/recaptcha/api.js?render={{ config.RECAPTCHA_SITE_KEY }}"></script>
+<script>
+document.getElementById('registerForm').addEventListener('submit', function(e) {
+    // Check password match first
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('password_confirm').value;
+    
+    if (password !== confirmPassword) {
+        e.preventDefault();
+        alert('Passwords do not match!');
+        return false;
+    }
+    
+    if (password.length < 8) {
+        e.preventDefault();
+        alert('Password must be at least 8 characters!');
+        return false;
+    }
+    
+    e.preventDefault();
+    const form = this;
+    grecaptcha.ready(function() {
+        grecaptcha.execute('{{ config.RECAPTCHA_SITE_KEY }}', {action: 'register'}).then(function(token) {
+            document.getElementById('recaptcha_token').value = token;
+            form.submit();
+        });
+    });
+});
+</script>
+{% endif %}
 
 <script>
 function togglePassword(fieldId) {
@@ -140,7 +180,6 @@ function checkPasswordMatch() {
     const noMatchDiv = document.getElementById('password-no-match');
     const submitBtn = document.getElementById('submitBtn');
     
-    // Only show indicator if confirm field has content
     if (confirmPassword.length > 0) {
         indicator.classList.remove('hidden');
         
@@ -158,23 +197,5 @@ function checkPasswordMatch() {
         submitBtn.disabled = false;
     }
 }
-
-// Form validation before submit
-document.getElementById('registerForm').addEventListener('submit', function(e) {
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('password_confirm').value;
-    
-    if (password !== confirmPassword) {
-        e.preventDefault();
-        alert('Passwords do not match!');
-        return false;
-    }
-    
-    if (password.length < 8) {
-        e.preventDefault();
-        alert('Password must be at least 8 characters!');
-        return false;
-    }
-});
 </script>
 {% endblock %}
