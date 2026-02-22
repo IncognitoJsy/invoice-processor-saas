@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN echo "build-bust-v3"
-nCOPY . .
+COPY . .
 
 RUN mkdir -p logs uploads temp_uploads integration_data/queue data
 
