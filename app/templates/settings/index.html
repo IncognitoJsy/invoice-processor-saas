@@ -181,6 +181,84 @@
             </form>
         </div>
 
+        <!-- Two-Factor Authentication Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Two-Factor Authentication</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Add an extra layer of security to your account</p>
+            </div>
+            <div class="p-6">
+                {% if current_user.mfa_enabled %}
+                <!-- MFA is ON -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mr-4">
+                            <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900 dark:text-white">Enabled</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Your account is protected with two-factor authentication</p>
+                        </div>
+                    </div>
+                    <button onclick="document.getElementById('disableMfaModal').classList.remove('hidden')" 
+                            class="px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium rounded-lg transition text-sm">
+                        Disable
+                    </button>
+                </div>
+                
+                <!-- Disable MFA Modal -->
+                <div id="disableMfaModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Disable Two-Factor Authentication?</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Enter your password to confirm. This will make your account less secure.</p>
+                        <form method="POST" action="{{ url_for('settings.mfa_disable') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-4">
+                                <input type="password" name="password" required placeholder="Your password"
+                                       class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                            </div>
+                            <div class="flex gap-3">
+                                <button type="button" onclick="document.getElementById('disableMfaModal').classList.add('hidden')"
+                                        class="flex-1 py-3 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition">
+                                    Cancel
+                                </button>
+                                <button type="submit"
+                                        class="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition">
+                                    Disable MFA
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                {% else %}
+                <!-- MFA is OFF -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mr-4">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900 dark:text-white">Not enabled</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Protect your account with an authenticator app</p>
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('settings.mfa_setup') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit"
+                                class="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition text-sm">
+                            Enable
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Integrations Link -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             <div class="p-6">

@@ -46,6 +46,11 @@ class User(db.Model, UserMixin):
     trial_reminder_sent = db.Column(db.Boolean, default=False)
     payment_failed_email_sent = db.Column(db.Boolean, default=False)
     
+    # MFA (Multi-Factor Authentication)
+    mfa_enabled = db.Column(db.Boolean, default=False)
+    mfa_secret = db.Column(db.String(255))  # TOTP secret key (encrypted)
+    mfa_recovery_codes = db.Column(db.Text)  # JSON list of hashed recovery codes
+    
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -56,6 +61,60 @@ class User(db.Model, UserMixin):
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def generate_mfa_secret(self):
+        """Generate a new TOTP secret for MFA setup"""
+        import pyotp
+        self.mfa_secret = pyotp.random_base32()
+        return self.mfa_secret
+    
+    def get_mfa_uri(self):
+        """Get the otpauth URI for QR code generation"""
+        import pyotp
+        if not self.mfa_secret:
+            return None
+        totp = pyotp.TOTP(self.mfa_secret)
+        return totp.provisioning_uri(name=self.email, issuer_name='GoZappify')
+    
+    def verify_mfa_code(self, code):
+        """Verify a TOTP code"""
+        import pyotp
+        if not self.mfa_secret:
+            return False
+        totp = pyotp.TOTP(self.mfa_secret)
+        return totp.verify(code, valid_window=1)  # Allow 1 window tolerance (30 sec each side)
+    
+    def generate_recovery_codes(self):
+        """Generate 8 one-time recovery codes"""
+        import secrets
+        import json
+        codes = [secrets.token_hex(4).upper() for _ in range(8)]  # e.g. 'A1B2C3D4'
+        # Store hashed versions
+        self.mfa_recovery_codes = json.dumps([
+            generate_password_hash(code) for code in codes
+        ])
+        return codes  # Return plain codes to show user once
+    
+    def use_recovery_code(self, code):
+        """Verify and consume a recovery code. Returns True if valid."""
+        import json
+        if not self.mfa_recovery_codes:
+            return False
+        
+        hashed_codes = json.loads(self.mfa_recovery_codes)
+        for i, hashed in enumerate(hashed_codes):
+            if check_password_hash(hashed, code.upper().strip()):
+                # Remove used code
+                hashed_codes.pop(i)
+                self.mfa_recovery_codes = json.dumps(hashed_codes)
+                return True
+        return False
+    
+    def disable_mfa(self):
+        """Disable MFA and clear secrets"""
+        self.mfa_enabled = False
+        self.mfa_secret = None
+        self.mfa_recovery_codes = None
     
     def start_trial(self):
         self.subscription_plan = 'trial'

@@ -75,3 +75,5 @@ resend
 whitenoise
 pytesseract
 reportlab
+pyotp
+qrcode[pil]
