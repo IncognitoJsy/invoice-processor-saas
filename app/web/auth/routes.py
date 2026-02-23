@@ -7,6 +7,27 @@ from app.utils.password_validation import validate_password
 from app.models.user import User
 from app.extensions import db
 import requests as http_requests
+import time
+from collections import defaultdict
+
+# Login rate limiting - 5 attempts per 15 minutes per IP
+_login_attempts = defaultdict(list)
+
+def check_login_rate_limit():
+    ip = request.remote_addr or "unknown"
+    now = time.time()
+    window = 900  # 15 minutes
+    max_attempts = 5
+    
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < window]
+    
+    if len(_login_attempts[ip]) >= max_attempts:
+        return False
+    return True
+
+def record_login_attempt():
+    ip = request.remote_addr or "unknown"
+    _login_attempts[ip].append(time.time())
 
 
 def verify_recaptcha(token, expected_action=None):
@@ -77,6 +98,11 @@ def login():
         password = request.form.get('password')
         remember = request.form.get('remember', False)
         
+        # Rate limit check
+        if not check_login_rate_limit():
+            flash('Too many login attempts. Please try again in 15 minutes.', 'error')
+            return render_template('auth/login.html')
+        
         # Verify reCAPTCHA
         recaptcha_token = request.form.get('recaptcha_token')
         recaptcha_ok, recaptcha_score = verify_recaptcha(recaptcha_token, expected_action='login')
@@ -109,6 +135,7 @@ def login():
             
             return redirect(url_for('dashboard.index'))
         else:
+            record_login_attempt()
             flash('Invalid email or password', 'error')
     
     return render_template('auth/login.html')

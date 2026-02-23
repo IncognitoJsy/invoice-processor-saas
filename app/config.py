@@ -13,7 +13,7 @@ class Config:
     # Session security (base settings - overridden in Production)
     SESSION_COOKIE_HTTPONLY = True      # Prevent JS access to session cookie
     SESSION_COOKIE_SAMESITE = 'Lax'    # CSRF protection
-    PERMANENT_SESSION_LIFETIME = 86400  # 24 hours
+    PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 hour session timeout
     
     # Redis
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
