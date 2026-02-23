@@ -1036,6 +1036,26 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     discounted_total = total_amount
                 
                 cost_per_item = round(discounted_total / quantity, 2) if quantity > 0 else 0
+
+                # ─── BULK CABLE PER-METRE CONVERSION ────────────────────────────
+                # Cat6/data cable is sold as 1 box of 305m but needs per-metre pricing
+                # for accurate quoting. Twin & Earth etc already show per-metre from supplier.
+                description_lower = (item.get('description', '') or '').lower()
+                part_lower = (item.get('part_number', '') or '').lower()
+                
+                is_305m_box = any(p in description_lower or p in part_lower for p in [
+                    '305m', '305 m', '305mtr', '305 mtr', 'box 305', '305 metre', '305 meter'
+                ])
+                
+                if is_305m_box and quantity <= 10:
+                    original_box_cost = cost_per_item
+                    cost_per_item = round(cost_per_item / 305, 4)
+                    quantity = quantity * 305
+                    self.logger.info(
+                        f"📏 Per-metre conversion: {item.get('part_number', '')} "
+                        f"£{original_box_cost:.2f}/box ÷ 305m = £{cost_per_item:.4f}/m"
+                    )
+                # ─── END BULK CABLE CONVERSION ─────────────────────────────────
                 
                 # Determine markup based on user type
                 if is_admin:
