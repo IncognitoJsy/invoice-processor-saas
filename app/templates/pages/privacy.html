@@ -62,11 +62,11 @@
         </div>
     </nav>
 
-    <!-- Header -->
-    <section class="pt-32 pb-12 bg-white border-b border-gray-200">
+    <!-- Header - branded gradient matching help page -->
+    <section class="pt-24 pb-12 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
         <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 class="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
-            <p class="text-gray-600">Last updated: January 2026</p>
+            <h1 class="text-3xl md:text-4xl font-bold mb-2">Privacy Policy</h1>
+            <p class="text-blue-100">Last updated: February 2026</p>
         </div>
     </section>
 
@@ -90,8 +90,9 @@
                     <ul class="list-disc list-inside text-gray-600 mb-6 space-y-2">
                         <li><strong>Account Information:</strong> Name, email address, password, and business details when you register</li>
                         <li><strong>Invoice Data:</strong> Supplier invoices you upload, including line items, prices, and supplier information</li>
-                        <li><strong>Payment Information:</strong> Billing details processed securely through Stripe (we do not store full card numbers)</li>
+                        <li><strong>Payment Information:</strong> Billing details processed securely through PayPal (we do not store full card numbers or PayPal credentials)</li>
                         <li><strong>Communications:</strong> Messages you send to our support team</li>
+                        <li><strong>Multi-Factor Authentication:</strong> If you enable two-factor authentication, we store an encrypted TOTP secret and hashed recovery codes associated with your account</li>
                     </ul>
                     
                     <h3 class="text-xl font-semibold text-gray-900 mt-6 mb-3">2.2 Information Collected Automatically</h3>
@@ -103,7 +104,12 @@
                     
                     <h3 class="text-xl font-semibold text-gray-900 mt-6 mb-3">2.3 Third-Party Integrations</h3>
                     <p class="text-gray-600 mb-6">
-                        When you connect QuickBooks or other accounting software, we access only the data necessary to provide our service, such as customer lists, accounts, and the ability to create bills and invoices. We use secure OAuth authentication and do not store your QuickBooks login credentials.
+                        When you connect QuickBooks Online, Xero, or other accounting software, we access only the data necessary to provide our service, such as product lists, customer lists, tax codes, and the ability to create bills and invoices. We use secure OAuth 2.0 authentication and do not store your accounting software login credentials.
+                    </p>
+                    
+                    <h3 class="text-xl font-semibold text-gray-900 mt-6 mb-3">2.4 reCAPTCHA</h3>
+                    <p class="text-gray-600 mb-6">
+                        We use Google reCAPTCHA v3 on our login, registration, and password reset pages to protect against automated abuse. reCAPTCHA collects hardware and software information, such as device and application data, and sends it to Google for analysis. Your use of reCAPTCHA is subject to Google's <a href="https://policies.google.com/privacy" class="text-primary-600 hover:underline" target="_blank">Privacy Policy</a> and <a href="https://policies.google.com/terms" class="text-primary-600 hover:underline" target="_blank">Terms of Service</a>.
                     </p>
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">3. How We Use Your Information</h2>
@@ -121,9 +127,10 @@
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">4. Data Sharing and Disclosure</h2>
                     <p class="text-gray-600 mb-4">We do not sell your personal information. We may share your information with:</p>
                     <ul class="list-disc list-inside text-gray-600 mb-6 space-y-2">
-                        <li><strong>Service Providers:</strong> Third parties that help us operate our service (e.g., Stripe for payments, cloud hosting providers)</li>
-                        <li><strong>AI Processing:</strong> Invoice content is processed using AI services to extract data. This data is not used to train AI models</li>
-                        <li><strong>Accounting Integrations:</strong> QuickBooks and other connected platforms, as authorised by you</li>
+                        <li><strong>Service Providers:</strong> Third parties that help us operate our service (e.g., PayPal for payments, Railway for cloud hosting)</li>
+                        <li><strong>AI Processing:</strong> Invoice content is processed using AI services (Anthropic Claude) to extract data. This data is not used to train AI models</li>
+                        <li><strong>Accounting Integrations:</strong> QuickBooks Online, Xero, and other connected platforms, as authorised by you</li>
+                        <li><strong>Security Services:</strong> Google reCAPTCHA for bot protection on authentication pages</li>
                         <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
                     </ul>
                     
@@ -133,10 +140,12 @@
                     </p>
                     <ul class="list-disc list-inside text-gray-600 mb-6 space-y-2">
                         <li>Encryption of data in transit (TLS/HTTPS) and at rest</li>
-                        <li>Secure password hashing</li>
+                        <li>Secure password hashing (Werkzeug/PBKDF2)</li>
+                        <li>Optional two-factor authentication (TOTP) for account access</li>
+                        <li>reCAPTCHA protection on authentication forms</li>
                         <li>Regular security assessments</li>
                         <li>Access controls and authentication</li>
-                        <li>Secure OAuth connections for third-party integrations</li>
+                        <li>Secure OAuth 2.0 connections for third-party integrations</li>
                     </ul>
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">6. Data Retention</h2>
@@ -160,7 +169,7 @@
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">8. Cookies</h2>
                     <p class="text-gray-600 mb-6">
-                        We use essential cookies to operate our service (e.g., session management, authentication). We do not use third-party tracking or advertising cookies.
+                        We use essential cookies to operate our service (e.g., session management, authentication). We do not use third-party tracking or advertising cookies. Google reCAPTCHA may set cookies as part of its bot detection functionality.
                     </p>
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">9. Children's Privacy</h2>
@@ -170,7 +179,7 @@
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">10. International Data Transfers</h2>
                     <p class="text-gray-600 mb-6">
-                        Your data may be processed in countries outside your jurisdiction. We ensure appropriate safeguards are in place for any international transfers in compliance with applicable data protection laws.
+                        Your data may be processed in countries outside your jurisdiction, including the United States (for cloud hosting and AI processing services). We ensure appropriate safeguards are in place for any international transfers in compliance with applicable data protection laws.
                     </p>
                     
                     <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">11. Changes to This Policy</h2>
@@ -220,10 +229,12 @@
                     <a href="/" class="hover:text-white transition">Home</a>
                     <a href="/help" class="hover:text-white transition">Help Centre</a>
                     <a href="/terms" class="hover:text-white transition">Terms</a>
+                    <a href="/privacy" class="hover:text-white transition">Privacy</a>
+                    <a href="/refund-policy" class="hover:text-white transition">Refund Policy</a>
                 </div>
             </div>
-            <div class="mt-8 pt-8 border-t border-gray-800 text-center">
-                <p class="text-gray-400">&copy; 2026 GoZappify. All rights reserved.</p>
+            <div class="mt-8 pt-8 border-t border-gray-800 text-center text-gray-400">
+                <p>&copy; 2026 GoZappify. All rights reserved.</p>
             </div>
         </div>
     </footer>
