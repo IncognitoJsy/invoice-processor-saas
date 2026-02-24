@@ -622,18 +622,16 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         }]
         
         client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
+        response_text = ""
+        with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
             max_tokens=32000,
             temperature=0,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
-        )
-        
-        response_text = ""
-        for block in message.content:
-            if hasattr(block, 'text'):
-                response_text += block.text
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
         
         response_text = response_text.strip()
         if response_text.startswith('```'):
@@ -899,7 +897,8 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         
         client = anthropic.Anthropic(api_key=api_key)
         
-        message = client.messages.create(
+        response_text = ""
+        with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
             max_tokens=32000,
             temperature=0,
@@ -907,12 +906,9 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
             messages=[
                 {"role": "user", "content": user_content}
             ]
-        )
-        
-        response_text = ""
-        for block in message.content:
-            if hasattr(block, 'text'):
-                response_text += block.text
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
         
         response_text = response_text.strip()
         if response_text.startswith('```'):
@@ -1048,18 +1044,16 @@ Response: [Check preferences and answer — no JSON block needed]
             messages.append({"role": h["role"], "content": h["content"]})
         messages.append({"role": "user", "content": message})
         
-        response = client.messages.create(
+        response_text = ""
+        with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
             max_tokens=1500,
             temperature=0.3,
             system=system_prompt,
             messages=messages
-        )
-        
-        response_text = ""
-        for block in response.content:
-            if hasattr(block, 'text'):
-                response_text += block.text
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
         
         # Check if response contains JSON actions to apply
         actions_applied = []
@@ -2451,7 +2445,8 @@ IMPORTANT:
 - Be accurate with measurements — these will be used for cable run calculations
 - Include any notes about room features (e.g. "has island unit", "L-shaped", "vaulted ceiling")"""
 
-        response = client.messages.create(
+        response_text = ""
+        with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
             max_tokens=4000,
             temperature=0,
@@ -2472,9 +2467,11 @@ IMPORTANT:
                     }
                 ]
             }]
-        )
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
         
-        response_text = response.content[0].text.strip()
+        response_text = response_text.strip()
         
         # Clean up JSON
         if response_text.startswith('```'):
