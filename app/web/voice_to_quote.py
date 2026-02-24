@@ -624,7 +624,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=16000,
+            max_tokens=32000,
             temperature=0,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
@@ -901,7 +901,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=16000,
+            max_tokens=32000,
             temperature=0,
             system=system_prompt,
             messages=[
