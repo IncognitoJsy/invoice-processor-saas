@@ -266,10 +266,10 @@ Return valid JSON matching this structure:
         }
       ],
       "cable_summary": {
-        "cable_type": {"metres": number, "calculation": "string"}
+        "cable_type": {"metres": number, "calculation": "brief formula, max 60 chars"}
       },
       "sundries": [
-        {"item": "string", "quantity": "string", "calculation": "string"}
+        {"item": "string", "quantity": "string", "calculation": "brief formula, max 60 chars"}
       ],
       "flags": [
         {"message": "string", "severity": "amber | red", "default_value": "string or null"}
@@ -625,7 +625,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         response_text = ""
         with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=32000,
+            max_tokens=64000,
             temperature=0,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}]
@@ -900,7 +900,7 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation before or a
         response_text = ""
         with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=32000,
+            max_tokens=64000,
             temperature=0,
             system=system_prompt,
             messages=[
