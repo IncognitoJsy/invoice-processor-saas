@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for, session
 from flask_login import login_required, current_user
 from app.extensions import db
+from app.utils.password_validation import validate_password
 import io
 import base64
 
@@ -81,6 +82,14 @@ def change_password():
         if request.is_json:
             return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
         flash('Password must be at least 8 characters', 'error')
+        return redirect(url_for('settings.index'))
+    
+    # Validate password strength
+    is_valid, error_msg = validate_password(new_password)
+    if not is_valid:
+        if request.is_json:
+            return jsonify({'success': False, 'error': error_msg}), 400
+        flash(error_msg, 'error')
         return redirect(url_for('settings.index'))
     
     # Update password
