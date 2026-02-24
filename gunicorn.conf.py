@@ -9,7 +9,7 @@ backlog = 2048
 workers = 1
 worker_class = "sync"
 worker_connections = 1000
-timeout = 300  # Increased for Claude API processing (default is 30)
+timeout = 900  # Increased for Claude API processing (default is 30)
 keepalive = 2
 
 # Logging
