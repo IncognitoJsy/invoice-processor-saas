@@ -84,7 +84,7 @@ def apply_product_swaps(parsed_data, user_id):
 
 bp = Blueprint('voice_to_quote', __name__, url_prefix='/voice-to-quote')
 
-PRODUCT_CACHE_TTL_HOURS = 24  # Refresh cache if older than this
+PRODUCT_CACHE_TTL_HOURS = 4  # Refresh cache if older than this
 
 
 def get_knowledge_base():
