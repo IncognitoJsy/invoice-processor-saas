@@ -6,6 +6,14 @@
     tourStep: {% if current_user.is_authenticated and current_user.setup_completed and not current_user.tour_completed %}0{% else %}-1{% endif %}
 }" :class="{ 'dark': darkMode }">
 <head>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-GSC14RVPY8"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag("js", new Date());
+        gtag("config", "G-GSC14RVPY8");
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}GoZappify - Operations Platform for Electrical Contractors{% endblock %}</title>
