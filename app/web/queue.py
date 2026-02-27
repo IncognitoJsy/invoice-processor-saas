@@ -60,6 +60,9 @@ def api_list_queue():
     
     if status_filter != 'all':
         query = query.filter_by(status=status_filter)
+    else:
+        # Even when showing 'all', hide dismissed items
+        query = query.filter(QueuedInvoice.status != 'dismissed')
     
     items = query.order_by(QueuedInvoice.created_at.desc()).all()
     
@@ -348,14 +351,16 @@ def api_delete_from_queue(queue_id):
     if not item:
         return jsonify({'error': 'Not found'}), 404
     
-    # Delete the file
+    # Delete the file from disk to free space, but keep the DB record for dedup
     try:
         if os.path.exists(item.file_path):
             os.remove(item.file_path)
     except Exception as e:
         current_app.logger.warning(f"Could not delete file {item.file_path}: {e}")
     
-    db.session.delete(item)
+    # Mark as dismissed instead of deleting - keeps email_message_id 
+    # and attachment_hash so the email fetcher won't re-fetch it
+    item.status = 'dismissed'
     db.session.commit()
     
     return jsonify({'success': True})
