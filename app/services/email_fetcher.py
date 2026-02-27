@@ -15,6 +15,9 @@ from app.services.imap_fetcher import fetch_pdf_invoices_imap
 
 logger = logging.getLogger(__name__)
 
+# How far back to scan for missed emails (days)
+LOOKBACK_DAYS = 30
+
 
 def _get_gmail_service(connection):
     """Build Gmail API service from stored encrypted credentials"""
@@ -137,6 +140,21 @@ def _find_pdf_attachments(message):
     return attachments
 
 
+def _get_already_fetched_message_ids(user_id):
+    """Get set of Gmail message IDs we've already processed for this user.
+    
+    This is the key to gap-free fetching: instead of relying on timestamps,
+    we track which messages we've already seen and skip them.
+    """
+    existing = db.session.query(QueuedInvoice.email_message_id).filter(
+        QueuedInvoice.user_id == user_id,
+        QueuedInvoice.source == 'email',
+        QueuedInvoice.email_message_id.isnot(None)
+    ).all()
+    
+    return set(row[0] for row in existing)
+
+
 def _save_pdf_to_queue(user_id, filename, file_data, sender, subject, email_date, msg_id, supplier_filters):
     """Save a PDF file to disk and create a queue entry. Returns 'fetched', 'skipped', or 'error'."""
     try:
@@ -204,7 +222,14 @@ def _save_pdf_to_queue(user_id, filename, file_data, sender, subject, email_date
 
 
 def _fetch_gmail_for_user(user_id):
-    """Fetch PDF invoices via Gmail API for a user and queue them"""
+    """Fetch PDF invoices via Gmail API for a user and queue them.
+    
+    Uses a lookback window + message ID deduplication instead of relying
+    on last_checked timestamps. This means:
+    - If the token was expired for days, we catch up on all missed emails
+    - If emails arrived between checks, they're never lost
+    - Already-processed emails are efficiently skipped via DB lookup
+    """
     result = {'fetched': 0, 'skipped': 0, 'errors': []}
     
     connection = EmailConnection.query.filter_by(
@@ -232,73 +257,107 @@ def _fetch_gmail_for_user(user_id):
         result['errors'].append('No active supplier filters')
         return result
     
-    # Time filter
-    if connection.last_checked:
-        import calendar
-        epoch = int(calendar.timegm(connection.last_checked.timetuple()))
-        query += f" after:{epoch}"
-    else:
-        query += " newer_than:1d"
+    # Always look back LOOKBACK_DAYS to catch any missed emails.
+    # Deduplication handles skipping already-processed ones efficiently.
+    import calendar
+    lookback_date = datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)
+    epoch = int(calendar.timegm(lookback_date.timetuple()))
+    query += f" after:{epoch}"
     
     logger.info(f"Gmail fetch for user {user_id} with query: {query}")
     
     try:
         service = _get_gmail_service(connection)
         
-        messages_response = service.users().messages().list(
-            userId='me',
-            q=query,
-            maxResults=50
-        ).execute()
+        # Pre-load already-fetched message IDs for fast skip checking
+        already_fetched_ids = _get_already_fetched_message_ids(user_id)
+        logger.info(f"User {user_id} has {len(already_fetched_ids)} previously fetched message IDs")
         
-        messages = messages_response.get('messages', [])
-        logger.info(f"Found {len(messages)} matching Gmail emails for user {user_id}")
+        # Paginate through ALL matching messages (not just first 50)
+        all_messages = []
+        page_token = None
         
-        for msg_stub in messages:
-            msg_id = msg_stub['id']
-            
-            message = service.users().messages().get(
+        while True:
+            messages_response = service.users().messages().list(
                 userId='me',
-                id=msg_id,
-                format='full'
+                q=query,
+                maxResults=100,
+                pageToken=page_token
             ).execute()
             
-            sender = _extract_sender(message)
-            subject = _extract_subject(message)
-            email_date = _extract_date(message)
+            messages = messages_response.get('messages', [])
+            all_messages.extend(messages)
             
-            pdf_attachments = _find_pdf_attachments(message)
+            page_token = messages_response.get('nextPageToken')
+            if not page_token:
+                break
             
-            if not pdf_attachments:
-                continue
+            # Safety limit - don't fetch more than 500 messages in one go
+            if len(all_messages) >= 500:
+                logger.warning(f"Hit 500 message limit for user {user_id}, some older emails may be skipped")
+                break
+        
+        logger.info(f"Found {len(all_messages)} matching Gmail emails for user {user_id}")
+        
+        # Filter out messages we've already processed BEFORE downloading them
+        # This saves API calls for attachments we don't need
+        new_messages = [m for m in all_messages if m['id'] not in already_fetched_ids]
+        skipped_early = len(all_messages) - len(new_messages)
+        result['skipped'] += skipped_early
+        
+        logger.info(f"Skipped {skipped_early} already-fetched messages, processing {len(new_messages)} new ones")
+        
+        for msg_stub in new_messages:
+            msg_id = msg_stub['id']
             
-            for filename, attachment_id in pdf_attachments:
-                try:
-                    attachment = service.users().messages().attachments().get(
-                        userId='me',
-                        messageId=msg_id,
-                        id=attachment_id
-                    ).execute()
-                    
-                    file_data = base64.urlsafe_b64decode(attachment['data'])
-                    
-                    status = _save_pdf_to_queue(
-                        user_id, filename, file_data, sender, subject,
-                        email_date, msg_id, supplier_filters
-                    )
-                    
-                    if status == 'fetched':
-                        result['fetched'] += 1
-                        logger.info(f"Queued Gmail PDF: {filename} from {sender} for user {user_id}")
-                    elif status == 'skipped':
-                        result['skipped'] += 1
-                    else:
-                        result['errors'].append(f"Failed to save {filename}")
-                    
-                except Exception as e:
-                    error_msg = f"Failed to download {filename}: {str(e)}"
-                    logger.error(error_msg)
-                    result['errors'].append(error_msg)
+            try:
+                message = service.users().messages().get(
+                    userId='me',
+                    id=msg_id,
+                    format='full'
+                ).execute()
+                
+                sender = _extract_sender(message)
+                subject = _extract_subject(message)
+                email_date = _extract_date(message)
+                
+                pdf_attachments = _find_pdf_attachments(message)
+                
+                if not pdf_attachments:
+                    continue
+                
+                for filename, attachment_id in pdf_attachments:
+                    try:
+                        attachment = service.users().messages().attachments().get(
+                            userId='me',
+                            messageId=msg_id,
+                            id=attachment_id
+                        ).execute()
+                        
+                        file_data = base64.urlsafe_b64decode(attachment['data'])
+                        
+                        status = _save_pdf_to_queue(
+                            user_id, filename, file_data, sender, subject,
+                            email_date, msg_id, supplier_filters
+                        )
+                        
+                        if status == 'fetched':
+                            result['fetched'] += 1
+                            logger.info(f"Queued Gmail PDF: {filename} from {sender} for user {user_id}")
+                        elif status == 'skipped':
+                            result['skipped'] += 1
+                        else:
+                            result['errors'].append(f"Failed to save {filename}")
+                        
+                    except Exception as e:
+                        error_msg = f"Failed to download {filename}: {str(e)}"
+                        logger.error(error_msg)
+                        result['errors'].append(error_msg)
+            
+            except Exception as e:
+                error_msg = f"Failed to fetch message {msg_id}: {str(e)}"
+                logger.error(error_msg)
+                result['errors'].append(error_msg)
         
         # Update connection status
         connection.last_checked = datetime.utcnow()
@@ -341,7 +400,8 @@ def _fetch_imap_for_user(user_id):
                 result['errors'].append(f'No credentials for {connection.email_address}')
                 continue
             
-            since_date = connection.last_checked or (datetime.utcnow() - timedelta(days=1))
+            # Use lookback window instead of last_checked for IMAP too
+            since_date = datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)
             
             logger.info(f"IMAP fetch for user {user_id} from {connection.email_address} since {since_date}")
             
