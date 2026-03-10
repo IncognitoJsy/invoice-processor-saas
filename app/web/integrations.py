@@ -752,7 +752,8 @@ def quickbooks_draft_invoices():
                 'Id': d.get('Id'),
                 'DocNumber': d.get('DocNumber'),
                 'TotalAmt': d.get('TotalAmt'),
-                'Balance': d.get('Balance')
+                'Balance': d.get('Balance'),
+                'Line': d.get('Line', [])
             }
             for d in drafts
         ]
