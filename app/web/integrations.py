@@ -770,6 +770,7 @@ def quickbooks_sync_to_customer(invoice_id):
     
     data = request.get_json() or {}
     customer_id = data.get('customer_id')
+    sync_mode = data.get('sync_mode', 'itemised')
     
     if not customer_id:
         return jsonify({'success': False, 'error': 'Customer ID required'}), 400
@@ -789,7 +790,7 @@ def quickbooks_sync_to_customer(invoice_id):
     
     # Perform full sync
     qb = QuickBooksService(current_user)
-    result = qb.sync_invoice_to_customer(connection, invoice, customer_id)
+    result = qb.sync_invoice_to_customer(connection, invoice, customer_id, sync_mode=sync_mode)
     
     if result.get('success'):
         # Update invoice sync status

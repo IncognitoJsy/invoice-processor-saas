@@ -1315,7 +1315,7 @@ Rules:
 
     
     def sync_invoice_to_customer(self, qb_connection, gozappify_invoice, customer_id: str, 
-                                  use_existing_invoice: bool = True):
+                                  use_existing_invoice: bool = True, sync_mode: str = 'itemised'):
         """
         Full sync: Update products AND add to customer invoice
         
@@ -1362,17 +1362,38 @@ Rules:
                 current_app.logger.info(f"Found existing draft invoice: {qb_invoice.get('Id')}")
         
         # Step 3: Build line items for QB invoice
-        line_items = []
-        for item in items:
-            if item.part_number not in product_map:
-                continue
+        if sync_mode == 'summary':
+            # Summary mode: combine all items into one "Materials Used" line
+            total_selling = sum(
+                (float(item.selling_price) if item.selling_price else 0) * (float(item.quantity) if item.quantity else 1)
+                for item in items
+            )
             
-            line_items.append({
-                'item_id': product_map[item.part_number],
-                'quantity': float(item.quantity) if item.quantity else 1,
-                'unit_price': float(item.selling_price) if item.selling_price else 0,
-                'description': item.description or ''
-            })
+            materials_item_id = self._get_or_create_materials_used(qb_connection)
+            if not materials_item_id:
+                results['errors'].append('Failed to find or create Materials Used product')
+                results['success'] = False
+                return results
+            
+            line_items = [{
+                'item_id': materials_item_id,
+                'quantity': 1,
+                'unit_price': round(total_selling, 2),
+                'description': 'Materials Used'
+            }]
+        else:
+            # Itemised mode: individual line items
+            line_items = []
+            for item in items:
+                if item.part_number not in product_map:
+                    continue
+                
+                line_items.append({
+                    'item_id': product_map[item.part_number],
+                    'quantity': float(item.quantity) if item.quantity else 1,
+                    'unit_price': float(item.selling_price) if item.selling_price else 0,
+                    'description': item.description or ''
+                })
         
         if not line_items:
             results['errors'].append('No products synced successfully - cannot create invoice')
@@ -1381,20 +1402,25 @@ Rules:
         
         # Step 4: Add to existing or create new invoice
         if qb_invoice:
-            # Add to existing invoice
-            invoice_result = self.add_items_to_invoice(
-                qb_connection, 
-                qb_invoice['Id'], 
-                line_items
-            )
+            if sync_mode == 'summary':
+                invoice_result = self._add_summary_to_invoice(
+                    qb_connection,
+                    qb_invoice['Id'],
+                    line_items[0]
+                )
+            else:
+                invoice_result = self.add_items_to_invoice(
+                    qb_connection, 
+                    qb_invoice['Id'], 
+                    line_items
+                )
         else:
-            # Create new invoice
             results['invoice_action'] = 'created_new'
             invoice_result = self.create_invoice(
                 qb_connection,
                 customer_id,
                 line_items,
-                memo=None  # Don't add job reference to invoice memo
+                memo=None
             )
         
         if invoice_result.get('Invoice'):
@@ -1405,6 +1431,105 @@ Rules:
             results['success'] = False
         
         return results
+
+    def _get_or_create_materials_used(self, qb_connection):
+        """Find or create a 'Materials Used' product in QuickBooks"""
+        try:
+            query = "SELECT * FROM Item WHERE Sku = 'MATERIALS-USED'"
+            result = self.make_api_request(qb_connection, f"query?query={query}")
+            items = result.get('QueryResponse', {}).get('Item', [])
+            if items:
+                return items[0]['Id']
+        except Exception as e:
+            current_app.logger.warning(f"Error searching for Materials Used item: {e}")
+        
+        try:
+            query = "SELECT * FROM Item WHERE Name = 'Materials Used'"
+            result = self.make_api_request(qb_connection, f"query?query={query}")
+            items = result.get('QueryResponse', {}).get('Item', [])
+            if items:
+                return items[0]['Id']
+        except Exception as e:
+            current_app.logger.warning(f"Error searching for Materials Used by name: {e}")
+        
+        try:
+            from app.models.quickbooks import QuickBooksConnection
+            connection = QuickBooksConnection.query.filter_by(user_id=self.user.id).first()
+            
+            tax_code = self.get_default_tax_code(qb_connection)
+            
+            item_data = {
+                "Name": "Materials Used",
+                "Sku": "MATERIALS-USED",
+                "Description": "Materials Used",
+                "Type": "NonInventory",
+                "IncomeAccountRef": {"value": connection.default_income_account_id},
+                "ExpenseAccountRef": {"value": connection.default_expense_account_id}
+            }
+            
+            if tax_code:
+                item_data["SalesTaxCodeRef"] = {"value": tax_code['value']}
+            
+            result = self.make_api_request(qb_connection, "item", method='POST', data=item_data)
+            if result.get('Item'):
+                current_app.logger.info(f"Created Materials Used product in QB: {result['Item']['Id']}")
+                return result['Item']['Id']
+        except Exception as e:
+            current_app.logger.error(f"Failed to create Materials Used item: {e}")
+        
+        return None
+    
+    def _add_summary_to_invoice(self, qb_connection, invoice_id, summary_item):
+        """Add or accumulate a Materials Used line on an existing invoice"""
+        existing = self.make_api_request(qb_connection, f"invoice/{invoice_id}")
+        
+        if not existing.get('Invoice'):
+            return {'error': 'Invoice not found'}
+        
+        invoice = existing['Invoice']
+        existing_lines = invoice.get('Line', [])
+        
+        materials_line_idx = None
+        for idx, line in enumerate(existing_lines):
+            if line.get('DetailType') == 'SalesItemLineDetail':
+                item_ref = line.get('SalesItemLineDetail', {}).get('ItemRef', {})
+                if item_ref.get('value') == summary_item['item_id']:
+                    materials_line_idx = idx
+                    break
+        
+        if materials_line_idx is not None:
+            old_amount = float(existing_lines[materials_line_idx].get('Amount', 0))
+            new_amount = round(old_amount + summary_item['unit_price'], 2)
+            existing_lines[materials_line_idx]['Amount'] = new_amount
+            existing_lines[materials_line_idx]['SalesItemLineDetail']['UnitPrice'] = new_amount
+            existing_lines[materials_line_idx]['SalesItemLineDetail']['Qty'] = 1
+            current_app.logger.info(f"Accumulated Materials Used: {old_amount} + {summary_item['unit_price']} = {new_amount}")
+        else:
+            tax_code = self.get_default_tax_code(qb_connection)
+            max_id = max((int(l.get('Id', 0)) for l in existing_lines if l.get('Id')), default=0)
+            new_line = {
+                "Id": str(max_id + 1),
+                "DetailType": "SalesItemLineDetail",
+                "Amount": summary_item['unit_price'],
+                "Description": "Materials Used",
+                "SalesItemLineDetail": {
+                    "ItemRef": {"value": summary_item['item_id']},
+                    "Qty": 1,
+                    "UnitPrice": summary_item['unit_price']
+                }
+            }
+            if tax_code:
+                new_line["SalesItemLineDetail"]["TaxCodeRef"] = {"value": tax_code['value']}
+            existing_lines.append(new_line)
+        
+        update_data = {
+            "Id": invoice['Id'],
+            "SyncToken": invoice['SyncToken'],
+            "sparse": True,
+            "Line": existing_lines
+        }
+        
+        return self.make_api_request(qb_connection, "invoice", method='POST', data=update_data)
 
     # =========================================================================
     # ESTIMATE MANAGEMENT (for Quotes)
