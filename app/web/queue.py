@@ -437,7 +437,7 @@ def api_clear_completed():
                 os.remove(item.file_path)
         except Exception:
             pass
-        db.session.delete(item)
+        item.status = 'dismissed'  # Keep record for email dedup
     
     db.session.commit()
     
