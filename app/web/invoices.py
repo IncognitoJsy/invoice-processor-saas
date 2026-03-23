@@ -12,7 +12,16 @@ bp = Blueprint('invoices', __name__)
 @login_required
 def invoices_page():
     """Invoices listing page"""
-    return render_template('invoices/index.html')
+    from app.models.customer import Customer
+    mode = current_user.platform_mode or 'sync'
+    customers = []
+    if mode in ['full', 'both']:
+        customers = Customer.query.filter_by(user_id=current_user.id)            .order_by(Customer.name.asc()).all()
+        customers = [{'id': c.id, 'name': c.display_name, 'email': c.email or ''} for c in customers]
+    return render_template('invoices/index.html',
+        platform_mode=mode,
+        customers=customers
+    )
 
 
 @bp.route('/api/invoices')
@@ -232,4 +241,112 @@ def update_item_price(item_id):
             'total_selling': float(invoice.total_selling),
             'total_profit': float(invoice.total_profit)
         }
+    })
+
+
+@bp.route('/api/invoices/<int:invoice_id>/assign-customer', methods=['POST'])
+@login_required
+def assign_customer(invoice_id):
+    """Assign a processed invoice to a customer/job — full platform mode"""
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer, Job
+    from app.extensions import db
+
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    data = request.get_json()
+    customer_id = data.get('customer_id')
+    job_id = data.get('job_id')
+
+    if customer_id:
+        customer = Customer.query.filter_by(id=customer_id, user_id=current_user.id).first()
+        if not customer:
+            return jsonify({'success': False, 'error': 'Customer not found'}), 404
+        invoice.platform_customer_id = customer_id
+        invoice.customer_match_confidence = 'manual'
+
+    if job_id:
+        job = Job.query.filter_by(id=job_id, user_id=current_user.id).first()
+        if not job:
+            return jsonify({'success': False, 'error': 'Job not found'}), 404
+        invoice.platform_job_id = job_id
+
+    if not customer_id and not job_id:
+        invoice.platform_customer_id = None
+        invoice.platform_job_id = None
+        invoice.customer_match_confidence = 'none'
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/api/invoices/<int:invoice_id>/suggest-customer')
+@login_required
+def suggest_customer(invoice_id):
+    """Auto-suggest customer based on job_reference fuzzy match"""
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer, Job
+
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    customers = Customer.query.filter_by(user_id=current_user.id).all()
+    jobs = Job.query.filter_by(user_id=current_user.id).all()
+
+    suggestions = []
+    ref = (invoice.job_reference or '').lower().strip()
+
+    if ref:
+        for customer in customers:
+            score = 0
+            name = (customer.name or '').lower()
+            company = (customer.company_name or '').lower()
+            if ref in name or name in ref:
+                score = 90
+            elif ref in company or company in ref:
+                score = 85
+            elif any(word in name or word in company for word in ref.split() if len(word) > 2):
+                score = 60
+            if score > 0:
+                suggestions.append({
+                    'type': 'customer',
+                    'id': customer.id,
+                    'name': customer.display_name,
+                    'email': customer.email,
+                    'score': score
+                })
+
+        for job in jobs:
+            score = 0
+            title = (job.title or '').lower()
+            jnum = (job.job_number or '').lower()
+            if ref in title or title in ref:
+                score = 95
+            elif ref == jnum:
+                score = 100
+            elif any(word in title for word in ref.split() if len(word) > 2):
+                score = 70
+            if score > 0:
+                customer_name = job.customer.display_name if job.customer else None
+                suggestions.append({
+                    'type': 'job',
+                    'id': job.id,
+                    'name': job.title,
+                    'customer_id': job.customer_id,
+                    'customer_name': customer_name,
+                    'score': score
+                })
+
+    suggestions.sort(key=lambda x: x['score'], reverse=True)
+
+    return jsonify({
+        'success': True,
+        'job_reference': invoice.job_reference,
+        'current_customer_id': invoice.platform_customer_id,
+        'current_job_id': invoice.platform_job_id,
+        'suggestions': suggestions[:5],
+        'customers': [{'id': c.id, 'name': c.display_name, 'email': c.email} for c in customers]
     })

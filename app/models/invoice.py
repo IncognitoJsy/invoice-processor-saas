@@ -71,6 +71,12 @@ class Invoice(db.Model):
     # Customer matching (for quotes that become estimates)
     matched_customer_id = db.Column(db.String(50))  # QB Customer ID
     matched_customer_name = db.Column(db.String(255))  # QB Customer Name
+
+    # Full platform customer linking
+    platform_customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
+    platform_job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=True)
+    customer_match_confidence = db.Column(db.String(20))  # auto_high, auto_low, manual, none
+    platform_customer = db.relationship('Customer', foreign_keys=[platform_customer_id], lazy='select')
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -112,7 +118,11 @@ class Invoice(db.Model):
             'xero_quote_id': self.xero_quote_id,
             'xero_quote_synced_at': self.xero_quote_synced_at.isoformat() if self.xero_quote_synced_at else None,
             'matched_customer_id': self.matched_customer_id,
-            'matched_customer_name': self.matched_customer_name
+            'matched_customer_name': self.matched_customer_name,
+            'platform_customer_id': self.platform_customer_id,
+            'platform_job_id': self.platform_job_id,
+            'customer_match_confidence': self.customer_match_confidence,
+            'customer_name': self.platform_customer.display_name if self.platform_customer_id and self.platform_customer else None
         }
 
 
