@@ -76,7 +76,7 @@ def create_app(config_name='default'):
     register_blueprints(app)
 
     # Exempt API and webhook routes from CSRF (they use fetch() with session cookies or are external webhooks)
-    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue, gmail_auth, imap_auth, voice_to_quote
+    from app.web import upload, user_api, integrations, tasks, part_number_routes, billing, invoices, quotebuilder, queue, gmail_auth, imap_auth, voice_to_quote, customer_invoices, customers, products
     csrf.exempt(upload.bp)
     csrf.exempt(user_api.bp)
     csrf.exempt(integrations.bp)
@@ -89,6 +89,9 @@ def create_app(config_name='default'):
     csrf.exempt(gmail_auth.bp)
     csrf.exempt(imap_auth.bp)
     csrf.exempt(voice_to_quote.bp)
+    csrf.exempt(customer_invoices.bp)
+    csrf.exempt(customers.bp)
+    csrf.exempt(products.bp)
 
     # Register error handlers
     register_error_handlers(app)
