@@ -1,5 +1,101 @@
 {% extends "base/layout.html" %}
-{% block title %}Customer Invoices - GoZappify{% endblock %}
+{% block title %}Customer Invoices - GoZappify
+<!-- Payment Received Modal -->
+<div id="payment-modal" class="hidden fixed inset-0 bg-gray-900/70 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+        <button onclick="closePaymentModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1">Record Payment</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-5" id="payment-modal-subtitle">Payment for invoice</p>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Received</label>
+                <input type="date" id="payment-date"
+                       class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Payment Method</label>
+                <select id="payment-method"
+                        class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition">
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="direct_debit">Direct Debit</option>
+                    <option value="card">Card</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Memo / Reference <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="text" id="payment-memo" placeholder="e.g. Cheque no. 001234"
+                       class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition">
+            </div>
+            <div id="payment-amount-display" class="hidden p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-500">Amount</span>
+                    <span class="font-bold text-gray-900 dark:text-white" id="payment-amount-value">£0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+            <button onclick="closePaymentModal()" class="flex-1 py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
+                Cancel
+            </button>
+            <button onclick="savePayment()" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition text-sm">
+                Save Payment
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let paymentInvoiceId = null;
+let paymentInvoiceNumber = null;
+
+function openPaymentModal(invoiceId, invoiceNumber, total) {
+    paymentInvoiceId = invoiceId;
+    paymentInvoiceNumber = invoiceNumber;
+    document.getElementById('payment-modal-subtitle').textContent = 'Recording payment for ' + invoiceNumber;
+    document.getElementById('payment-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('payment-memo').value = '';
+    document.getElementById('payment-method').value = 'bank_transfer';
+    document.getElementById('payment-amount-value').textContent = '£' + parseFloat(total || 0).toFixed(2);
+    document.getElementById('payment-amount-display').classList.remove('hidden');
+    document.getElementById('payment-modal').classList.remove('hidden');
+}
+
+function closePaymentModal() {
+    document.getElementById('payment-modal').classList.add('hidden');
+    paymentInvoiceId = null;
+}
+
+async function savePayment() {
+    if (!paymentInvoiceId) return;
+    const res = await fetch('/customer-invoices/' + paymentInvoiceId + '/receive-payment', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            payment_date: document.getElementById('payment-date').value,
+            payment_method: document.getElementById('payment-method').value,
+            memo: document.getElementById('payment-memo').value,
+        })
+    });
+    const data = await res.json();
+    if (data.success) {
+        closePaymentModal();
+        window.location.reload();
+    }
+}
+
+document.getElementById('payment-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'payment-modal') closePaymentModal();
+});
+</script>
+
+{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -38,8 +134,8 @@
     </div>
 
     {% if invoices %}
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <table class="w-full">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-visible">
+        <table class="w-full" style="border-collapse: separate;">
             <thead>
                 <tr class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Invoice</th>
@@ -125,6 +221,12 @@
                                         View/Edit
                                     </a>
 
+                                    <a href="/customer-invoices/api/{{ inv.id }}/preview"
+                                       class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        Preview & Send
+                                    </a>
+
                                     <button onclick="window.print()"
                                             class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
@@ -139,6 +241,14 @@
                                             Send
                                         </button>
                                     </form>
+                                    {% endif %}
+
+                                    {% if inv.status in ['open', 'sent', 'overdue'] %}
+                                    <button onclick="openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
+                                            class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Receive Payment
+                                    </button>
                                     {% endif %}
 
                                     {% if inv.status in ['sent', 'overdue'] %}

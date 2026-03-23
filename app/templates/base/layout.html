@@ -186,9 +186,7 @@
                     <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Queue
                     </a>
-                    <a href="/integrations/overview" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'integrations' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
-                        Email Setup
-                    </a>
+
                     {% endif %}
 
                     {% if mode in ['sync', 'both'] %}
@@ -292,13 +290,22 @@
                                 </svg>
                                 Settings
                             </a>
-                            
+
+                            {% if current_user.platform_mode in ['full', 'both'] %}
+                            <a href="/integrations/overview" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                Email Setup
+                            </a>
+                            {% else %}
                             <a href="/integrations/overview" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                                 </svg>
                                 Integrations
                             </a>
+                            {% endif %}
 
                             <a href="/help" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

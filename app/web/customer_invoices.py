@@ -308,6 +308,111 @@ def mark_paid(invoice_id):
     return redirect(url_for('customer_invoices.view', invoice_id=invoice.id))
 
 
+@bp.route('/<int:invoice_id>/receive-payment', methods=['POST'])
+@login_required
+@require_full_mode
+def receive_payment(invoice_id):
+    """Record payment received for an invoice"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+
+    data = request.get_json() or request.form
+    payment_date = data.get('payment_date')
+    payment_method = data.get('payment_method', 'bank_transfer')
+    memo = data.get('memo', '')
+
+    invoice.status = 'paid'
+    if payment_date:
+        try:
+            invoice.paid_at = datetime.strptime(payment_date, '%Y-%m-%d')
+        except ValueError:
+            invoice.paid_at = datetime.utcnow()
+    else:
+        invoice.paid_at = datetime.utcnow()
+
+    db.session.commit()
+
+    if request.is_json:
+        return jsonify({'success': True, 'invoice_number': invoice.invoice_number})
+
+    flash(f'Payment recorded for {invoice.invoice_number}.', 'success')
+    return redirect(url_for('customer_invoices.index', tab='paid'))
+
+
+@bp.route('/api/bulk-payment', methods=['POST'])
+@login_required
+@require_full_mode
+def bulk_payment():
+    """Record payment for multiple invoices at once"""
+    data = request.get_json()
+    invoice_ids = data.get('invoice_ids', [])
+    payment_date = data.get('payment_date')
+    payment_method = data.get('payment_method', 'bank_transfer')
+    memo = data.get('memo', '')
+
+    if not invoice_ids:
+        return jsonify({'success': False, 'error': 'No invoices selected'}), 400
+
+    paid_count = 0
+    for inv_id in invoice_ids:
+        invoice = CustomerInvoice.query.filter_by(
+            id=inv_id, user_id=current_user.id).first()
+        if invoice and invoice.status in ['open', 'sent', 'overdue']:
+            invoice.status = 'paid'
+            if payment_date:
+                try:
+                    invoice.paid_at = datetime.strptime(payment_date, '%Y-%m-%d')
+                except ValueError:
+                    invoice.paid_at = datetime.utcnow()
+            else:
+                invoice.paid_at = datetime.utcnow()
+            paid_count += 1
+
+    db.session.commit()
+    return jsonify({'success': True, 'paid_count': paid_count})
+
+
+@bp.route('/api/customer/<int:customer_id>/open-invoices')
+@login_required
+@require_full_mode
+def customer_open_invoices(customer_id):
+    """Get open invoices for a customer (for bulk payment)"""
+    customer = Customer.query.filter_by(
+        id=customer_id, user_id=current_user.id).first_or_404()
+    invoices = CustomerInvoice.query.filter_by(
+        user_id=current_user.id,
+        customer_id=customer_id
+    ).filter(CustomerInvoice.status.in_(['open', 'sent', 'overdue'])).all()
+
+    return jsonify({
+        'success': True,
+        'customer': {'id': customer.id, 'name': customer.display_name},
+        'invoices': [i.to_dict() for i in invoices]
+    })
+
+
+@bp.route('/api/customers')
+@login_required
+@require_full_mode
+def get_customers():
+    """Get all customers for payment selection"""
+    customers = Customer.query.filter_by(user_id=current_user.id)        .order_by(Customer.name.asc()).all()
+    return jsonify({
+        'success': True,
+        'customers': [{'id': c.id, 'name': c.display_name, 'email': c.email} for c in customers]
+    })
+
+
+@bp.route('/api/<int:invoice_id>/preview')
+@login_required
+@require_full_mode
+def preview(invoice_id):
+    """Preview invoice as it will appear to client"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    return render_template('customer_invoices/preview.html', invoice=invoice)
+
+
 @bp.route('/<int:invoice_id>/void', methods=['POST'])
 @login_required
 @require_full_mode
