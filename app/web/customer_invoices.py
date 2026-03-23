@@ -372,6 +372,66 @@ def bulk_payment():
     return jsonify({'success': True, 'paid_count': paid_count})
 
 
+@bp.route('/<int:invoice_id>/update-due-date', methods=['POST'])
+@login_required
+@require_full_mode
+def update_due_date(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    due_date_str = data.get('due_date')
+    if due_date_str:
+        try:
+            invoice.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+            db.session.commit()
+            return jsonify({'success': True})
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid date'}), 400
+    return jsonify({'success': False, 'error': 'No date provided'}), 400
+
+
+@bp.route('/<int:invoice_id>/add-line', methods=['POST'])
+@login_required
+@require_full_mode
+def add_line(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    if invoice.status != 'open':
+        return jsonify({'success': False, 'error': 'Can only add lines to open invoices'}), 400
+    data = request.get_json()
+    description = data.get('description', '').strip()
+    quantity = float(data.get('quantity', 1) or 1)
+    unit_price = float(data.get('unit_price', 0) or 0)
+    if not description:
+        return jsonify({'success': False, 'error': 'Description required'}), 400
+    line = CustomerInvoiceLine(
+        customer_invoice_id=invoice_id,
+        description=description,
+        quantity=quantity,
+        unit_price=unit_price,
+        line_total=round(quantity * unit_price, 2),
+        line_type='itemised',
+    )
+    db.session.add(line)
+    invoice.recalculate_totals()
+    db.session.commit()
+    return jsonify({'success': True, 'line': line.to_dict(), 'total': invoice.total})
+
+
+@bp.route('/<int:invoice_id>/delete-line/<int:line_id>', methods=['POST'])
+@login_required
+@require_full_mode
+def delete_line(invoice_id, line_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    line = CustomerInvoiceLine.query.filter_by(
+        id=line_id, customer_invoice_id=invoice_id).first_or_404()
+    db.session.delete(line)
+    invoice.recalculate_totals()
+    db.session.commit()
+    return jsonify({'success': True, 'total': invoice.total})
+
+
 @bp.route('/api/customer/<int:customer_id>/open-invoices')
 @login_required
 @require_full_mode

@@ -1,27 +1,38 @@
 {% extends "base/layout.html" %}
 {% block title %}{{ customer.display_name }} - GoZappify{% endblock %}
 {% block content %}
-<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-6 flex items-center justify-between">
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- Header -->
+    <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
         <div>
             <a href="{{ url_for('customers.index') }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium">← Back to Customers</a>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-2">{{ customer.display_name }}</h1>
         </div>
-        <a href="{{ url_for('customers.edit', customer_id=customer.id) }}" class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
-            Edit Customer
-        </a>
+        <div class="flex gap-3">
+            <a href="{{ url_for('customer_invoices.index') }}?customer={{ customer.id }}"
+               class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">
+                + New Invoice
+            </a>
+            <a href="{{ url_for('customers.edit', customer_id=customer.id) }}"
+               class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
+                Edit
+            </a>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Customer details -->
-        <div class="lg:col-span-1">
+
+        <!-- Left: Contact details + stats -->
+        <div class="space-y-4">
+            <!-- Contact -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
                 <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Contact Details</h2>
                 <div class="space-y-3">
                     {% if customer.email %}
                     <div class="flex items-center gap-3">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                        <a href="mailto:{{ customer.email }}" class="text-sm text-primary-600 hover:underline">{{ customer.email }}</a>
+                        <a href="mailto:{{ customer.email }}" class="text-sm text-primary-600 hover:underline truncate">{{ customer.email }}</a>
                     </div>
                     {% endif %}
                     {% if customer.phone %}
@@ -36,6 +47,15 @@
                         <span class="text-sm text-gray-600 dark:text-gray-300">{{ customer.full_address }}</span>
                     </div>
                     {% endif %}
+                    {% if customer.payment_terms %}
+                    <div class="flex items-center gap-3">
+                        <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="text-sm text-gray-600 dark:text-gray-300">
+                            {% if customer.payment_terms == 'receipt' %}Due on Receipt
+                            {% else %}Net {{ customer.payment_terms }} Days{% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
                     {% if customer.notes %}
                     <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
                         <p class="text-xs text-gray-400 mb-1">Notes</p>
@@ -44,39 +64,126 @@
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Financial summary -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+                <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Account Summary</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">Total Invoiced</span>
+                        <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(total_invoiced) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">Outstanding</span>
+                        <span class="font-semibold {% if total_outstanding > 0 %}text-amber-600 dark:text-amber-400{% else %}text-gray-900 dark:text-white{% endif %} font-mono">
+                            £{{ "%.2f"|format(total_outstanding) }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span class="text-sm text-gray-500">Total Paid</span>
+                        <span class="font-semibold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(total_paid) }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- Jobs -->
-        <div class="lg:col-span-2">
-            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <h2 class="font-semibold text-gray-900 dark:text-white">Jobs</h2>
-                    <a href="#" class="text-sm text-primary-600 hover:text-primary-700 font-medium">+ New Job</a>
+        <!-- Right: Invoices -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Open invoices -->
+            {% if open_invoices %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm">
+                <div class="p-5 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between bg-amber-50 dark:bg-amber-900/20 rounded-t-2xl">
+                    <h2 class="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                        Open Invoices
+                    </h2>
+                    <span class="text-xs font-bold text-amber-600 dark:text-amber-400">{{ open_invoices|length }}</span>
                 </div>
-                {% if jobs %}
-                <div class="divide-y divide-gray-200 dark:divide-gray-700">
-                    {% for job in jobs %}
-                    <div class="p-4 flex items-center justify-between">
-                        <div>
-                            <p class="font-medium text-gray-900 dark:text-white">{{ job.title }}</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ job.created_at.strftime('%d %b %Y') }}</p>
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in open_invoices %}
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
+                            <span class="text-sm text-gray-500">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
                         </div>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
-                            {% if job.status_colour == 'green' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
-                            {% elif job.status_colour == 'amber' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
-                            {% elif job.status_colour == 'blue' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
-                            {% else %}bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
-                            {{ job.status_label }}
-                        </span>
+                        <div class="flex items-center gap-4">
+                            <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-primary-600 hover:text-primary-700 font-medium">View →</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Outstanding -->
+            {% if outstanding %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 shadow-sm">
+                <div class="p-5 border-b border-red-200 dark:border-red-800 flex items-center justify-between bg-red-50 dark:bg-red-900/20 rounded-t-2xl">
+                    <h2 class="font-semibold text-red-800 dark:text-red-300 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        Outstanding
+                    </h2>
+                    <span class="text-xs font-bold text-red-600 dark:text-red-400">£{{ "%.2f"|format(total_outstanding) }}</span>
+                </div>
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in outstanding %}
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
+                            <span class="text-sm {% if inv.is_overdue %}text-red-500{% else %}text-gray-500{% endif %}">
+                                Due {{ inv.due_date.strftime('%d %b %Y') if inv.due_date else '—' }}
+                                {% if inv.is_overdue %} — {{ inv.days_overdue }}d overdue{% endif %}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-primary-600 hover:text-primary-700 font-medium">View →</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- All invoices history -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Invoice History</h2>
+                    <span class="text-xs text-gray-400">{{ invoices|length }} total</span>
+                </div>
+                {% if invoices %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in invoices %}
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-sm text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if inv.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
+                                {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
+                                {% elif inv.status == 'overdue' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                                {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
+                                {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
+                                {{ inv.status|title }}
+                            </span>
+                            <span class="text-xs text-gray-400 hidden sm:inline">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-gray-400 hover:text-primary-600">→</a>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
                 <div class="p-8 text-center">
-                    <p class="text-gray-400 text-sm">No jobs yet for this customer.</p>
+                    <p class="text-gray-400 text-sm">No invoices yet for this customer.</p>
+                    <a href="{{ url_for('customer_invoices.index') }}" class="inline-block mt-3 text-sm text-primary-600 hover:underline">Create first invoice →</a>
                 </div>
                 {% endif %}
             </div>
+
         </div>
     </div>
 </div>

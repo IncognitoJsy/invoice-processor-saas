@@ -58,10 +58,27 @@ def new():
 @login_required
 @require_full_mode
 def view(customer_id):
+    from app.models.customer_invoice import CustomerInvoice
     customer = Customer.query.filter_by(id=customer_id, user_id=current_user.id).first_or_404()
-    jobs = Job.query.filter_by(customer_id=customer_id, user_id=current_user.id)\
-        .order_by(Job.created_at.desc()).all()
-    return render_template('customers/view.html', customer=customer, jobs=jobs)
+    invoices = CustomerInvoice.query.filter_by(
+        customer_id=customer_id, user_id=current_user.id
+    ).order_by(CustomerInvoice.created_at.desc()).all()
+    open_invoices = [i for i in invoices if i.status == 'open']
+    outstanding = [i for i in invoices if i.status in ['sent', 'overdue']]
+    paid_invoices = [i for i in invoices if i.status == 'paid']
+    total_invoiced = sum(i.total or 0 for i in invoices if i.status != 'void')
+    total_outstanding = sum(i.total or 0 for i in outstanding)
+    total_paid = sum(i.total or 0 for i in paid_invoices)
+    return render_template('customers/view.html',
+        customer=customer,
+        invoices=invoices,
+        open_invoices=open_invoices,
+        outstanding=outstanding,
+        paid_invoices=paid_invoices,
+        total_invoiced=total_invoiced,
+        total_outstanding=total_outstanding,
+        total_paid=total_paid,
+    )
 
 
 @bp.route('/<int:customer_id>/edit', methods=['GET', 'POST'])
