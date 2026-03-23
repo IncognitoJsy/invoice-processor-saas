@@ -18,6 +18,7 @@ class Customer(db.Model):
     postcode = db.Column(db.String(20))
     country = db.Column(db.String(50))
     notes = db.Column(db.Text)
+    payment_terms = db.Column(db.String(20), default='30')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

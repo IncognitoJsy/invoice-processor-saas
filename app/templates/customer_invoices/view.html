@@ -1,0 +1,168 @@
+{% extends "base/layout.html" %}
+{% block title %}{{ invoice.invoice_number }} - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <a href="{{ url_for('customer_invoices.index') }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium">← Back to Invoices</a>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-2 font-mono">{{ invoice.invoice_number }}</h1>
+        </div>
+        <div class="flex gap-3">
+            {% if invoice.status == 'open' %}
+            <form action="{{ url_for('customer_invoices.mark_sent', invoice_id=invoice.id) }}" method="POST" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">
+                    Mark as Sent
+                </button>
+            </form>
+            {% elif invoice.status == 'sent' %}
+            <form action="{{ url_for('customer_invoices.mark_paid', invoice_id=invoice.id) }}" method="POST" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition text-sm">
+                    Mark as Paid
+                </button>
+            </form>
+            {% endif %}
+            <form action="{{ url_for('customer_invoices.delete', invoice_id=invoice.id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this invoice?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="px-5 py-2.5 border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl font-semibold transition text-sm">
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invoice card -->
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <!-- Header -->
+        <div class="p-8 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-start flex-wrap gap-6">
+                <div>
+                    <h2 class="text-2xl font-black text-gray-900 dark:text-white">{{ current_user.company_name or 'Your Company' }}</h2>
+                    {% if current_user.trade_type %}
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-0.5">{{ current_user.trade_type|title }}</p>
+                    {% endif %}
+                    {% if current_user.tax_registered and current_user.tax_number %}
+                    <p class="text-gray-500 dark:text-gray-400 text-xs mt-1">{{ current_user.tax_type or 'Tax' }} No: {{ current_user.tax_number }}</p>
+                    {% endif %}
+                </div>
+                <div class="text-right">
+                    <p class="text-3xl font-black text-gray-900 dark:text-white font-mono">{{ invoice.invoice_number }}</p>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mt-2
+                        {% if invoice.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
+                        {% elif invoice.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
+                        {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
+                        {{ invoice.status|title }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
+                <div>
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Bill To</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">{{ invoice.customer.display_name }}</p>
+                    {% if invoice.customer.email %}<p class="text-sm text-gray-500">{{ invoice.customer.email }}</p>{% endif %}
+                    {% if invoice.customer.full_address %}<p class="text-sm text-gray-500 mt-1">{{ invoice.customer.full_address }}</p>{% endif %}
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Issue Date</p>
+                    <p class="font-medium text-gray-900 dark:text-white">{{ invoice.issue_date.strftime('%d %b %Y') if invoice.issue_date else '—' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Due Date</p>
+                    <p class="font-medium {% if invoice.is_overdue %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-white{% endif %}">
+                        {{ invoice.due_date.strftime('%d %b %Y') if invoice.due_date else '—' }}
+                    </p>
+                    <p class="text-xs text-gray-400">{{ invoice.payment_terms_label }}</p>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Mode</p>
+                    <p class="font-medium text-gray-900 dark:text-white">{{ invoice.invoice_mode|title }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line items -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                        <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                        <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                        <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Unit Price</th>
+                        <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for line in invoice.lines %}
+                    <tr>
+                        <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">{{ line.description }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 text-right">{{ line.quantity }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 text-right font-mono">£{{ "%.2f"|format(line.unit_price or 0) }}</td>
+                        <td class="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white text-right font-mono">£{{ "%.2f"|format(line.line_total or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Totals -->
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700">
+            <div class="max-w-xs ml-auto space-y-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">Subtotal</span>
+                    <span class="font-medium text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(invoice.subtotal or 0) }}</span>
+                </div>
+                {% if invoice.tax_rate and invoice.tax_rate > 0 %}
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">{{ current_user.tax_type or 'Tax' }} ({{ invoice.tax_rate }}%)</span>
+                    <span class="font-medium text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(invoice.tax_amount or 0) }}</span>
+                </div>
+                {% endif %}
+                <div class="flex justify-between text-lg font-bold pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <span class="text-gray-900 dark:text-white">Total</span>
+                    <span class="text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(invoice.total or 0) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank details -->
+        {% if current_user.bank_account_number or current_user.bank_iban %}
+        <div class="px-8 py-6 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Payment Details</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {% if current_user.bank_name %}
+                <div><p class="text-xs text-gray-400">Bank</p><p class="font-medium text-gray-900 dark:text-white">{{ current_user.bank_name }}</p></div>
+                {% endif %}
+                {% if current_user.bank_account_name %}
+                <div><p class="text-xs text-gray-400">Account Name</p><p class="font-medium text-gray-900 dark:text-white">{{ current_user.bank_account_name }}</p></div>
+                {% endif %}
+                {% if current_user.bank_account_number %}
+                <div><p class="text-xs text-gray-400">Account Number</p><p class="font-medium text-gray-900 dark:text-white font-mono">{{ current_user.bank_account_number }}</p></div>
+                {% endif %}
+                {% if current_user.bank_sort_code %}
+                <div><p class="text-xs text-gray-400">Sort Code</p><p class="font-medium text-gray-900 dark:text-white font-mono">{{ current_user.bank_sort_code }}</p></div>
+                {% endif %}
+                {% if current_user.bank_iban %}
+                <div><p class="text-xs text-gray-400">IBAN</p><p class="font-medium text-gray-900 dark:text-white font-mono">{{ current_user.bank_iban }}</p></div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="px-8 py-4 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800">
+            <p class="text-sm text-amber-700 dark:text-amber-400">
+                <a href="{{ url_for('settings.index') }}#bank-details" class="font-semibold hover:underline">Add your bank details in Settings</a>
+                — they'll appear here on all invoices sent to customers.
+            </p>
+        </div>
+        {% endif %}
+
+        {% if invoice.notes %}
+        <div class="px-8 py-4 border-t border-gray-200 dark:border-gray-700">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p>
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ invoice.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

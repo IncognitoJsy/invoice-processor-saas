@@ -46,6 +46,20 @@ class User(db.Model, UserMixin):
     trade_type = db.Column(db.String(50))
     country = db.Column(db.String(50))
 
+    # Bank / payment details (full platform mode)
+    bank_name = db.Column(db.String(100))
+    bank_account_name = db.Column(db.String(100))
+    bank_account_number = db.Column(db.String(50))
+    bank_sort_code = db.Column(db.String(20))
+    bank_iban = db.Column(db.String(50))
+    invoice_prefix = db.Column(db.String(10), default='INV')
+    quote_prefix = db.Column(db.String(10), default='QUO')
+    next_invoice_number = db.Column(db.Integer, default=1)
+    next_quote_number = db.Column(db.Integer, default=1)
+    default_payment_terms = db.Column(db.String(20), default='30')
+    invoice_notes = db.Column(db.Text)
+    default_invoice_mode = db.Column(db.String(20), default='itemised')
+
     # Tax / GST / VAT
     tax_registered = db.Column(db.Boolean, default=False)
     tax_number = db.Column(db.String(100))
