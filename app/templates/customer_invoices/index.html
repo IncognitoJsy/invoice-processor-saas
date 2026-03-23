@@ -2,11 +2,39 @@
 {% block title %}Customer Invoices - GoZappify{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center justify-between mb-8">
+
+    <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Customer Invoices</h1>
-            <p class="text-gray-500 dark:text-gray-400 mt-1">Invoices sent to your customers</p>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Manage invoices sent to your customers</p>
         </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+        {% set tabs = [
+            ('open', 'Open', counts.open),
+            ('outstanding', 'Outstanding', counts.outstanding),
+            ('paid', 'Paid', counts.paid),
+            ('void', 'Void', counts.void),
+        ] %}
+        {% for tab_key, tab_label, tab_count in tabs %}
+        <a href="{{ url_for('customer_invoices.index', tab=tab_key) }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2
+               {% if tab == tab_key %}bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm
+               {% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+            {{ tab_label }}
+            {% if tab_count > 0 %}
+            <span class="px-1.5 py-0.5 rounded-full text-xs font-bold
+                {% if tab == tab_key %}
+                    {% if tab_key == 'outstanding' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                    {% else %}bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400{% endif %}
+                {% else %}bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300{% endif %}">
+                {{ tab_count }}
+            </span>
+            {% endif %}
+        </a>
+        {% endfor %}
     </div>
 
     {% if invoices %}
@@ -20,53 +48,162 @@
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">Due</th>
                     <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-3"></th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for inv in invoices %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
-                    <td class="px-6 py-4">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition {% if inv.is_overdue %}bg-red-50/30 dark:bg-red-900/10{% endif %}">
+                    <td class="px-6 py-4 cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         <p class="font-semibold text-gray-900 dark:text-white font-mono">{{ inv.invoice_number }}</p>
                         <p class="text-xs text-gray-400">{{ inv.invoice_mode|title }}</p>
                     </td>
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4 cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         <p class="font-medium text-gray-900 dark:text-white">{{ inv.customer.display_name }}</p>
+                        {% if inv.customer.email %}<p class="text-xs text-gray-400">{{ inv.customer.email }}</p>{% endif %}
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         {{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}
                     </td>
-                    <td class="px-6 py-4 text-sm hidden md:table-cell {% if inv.is_overdue %}text-red-600 dark:text-red-400 font-medium{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-                        {{ inv.due_date.strftime('%d %b %Y') if inv.due_date else '—' }}
-                        {% if inv.is_overdue %}<span class="ml-1 text-xs">({{ inv.days_overdue }}d overdue)</span>{% endif %}
+                    <td class="px-6 py-4 text-sm hidden md:table-cell cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
+                        {% if inv.due_date %}
+                            {% if inv.is_overdue %}
+                            <span class="text-red-600 dark:text-red-400 font-semibold">
+                                {{ inv.due_date.strftime('%d %b %Y') }}
+                                <span class="block text-xs">{{ inv.days_overdue }}d overdue</span>
+                            </span>
+                            {% else %}
+                            <span class="text-gray-500 dark:text-gray-400">
+                                {{ inv.due_date.strftime('%d %b %Y') }}
+                                {% set days_left = (inv.due_date - now).days %}
+                                {% if days_left <= 7 %}
+                                <span class="block text-xs text-amber-600 dark:text-amber-400">Due in {{ days_left }}d</span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        {% else %}—{% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right font-semibold text-gray-900 dark:text-white">
+                    <td class="px-6 py-4 text-right font-semibold text-gray-900 dark:text-white cursor-pointer font-mono" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         £{{ "%.2f"|format(inv.total or 0) }}
                     </td>
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4 cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
                             {% if inv.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
                             {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
                             {% elif inv.status == 'overdue' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                            {% elif inv.status == 'void' %}bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400
                             {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
                             {{ inv.status|title }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 text-right">
-                        <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium">View →</a>
+                    <!-- Actions -->
+                    <td class="px-6 py-4 text-right" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                               class="px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition">
+                                View/Edit
+                            </a>
+                            <!-- Dropdown -->
+                            <div class="relative" x-data="{ open: false }">
+                                <button @click="open = !open"
+                                        class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                                <div x-show="open"
+                                     x-cloak
+                                     @click.away="open = false"
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="transform opacity-0 scale-95"
+                                     x-transition:enter-end="transform opacity-100 scale-100"
+                                     class="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+
+                                    <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                                       class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                        View/Edit
+                                    </a>
+
+                                    <button onclick="window.print()"
+                                            class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                                        Print
+                                    </button>
+
+                                    {% if inv.status in ['open', 'sent', 'overdue'] %}
+                                    <form action="{{ url_for('customer_invoices.mark_sent', invoice_id=inv.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                            Send
+                                        </button>
+                                    </form>
+                                    {% endif %}
+
+                                    {% if inv.status in ['sent', 'overdue'] %}
+                                    <form action="{{ url_for('customer_invoices.send_reminder', invoice_id=inv.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 w-full text-left">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                            Send Reminder
+                                        </button>
+                                    </form>
+
+                                    <form action="{{ url_for('customer_invoices.mark_paid', invoice_id=inv.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            Receive Payment
+                                        </button>
+                                    </form>
+                                    {% endif %}
+
+                                    {% if inv.status != 'void' and inv.status != 'paid' %}
+                                    <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+                                    <form action="{{ url_for('customer_invoices.void', invoice_id=inv.id) }}" method="POST"
+                                          onsubmit="return confirm('Void {{ inv.invoice_number }}? This cannot be undone.')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                                            Void
+                                        </button>
+                                    </form>
+                                    {% endif %}
+
+                                    <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+                                    <form action="{{ url_for('customer_invoices.delete', invoice_id=inv.id) }}" method="POST"
+                                          onsubmit="return confirm('Delete {{ inv.invoice_number }}? This cannot be undone.')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full text-left">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
     {% else %}
     <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-16 text-center">
         <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No customer invoices yet</h3>
-        <p class="text-gray-500 dark:text-gray-400">Process a supplier invoice and assign it to a customer to create your first invoice.</p>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            No {{ tab }} invoices
+        </h3>
+        <p class="text-gray-500 dark:text-gray-400">
+            {% if tab == 'open' %}Process a supplier invoice and assign it to a customer to get started.
+            {% elif tab == 'outstanding' %}No invoices are currently outstanding.
+            {% elif tab == 'paid' %}No paid invoices yet.
+            {% else %}No voided invoices.{% endif %}
+        </p>
     </div>
     {% endif %}
 </div>

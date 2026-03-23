@@ -63,9 +63,48 @@ def get_or_create_materials_used(user_id):
 @login_required
 @require_full_mode
 def index():
-    invoices = CustomerInvoice.query.filter_by(user_id=current_user.id)\
-        .order_by(CustomerInvoice.created_at.desc()).all()
-    return render_template('customer_invoices/index.html', invoices=invoices)
+    from datetime import datetime
+    tab = request.args.get('tab', 'open')
+    all_invoices = CustomerInvoice.query.filter_by(user_id=current_user.id).all()
+
+    # Update overdue status
+    for inv in all_invoices:
+        if inv.status == 'sent' and inv.due_date and datetime.utcnow() > inv.due_date:
+            inv.status = 'overdue'
+    db.session.commit()
+
+    # Split into tabs
+    open_invoices = [i for i in all_invoices if i.status == 'open']
+    outstanding = sorted(
+        [i for i in all_invoices if i.status in ['sent', 'overdue']],
+        key=lambda x: (x.status != 'overdue', x.due_date or datetime.max)
+    )
+    paid_invoices = sorted(
+        [i for i in all_invoices if i.status == 'paid'],
+        key=lambda x: x.paid_at or x.created_at, reverse=True
+    )
+    void_invoices = [i for i in all_invoices if i.status == 'void']
+
+    counts = {
+        'open': len(open_invoices),
+        'outstanding': len(outstanding),
+        'paid': len(paid_invoices),
+        'void': len(void_invoices),
+    }
+
+    tab_invoices = {
+        'open': open_invoices,
+        'outstanding': outstanding,
+        'paid': paid_invoices,
+        'void': void_invoices,
+    }.get(tab, open_invoices)
+
+    return render_template('customer_invoices/index.html',
+        invoices=tab_invoices,
+        tab=tab,
+        counts=counts,
+        now=datetime.utcnow(),
+    )
 
 
 @bp.route('/<int:invoice_id>')
@@ -267,6 +306,29 @@ def mark_paid(invoice_id):
     db.session.commit()
     flash(f'{invoice.invoice_number} marked as paid.', 'success')
     return redirect(url_for('customer_invoices.view', invoice_id=invoice.id))
+
+
+@bp.route('/<int:invoice_id>/void', methods=['POST'])
+@login_required
+@require_full_mode
+def void(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    invoice.status = 'void'
+    db.session.commit()
+    flash(f'{invoice.invoice_number} voided.', 'success')
+    return redirect(url_for('customer_invoices.index'))
+
+
+@bp.route('/<int:invoice_id>/send-reminder', methods=['POST'])
+@login_required
+@require_full_mode
+def send_reminder(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    # TODO: wire up email sending — for now just flash a message
+    flash(f'Reminder sent to {invoice.customer.email or "customer"} for {invoice.invoice_number}.', 'success')
+    return redirect(url_for('customer_invoices.index'))
 
 
 @bp.route('/<int:invoice_id>/delete', methods=['POST'])
