@@ -515,7 +515,9 @@ def preview(invoice_id):
     """Preview invoice as it will appear to client"""
     invoice = CustomerInvoice.query.filter_by(
         id=invoice_id, user_id=current_user.id).first_or_404()
-    return render_template('customer_invoices/preview.html', invoice=invoice)
+    auto_print = request.args.get('print') == '1'
+    return render_template('customer_invoices/preview.html',
+        invoice=invoice, auto_print=auto_print)
 
 
 @bp.route('/<int:invoice_id>/void', methods=['POST'])

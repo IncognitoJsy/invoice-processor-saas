@@ -227,11 +227,11 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                         Preview & Send
                                     </a>
 
-                                    <button onclick="window.print()"
-                                            class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                    <a href="/customer-invoices/api/{{ inv.id }}/preview?print=1" target="_blank"
+                                       class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                                         Print
-                                    </button>
+                                    </a>
 
                                     {% if inv.status in ['open', 'sent', 'overdue'] %}
                                     <form action="{{ url_for('customer_invoices.mark_sent', invoice_id=inv.id) }}" method="POST">
@@ -244,7 +244,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                     {% endif %}
 
                                     {% if inv.status in ['open', 'sent', 'overdue'] %}
-                                    <button onclick="openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
+                                    <button onclick="event.stopPropagation(); openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
                                             class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         Receive Payment
