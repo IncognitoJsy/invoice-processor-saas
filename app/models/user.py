@@ -41,6 +41,19 @@ class User(db.Model, UserMixin):
     tour_completed = db.Column(db.Boolean, default=False)
     company_name = db.Column(db.String(255))
     default_markup = db.Column(db.Float, default=50.0)
+    # Platform mode & trade (multi-trade expansion)
+    platform_mode = db.Column(db.String(20), default='sync')  # sync, full, both
+    trade_type = db.Column(db.String(50))
+    country = db.Column(db.String(50))
+
+    # Tax / GST / VAT
+    tax_registered = db.Column(db.Boolean, default=False)
+    tax_number = db.Column(db.String(100))
+    tax_type = db.Column(db.String(10))
+    tax_rate = db.Column(db.Float, default=0.0)
+    tax_registered_from = db.Column(db.DateTime)
+
+
     
     # Email notifications
     trial_reminder_sent = db.Column(db.Boolean, default=False)
