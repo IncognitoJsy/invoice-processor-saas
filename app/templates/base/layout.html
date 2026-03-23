@@ -180,6 +180,9 @@
                     <a href="/products" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'products' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Products
                     </a>
+                    <a href="/customer-invoices" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'customer_invoices' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                        My Invoices
+                    </a>
                     <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Queue
                     </a>

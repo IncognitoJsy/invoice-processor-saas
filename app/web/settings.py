@@ -215,3 +215,20 @@ def get_profile():
         'plan': current_user.subscription_plan,
         'plan_display': current_user.plan_display_name
     })
+
+
+@bp.route('/update-bank-details', methods=['POST'])
+@login_required
+def update_bank_details():
+    """Update bank and payment details"""
+    current_user.bank_name = request.form.get('bank_name', '').strip() or None
+    current_user.bank_account_name = request.form.get('bank_account_name', '').strip() or None
+    current_user.bank_account_number = request.form.get('bank_account_number', '').strip() or None
+    current_user.bank_sort_code = request.form.get('bank_sort_code', '').strip() or None
+    current_user.bank_iban = request.form.get('bank_iban', '').strip() or None
+    current_user.default_payment_terms = request.form.get('default_payment_terms', '30')
+    current_user.default_invoice_mode = request.form.get('default_invoice_mode', 'itemised')
+    current_user.invoice_notes = request.form.get('invoice_notes', '').strip() or None
+    db.session.commit()
+    flash('Payment details updated successfully.', 'success')
+    return redirect(url_for('settings.index'))
