@@ -1,0 +1,148 @@
+{% extends "base/layout.html" %}
+{% block title %}Step 4: Location & Tax - GoZappify{% endblock %}
+{% block content %}
+<div class="min-h-[80vh] flex items-center justify-center py-12">
+    <div class="max-w-xl mx-auto px-4 w-full">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+            <!-- Progress -->
+            <div class="flex items-center justify-between mb-8">
+                <span class="text-sm text-gray-500 dark:text-gray-400">Step 4 of 5</span>
+                <div class="flex gap-2">
+                    <div class="w-8 h-2 bg-primary-600 rounded-full"></div>
+                    <div class="w-8 h-2 bg-primary-600 rounded-full"></div>
+                    <div class="w-8 h-2 bg-primary-600 rounded-full"></div>
+                    <div class="w-8 h-2 bg-primary-600 rounded-full"></div>
+                    <div class="w-8 h-2 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                </div>
+            </div>
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Location & tax</h1>
+                <p class="text-gray-600 dark:text-gray-300">Sets your currency, tax rates, and local supplier list</p>
+            </div>
+            <form action="{{ url_for('setup.save_tax') }}" method="POST" class="space-y-6">
+                <!-- Country -->
+                <div>
+                    <label for="country" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Where are you based?</label>
+                    <select id="country" name="country" onchange="countryChanged()"
+                            class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                        <option value="">Select your country / region</option>
+                        <option value="jersey" {% if current_user.country == 'jersey' %}selected{% endif %}>Jersey, Channel Islands</option>
+                        <option value="uk" {% if current_user.country == 'uk' %}selected{% endif %}>United Kingdom</option>
+                        <option value="ireland" {% if current_user.country == 'ireland' %}selected{% endif %}>Republic of Ireland</option>
+                        <option value="australia" {% if current_user.country == 'australia' %}selected{% endif %}>Australia</option>
+                        <option value="nz" {% if current_user.country == 'nz' %}selected{% endif %}>New Zealand</option>
+                        <option value="canada" {% if current_user.country == 'canada' %}selected{% endif %}>Canada</option>
+                        <option value="uae" {% if current_user.country == 'uae' %}selected{% endif %}>United Arab Emirates</option>
+                        <option value="other" {% if current_user.country == 'other' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+                <!-- Tax toggle -->
+                <div>
+                    <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer" id="tax-toggle-row" onclick="toggleTax()">
+                        <div>
+                            <p class="font-semibold text-gray-900 dark:text-white text-sm" id="tax-toggle-label">Are you registered for GST / VAT?</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Only enable if registered with your tax authority</p>
+                        </div>
+                        <div class="relative w-10 h-6 flex-shrink-0">
+                            <div class="absolute inset-0 rounded-full bg-gray-300 dark:bg-gray-600 transition-colors duration-200" id="toggle-track"></div>
+                            <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200" id="toggle-knob"></div>
+                        </div>
+                    </div>
+                    <input type="hidden" name="tax_registered" id="tax_registered" value="{{ 'true' if current_user.tax_registered else 'false' }}">
+                </div>
+                <!-- Tax fields (shown when registered) -->
+                <div id="tax-fields" class="space-y-4 {% if not current_user.tax_registered %}hidden{% endif %}">
+                    <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 space-y-4">
+                        <div>
+                            <label for="tax_number" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" id="tax-num-label">GST number</label>
+                            <input type="text" id="tax_number" name="tax_number" value="{{ current_user.tax_number or '' }}"
+                                   placeholder="e.g. GB123456789"
+                                   class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-600 dark:text-white transition">
+                        </div>
+                        <div>
+                            <label for="tax_rate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tax rate (%)</label>
+                            <input type="number" id="tax_rate" name="tax_rate" value="{{ current_user.tax_rate or 5 }}"
+                                   min="0" max="30" step="0.1"
+                                   class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-600 dark:text-white transition">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="tax-rate-hint">Jersey GST is 5%</p>
+                        </div>
+                        <div>
+                            <label for="tax_registered_from" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registered from date</label>
+                            <input type="date" id="tax_registered_from" name="tax_registered_from"
+                                   value="{{ current_user.tax_registered_from.strftime('%Y-%m-%d') if current_user.tax_registered_from else '' }}"
+                                   class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-600 dark:text-white transition">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Tax only applies to documents from this date onwards</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-between pt-2">
+                    <a href="{{ url_for('setup.step', step=3) }}" class="px-6 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-medium transition">← Back</a>
+                    <button type="submit" class="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition shadow-lg shadow-primary-600/25">Continue →</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const countryData = {
+    jersey:    { rate: 5,  hint: 'Jersey GST is 5%',                        label: 'Are you registered for GST?',      num: 'GST number' },
+    uk:        { rate: 20, hint: 'UK standard VAT is 20%',                   label: 'Are you registered for VAT?',      num: 'VAT number' },
+    ireland:   { rate: 23, hint: 'Irish standard VAT is 23%',                label: 'Are you registered for VAT?',      num: 'VAT number' },
+    australia: { rate: 10, hint: 'Australian GST is 10%',                    label: 'Are you registered for GST?',      num: 'ABN / GST number' },
+    nz:        { rate: 15, hint: 'NZ GST is 15%',                            label: 'Are you registered for GST?',      num: 'GST number' },
+    canada:    { rate: 5,  hint: 'Canadian GST is 5% (HST varies by province)', label: 'Are you registered for GST/HST?', num: 'GST/HST number' },
+    uae:       { rate: 5,  hint: 'UAE VAT is 5%',                            label: 'Are you registered for VAT?',      num: 'TRN number' },
+};
+
+let taxOn = {{ 'true' if current_user.tax_registered else 'false' }};
+
+function updateToggleUI() {
+    const track = document.getElementById('toggle-track');
+    const knob = document.getElementById('toggle-knob');
+    const row = document.getElementById('tax-toggle-row');
+    if (taxOn) {
+        track.classList.add('bg-primary-600');
+        track.classList.remove('bg-gray-300', 'dark:bg-gray-600');
+        knob.style.transform = 'translateX(16px)';
+        row.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+        row.classList.remove('border-gray-200', 'dark:border-gray-600');
+        document.getElementById('tax-fields').classList.remove('hidden');
+    } else {
+        track.classList.remove('bg-primary-600');
+        track.classList.add('bg-gray-300');
+        knob.style.transform = 'translateX(0)';
+        row.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+        row.classList.add('border-gray-200', 'dark:border-gray-600');
+        document.getElementById('tax-fields').classList.add('hidden');
+    }
+    document.getElementById('tax_registered').value = taxOn ? 'true' : 'false';
+}
+
+function toggleTax() {
+    taxOn = !taxOn;
+    updateToggleUI();
+}
+
+function countryChanged() {
+    const v = document.getElementById('country').value;
+    const d = countryData[v];
+    if (d) {
+        document.getElementById('tax_rate').value = d.rate;
+        document.getElementById('tax-rate-hint').textContent = d.hint;
+        document.getElementById('tax-toggle-label').textContent = d.label;
+        document.getElementById('tax-num-label').textContent = d.num;
+    }
+}
+
+updateToggleUI();
+</script>
+{% endblock %}
