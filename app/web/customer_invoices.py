@@ -372,6 +372,51 @@ def bulk_payment():
     return jsonify({'success': True, 'paid_count': paid_count})
 
 
+@bp.route('/<int:invoice_id>/reorder-lines', methods=['POST'])
+@login_required
+@require_full_mode
+def reorder_lines(invoice_id):
+    """Update sort order of lines after drag and drop"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    line_ids = data.get('line_ids', [])
+    for i, line_id in enumerate(line_ids):
+        line = CustomerInvoiceLine.query.filter_by(
+            id=line_id, customer_invoice_id=invoice_id).first()
+        if line:
+            line.sort_order = i
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/<int:invoice_id>/update-line/<int:line_id>', methods=['POST'])
+@login_required
+@require_full_mode
+def update_line(invoice_id, line_id):
+    """Update quantity and/or unit price on an existing line"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    if invoice.status != 'open':
+        return jsonify({'success': False, 'error': 'Can only edit open invoices'}), 400
+    line = CustomerInvoiceLine.query.filter_by(
+        id=line_id, customer_invoice_id=invoice_id).first_or_404()
+    data = request.get_json()
+    if 'quantity' in data:
+        line.quantity = float(data['quantity'] or 0)
+    if 'unit_price' in data:
+        line.unit_price = float(data['unit_price'] or 0)
+    line.line_total = round(line.quantity * line.unit_price, 2)
+    invoice.recalculate_totals()
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'line_total': line.line_total,
+        'invoice_total': invoice.total,
+        'invoice_subtotal': invoice.subtotal,
+    })
+
+
 @bp.route('/<int:invoice_id>/update-due-date', methods=['POST'])
 @login_required
 @require_full_mode

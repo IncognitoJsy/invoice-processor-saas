@@ -112,15 +112,45 @@
                         {% endif %}
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700" id="sortable-lines">
                     {% for line in invoice.lines %}
-                    <tr id="line-{{ line.id }}">
-                        <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">{{ line.description }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 text-right">{{ line.quantity }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 text-right font-mono">£{{ "%.2f"|format(line.unit_price or 0) }}</td>
-                        <td class="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white text-right font-mono">£{{ "%.2f"|format(line.line_total or 0) }}</td>
+                    <tr id="line-{{ line.id }}" data-line-id="{{ line.id }}" class="{% if invoice.status == 'open' %}cursor-grab active:cursor-grabbing{% endif %}">
                         {% if invoice.status == 'open' %}
-                        <td class="px-4 py-4 text-right">
+                        <td class="pl-3 pr-1 py-4 w-6">
+                            <div class="drag-handle text-gray-300 hover:text-gray-500 cursor-grab" title="Drag to reorder">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+                            </div>
+                        </td>
+                        {% endif %}
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ line.description }}</td>
+                        <td class="px-4 py-3 text-sm text-right">
+                            {% if invoice.status == 'open' %}
+                            <input type="number" value="{{ line.quantity }}" min="0.01" step="0.01"
+                                   class="w-20 px-2 py-1 text-right border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-gray-700 dark:text-white transition"
+                                   onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'quantity', this.value)"
+                                   onclick="this.select()">
+                            {% else %}
+                            {{ line.quantity }}
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right font-mono">
+                            {% if invoice.status == 'open' %}
+                            <div class="flex items-center justify-end gap-1">
+                                <span class="text-gray-400">£</span>
+                                <input type="number" value="{{ "%.2f"|format(line.unit_price or 0) }}" min="0" step="0.01"
+                                       class="w-24 px-2 py-1 text-right border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-gray-700 dark:text-white transition"
+                                       onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'unit_price', this.value)"
+                                       onclick="this.select()">
+                            </div>
+                            {% else %}
+                            £{{ "%.2f"|format(line.unit_price or 0) }}
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-right font-mono" id="line-total-{{ line.id }}">
+                            £{{ "%.2f"|format(line.line_total or 0) }}
+                        </td>
+                        {% if invoice.status == 'open' %}
+                        <td class="px-3 py-3 text-right">
                             <button onclick="deleteLine({{ line.id }}, {{ invoice.id }})" class="text-gray-300 hover:text-red-500 transition">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
@@ -348,5 +378,74 @@ async function deleteLine(lineId, invoiceId) {
 document.getElementById("payment-modal").addEventListener("click", (e) => {
     if (e.target.id === "payment-modal") closePaymentModal();
 });
+
+async function updateLine(lineId, invoiceId, field, value) {
+    const body = {};
+    body[field] = parseFloat(value) || 0;
+    const res = await fetch("/customer-invoices/" + invoiceId + "/update-line/" + lineId, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) {
+        document.getElementById("line-total-" + lineId).textContent = "£" + parseFloat(data.line_total).toFixed(2);
+        // Update invoice totals
+        const subtotalEl = document.querySelector("[id='total-subtotal']");
+        const totalEl = document.querySelector("[id='total-amount']");
+        if (subtotalEl) subtotalEl.textContent = "£" + parseFloat(data.invoice_subtotal).toFixed(2);
+        if (totalEl) totalEl.textContent = "£" + parseFloat(data.invoice_total).toFixed(2);
+    }
+}
+
+// Drag and drop reordering using native HTML5 drag
+(function() {
+    const tbody = document.getElementById("sortable-lines");
+    if (!tbody) return;
+
+    let dragging = null;
+
+    tbody.querySelectorAll("tr[data-line-id]").forEach(row => {
+        row.setAttribute("draggable", "true");
+
+        row.addEventListener("dragstart", (e) => {
+            dragging = row;
+            row.style.opacity = "0.4";
+            e.dataTransfer.effectAllowed = "move";
+        });
+
+        row.addEventListener("dragend", () => {
+            row.style.opacity = "1";
+            dragging = null;
+            // Save new order
+            const ids = [...tbody.querySelectorAll("tr[data-line-id]")].map(r => parseInt(r.dataset.lineId));
+            const invoiceId = 0;  // replaced below
+            saveLineOrder(ids);
+        });
+
+        row.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (dragging && dragging !== row) {
+                const rect = row.getBoundingClientRect();
+                const mid = rect.top + rect.height / 2;
+                if (e.clientY < mid) {
+                    tbody.insertBefore(dragging, row);
+                } else {
+                    tbody.insertBefore(dragging, row.nextSibling);
+                }
+            }
+        });
+    });
+
+    async function saveLineOrder(ids) {
+        // Get invoice id from URL
+        const invoiceId = window.location.pathname.split("/").filter(Boolean).pop();
+        await fetch("/customer-invoices/" + invoiceId + "/reorder-lines", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({line_ids: ids})
+        });
+    }
+})();
 </script>
 {% endblock %}

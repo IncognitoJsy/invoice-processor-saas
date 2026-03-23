@@ -27,7 +27,7 @@ class CustomerInvoice(db.Model):
 
     customer = db.relationship('Customer', backref=db.backref('invoices', lazy='dynamic'))
     lines = db.relationship('CustomerInvoiceLine', backref='invoice', lazy='dynamic',
-                            cascade='all, delete-orphan', order_by='CustomerInvoiceLine.id')
+                            cascade='all, delete-orphan', order_by='CustomerInvoiceLine.sort_order')
 
     PAYMENT_TERMS = {
         'receipt': 'Due on Receipt',
@@ -114,6 +114,7 @@ class CustomerInvoiceLine(db.Model):
     unit_price = db.Column(db.Float, default=0.0)
     line_total = db.Column(db.Float, default=0.0)
     line_type = db.Column(db.String(20), default='itemised')  # itemised, summary
+    sort_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
