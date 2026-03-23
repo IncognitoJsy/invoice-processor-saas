@@ -111,6 +111,7 @@
             
             <!-- Actions -->
             <form action="{{ url_for('setup.complete') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="flex flex-col gap-3">
                     <button type="submit" class="w-full px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-lg transition shadow-lg shadow-primary-600/25">
                         Go to Dashboard

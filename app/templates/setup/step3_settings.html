@@ -31,6 +31,7 @@
             
             <!-- Form -->
             <form action="{{ url_for('setup.save_settings') }}" method="POST" class="space-y-8">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <!-- Markup Section -->
                 <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6">
