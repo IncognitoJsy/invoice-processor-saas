@@ -512,8 +512,78 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
         )
         db.session.add(item)
     
+    # Sync items to product catalogue (full platform mode users)
+    if current_user.platform_mode in ['full', 'both']:
+        _sync_items_to_catalogue(current_user, items)
+
     db.session.commit()
     
     current_app.logger.info(f"✅ Saved invoice {invoice.id} with {len(items)} items to database")
     
     return invoice
+
+
+def _sync_items_to_catalogue(user, items):
+    """Sync processed invoice items to user's product catalogue.
+    Updates existing products with latest purchase price, creates new ones.
+    Never creates duplicates — matches on part_number first, then description.
+    """
+    try:
+        from app.models.product_service import ProductService
+        markup = float(user.default_markup or 50) / 100
+
+        for item_data in items:
+            part_number = (item_data.get('part_number') or '').strip()
+            description = (item_data.get('description') or '').strip()
+            cost = float(item_data.get('cost_per_item') or 0)
+
+            if not description or cost <= 0:
+                continue
+
+            # Try match on part number first, then description
+            product = None
+            if part_number:
+                product = ProductService.query.filter_by(
+                    user_id=user.id,
+                    sku=part_number
+                ).first()
+
+            if not product:
+                product = ProductService.query.filter(
+                    ProductService.user_id == user.id,
+                    ProductService.name.ilike(description)
+                ).first()
+
+            sale_price = round(cost * (1 + markup), 2)
+
+            if product:
+                # Update existing — keep sale price if user has customised it
+                # Only auto-update sale price if markup hasn't been overridden
+                old_cost = product.purchase_price or 0
+                product.purchase_price = cost
+                if old_cost > 0:
+                    old_sale = product.sale_price or 0
+                    old_implied_markup = (old_sale - old_cost) / old_cost if old_cost > 0 else markup
+                    if abs(old_implied_markup - markup) < 0.05:
+                        # Markup is still close to default — auto-update sale price
+                        product.sale_price = sale_price
+                else:
+                    product.sale_price = sale_price
+                if part_number and not product.sku:
+                    product.sku = part_number
+            else:
+                # Create new product
+                product = ProductService(
+                    user_id=user.id,
+                    name=description,
+                    sku=part_number or None,
+                    item_type='product',
+                    purchase_price=cost,
+                    sale_price=sale_price,
+                    is_active=True,
+                )
+                from app.extensions import db
+                db.session.add(product)
+
+    except Exception as e:
+        current_app.logger.error(f"Error syncing items to catalogue: {e}")
