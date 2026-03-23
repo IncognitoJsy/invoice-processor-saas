@@ -254,9 +254,7 @@ def _add_summary_line(customer_invoice, supplier_invoice):
     """Add a summary 'Materials Used' line"""
     materials_product = get_or_create_materials_used(current_user.id)
     total_selling = float(supplier_invoice.total_selling or 0)
-    supplier_ref = supplier_invoice.supplier_name or 'Supplier'
-    inv_num = supplier_invoice.invoice_number or ''
-    description = f"Materials Used — {supplier_ref}" + (f" ({inv_num})" if inv_num else "")
+    description = "Materials Used"
 
     # Check if there's already a summary line from this supplier invoice
     existing = CustomerInvoiceLine.query.filter_by(

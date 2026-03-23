@@ -63,7 +63,8 @@ function openPaymentModal(invoiceId, invoiceNumber, total) {
     document.getElementById('payment-memo').value = '';
     document.getElementById('payment-method').value = 'bank_transfer';
     document.getElementById('payment-amount-value').textContent = '£' + parseFloat(total || 0).toFixed(2);
-    document.getElementById('payment-amount-display').classList.remove('hidden');
+    const display = document.getElementById('payment-amount-display');
+    if (display) display.classList.remove('hidden');
     document.getElementById('payment-modal').classList.remove('hidden');
 }
 
@@ -199,9 +200,8 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                class="px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition">
                                 View/Edit
                             </a>
-                            <!-- Dropdown -->
                             <div class="relative" x-data="{ open: false }">
-                                <button @click="open = !open"
+                                <button @click.stop="open = !open"
                                         class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -213,15 +213,16 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                      x-transition:enter="transition ease-out duration-100"
                                      x-transition:enter-start="transform opacity-0 scale-95"
                                      x-transition:enter-end="transform opacity-100 scale-100"
-                                     class="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                                     class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-[100]"
+                                     style="min-width: 180px;">
 
                                     <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
                                        class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                        View/Edit
+                                        View / Edit
                                     </a>
 
-                                    <a href="/customer-invoices/api/{{ inv.id }}/preview"
+                                    <a href="/customer-invoices/api/{{ inv.id }}/preview" target="_blank"
                                        class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                         Preview & Send
@@ -234,17 +235,9 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                     </a>
 
                                     {% if inv.status in ['open', 'sent', 'overdue'] %}
-                                    <form action="{{ url_for('customer_invoices.mark_sent', invoice_id=inv.id) }}" method="POST">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                                            Send
-                                        </button>
-                                    </form>
-                                    {% endif %}
+                                    <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
 
-                                    {% if inv.status in ['open', 'sent', 'overdue'] %}
-                                    <button onclick="event.stopPropagation(); openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
+                                    <button @click="open = false; openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
                                             class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         Receive Payment
@@ -259,20 +252,12 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                             Send Reminder
                                         </button>
                                     </form>
-
-                                    <form action="{{ url_for('customer_invoices.mark_paid', invoice_id=inv.id) }}" method="POST">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                            Receive Payment
-                                        </button>
-                                    </form>
                                     {% endif %}
 
-                                    {% if inv.status != 'void' and inv.status != 'paid' %}
+                                    {% if inv.status not in ['void', 'paid'] %}
                                     <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
                                     <form action="{{ url_for('customer_invoices.void', invoice_id=inv.id) }}" method="POST"
-                                          onsubmit="return confirm('Void {{ inv.invoice_number }}? This cannot be undone.')">
+                                          onsubmit="return confirm('Void {{ inv.invoice_number }}?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -283,7 +268,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
 
                                     <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
                                     <form action="{{ url_for('customer_invoices.delete', invoice_id=inv.id) }}" method="POST"
-                                          onsubmit="return confirm('Delete {{ inv.invoice_number }}? This cannot be undone.')">
+                                          onsubmit="return confirm('Delete {{ inv.invoice_number }}?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full text-left">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
