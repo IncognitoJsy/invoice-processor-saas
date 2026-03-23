@@ -23,6 +23,6 @@ USER appuser
 EXPOSE 8000
 
 # Create tables then start gunicorn
-CMD python -c "from app import create_app; from app.extensions import db; app = create_app(); app.app_context().push(); db.create_all(); print('Tables created!')" && gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
+CMD python -m flask db upgrade && gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - --log-level debug wsgi:app
 
 # force rebuild Sun 22 Feb 2026 01:23:53 GMT
