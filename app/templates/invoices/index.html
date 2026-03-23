@@ -334,6 +334,9 @@ function escapeAttr(str) {
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#039;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const PLATFORM_MODE = '{{ platform_mode }}';
+const ALL_CUSTOMERS = {{ customers | tojson }};
+
 document.addEventListener('DOMContentLoaded', () => { loadInvoices(); checkAccountingStatus(); setupCustomerDropdown(); setupXeroCustomerDropdown(); });
 document.getElementById('search-input').addEventListener('input', debounce(applyFilters, 300));
 document.getElementById('supplier-filter').addEventListener('change', applyFilters);
