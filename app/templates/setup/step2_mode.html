@@ -27,6 +27,7 @@
             </div>
             <!-- Mode choices -->
             <form action="{{ url_for('setup.save_mode') }}" method="POST" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="space-y-3 mb-6">
                     <!-- Sync mode -->
                     <label class="block cursor-pointer">
