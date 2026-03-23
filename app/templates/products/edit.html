@@ -1,0 +1,75 @@
+{% extends "base/layout.html" %}
+{% block title %}{% if product %}Edit Item{% else %}New Item{% endif %} - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+        <a href="{{ url_for('products.index') }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium">← Back to Products & Services</a>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-2">{% if product %}Edit Item{% else %}New Item{% endif %}</h1>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8">
+        <form method="POST" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Name <span class="text-red-500">*</span></label>
+                    <input type="text" name="name" value="{{ product.name if product else '' }}" required
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">SKU / Part number</label>
+                    <input type="text" name="sku" value="{{ product.sku if product else '' }}"
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition font-mono">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Type</label>
+                    <select name="item_type" class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                        <option value="product" {% if product and product.item_type == 'product' %}selected{% endif %}>Product</option>
+                        <option value="service" {% if product and product.item_type == 'service' %}selected{% endif %}>Service</option>
+                        <option value="labour" {% if product and product.item_type == 'labour' %}selected{% endif %}>Labour</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Purchase price (£)</label>
+                    <input type="number" name="purchase_price" value="{{ product.purchase_price if product else '0' }}" step="0.01" min="0"
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sale price (£)</label>
+                    <input type="number" name="sale_price" value="{{ product.sale_price if product else '0' }}" step="0.01" min="0"
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unit of measure</label>
+                    <input type="text" name="unit_of_measure" value="{{ product.unit_of_measure if product else '' }}" placeholder="e.g. each, m, hr"
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
+                    <input type="text" name="category" value="{{ product.category if product else '' }}" placeholder="e.g. Materials, Labour"
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
+                    <textarea name="description" rows="2"
+                              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">{{ product.description if product else '' }}</textarea>
+                </div>
+                {% if current_user.tax_registered %}
+                <div class="col-span-2 flex items-center gap-3">
+                    <input type="checkbox" name="tax_applicable" id="tax_applicable" {% if product and product.tax_applicable %}checked{% endif %}
+                           class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500">
+                    <label for="tax_applicable" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Tax applicable ({{ current_user.tax_rate or 0 }}% {{ current_user.tax_type or 'tax' }})
+                    </label>
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex justify-between pt-2">
+                <a href="{{ url_for('products.index') }}" class="px-6 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 font-medium transition">Cancel</a>
+                <button type="submit" class="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition shadow-lg shadow-primary-600/25">
+                    {% if product %}Save Changes{% else %}Add Item{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
