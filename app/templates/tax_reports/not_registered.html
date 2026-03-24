@@ -1,0 +1,14 @@
+{% extends "base/layout.html" %}
+{% block title %}Tax Reports - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-16 text-center">
+    <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>
+    </div>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Tax Reports</h1>
+    <p class="text-gray-500 dark:text-gray-400 mb-6">You are not currently registered for VAT/GST. If your business has grown and you need to register, you can update this in Settings.</p>
+    <a href="{{ url_for('settings.index') }}" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition">
+        Go to Settings
+    </a>
+</div>
+{% endblock %}

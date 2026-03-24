@@ -475,7 +475,7 @@ class ClaudeInvoiceParser:
             self.logger.info(f"User markup settings: {user_markup_settings}")
             
             # Store markup settings for use in transform
-            self.user_markup_settings = user_markup_settings or {'is_admin': False, 'default_markup': 50.0}
+            self.user_markup_settings = user_markup_settings or {'is_admin': False, 'default_markup': 50.0, 'tax_registered': False, 'tax_rate': 0.0}
             
             # Determine file type and media type
             file_ext = os.path.splitext(pdf_path)[1].lower()
@@ -995,7 +995,11 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         is_admin = self.user_markup_settings.get('is_admin', False)
         user_default_markup = self.user_markup_settings.get('default_markup', 50.0) / 100  # Convert to decimal
         
-        self.logger.info(f"Transform items: is_admin={is_admin}, user_markup={user_default_markup*100}%")
+        self.logger.info(
+            f"Transform items: is_admin={is_admin}, user_markup={user_default_markup*100}%, "
+            f"tax_registered={self.user_markup_settings.get('tax_registered', False)}, "
+            f"tax_rate={self.user_markup_settings.get('tax_rate', 0)}%"
+        )
         
         # Load known products for price comparison
         known_products = self._load_known_products()
@@ -1064,9 +1068,30 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 else:
                     # Regular users use their flat markup setting
                     markup = user_default_markup
-                
-                # Calculate selling price using markup rules
-                calculated_selling_price = round(cost_per_item * (1 + markup), 2)
+
+                # ── TAX-INCLUSIVE COST FOR NON-REGISTERED USERS ──────────────
+                # If user is NOT tax/VAT/GST registered they cannot reclaim
+                # input tax, so their real cost is tax-inclusive.
+                # We must apply markup on the tax-inclusive cost so their
+                # margin is protected.
+                # If user IS tax registered, they reclaim input tax so cost
+                # remains ex-tax (already correct).
+                tax_registered = self.user_markup_settings.get('tax_registered', False)
+                supplier_tax_rate = self.user_markup_settings.get('tax_rate', 0.0)
+
+                if not tax_registered and supplier_tax_rate > 0:
+                    # Cost they actually pay = ex-tax cost + irrecoverable tax
+                    effective_cost = round(cost_per_item * (1 + supplier_tax_rate / 100), 2)
+                    self.logger.info(
+                        f"💰 Non-registered user: cost_per_item £{cost_per_item:.2f} "
+                        f"+ {supplier_tax_rate}% tax = effective cost £{effective_cost:.2f}"
+                    )
+                else:
+                    # Tax registered — markup on ex-tax cost (they reclaim input tax)
+                    effective_cost = cost_per_item
+
+                # Calculate selling price using markup rules on effective cost
+                calculated_selling_price = round(effective_cost * (1 + markup), 2)
                 
                 # PRICE COMPARISON: Check if accounting software has higher price
                 final_selling_price = calculated_selling_price
@@ -1085,7 +1110,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                             source = known_products[part_upper].get('source', 'accounting')
                             self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f} ({int(actual_markup * 100)}% markup)")
                 
-                profit_per_item = round(final_selling_price - cost_per_item, 2)
+                profit_per_item = round(final_selling_price - effective_cost, 2)
                 
                 # Track QB price if different from calculated
                 qb_price = None

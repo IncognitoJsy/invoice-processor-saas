@@ -132,7 +132,9 @@ def api_upload_single():
         # Get user markup settings
         user_markup_settings = {
             'is_admin': current_user.is_admin,
-            'default_markup': current_user.default_markup or 50.0
+            'default_markup': current_user.default_markup or 50.0,
+            'tax_registered': bool(current_user.tax_registered),
+            'tax_rate': float(current_user.tax_rate or 0),
         }
         
         filename = secure_filename(file.filename)
@@ -309,9 +311,11 @@ def api_upload():
         # Get user markup settings to pass to parser
         user_markup_settings = {
             'is_admin': current_user.is_admin,
-            'default_markup': current_user.default_markup or 50.0
+            'default_markup': current_user.default_markup or 50.0,
+            'tax_registered': bool(current_user.tax_registered),
+            'tax_rate': float(current_user.tax_rate or 0),
         }
-        current_app.logger.info(f"User markup settings: admin={user_markup_settings['is_admin']}, markup={user_markup_settings['default_markup']}%")
+        current_app.logger.info(f"User markup settings: admin={user_markup_settings['is_admin']}, markup={user_markup_settings['default_markup']}%, tax_registered={user_markup_settings['tax_registered']}")
         
         for file in files:
             if file and file.filename and allowed_file(file.filename):
@@ -487,7 +491,11 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
         confidence=invoice_data.get('confidence'),
         needs_review=invoice_data.get('needs_review', False),
         status='completed',
-        processed_at=datetime.utcnow()
+        processed_at=datetime.utcnow(),
+        supplier_tax_amount=float(invoice_data.get('tax_amount') or invoice_data.get('vat_amount') or invoice_data.get('gst_amount') or 0),
+        supplier_tax_rate=float(invoice_data.get('tax_rate') or invoice_data.get('vat_rate') or 0),
+        total_ex_tax=float(invoice_data.get('total_ex_tax') or invoice_data.get('subtotal') or total_cost or 0),
+        total_inc_tax=float(invoice_data.get('total_inc_tax') or invoice_data.get('total_inc_vat') or invoice_data.get('total_inc_gst') or total_cost or 0),
     )
     
     db.session.add(invoice)
