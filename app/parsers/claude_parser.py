@@ -1121,15 +1121,17 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 if known_products:
                     part_upper = item.get('part_number', '').upper().strip() if item.get('part_number') else ''
                     if part_upper and part_upper in known_products:
-                        existing_price = known_products[part_upper].get('sales_price', 0)
-                        if existing_price and existing_price > calculated_selling_price:
-                            # Use the higher existing price from accounting software
-                            final_selling_price = round(existing_price, 2)
-                            # Calculate actual markup based on existing price
+                        # QB/Xero stores PER-UNIT price, calculated_selling_price is TOTAL
+                        # Compare on a per-unit basis
+                        existing_unit_price = known_products[part_upper].get('sales_price', 0)
+                        calculated_unit_price = round(calculated_selling_price / quantity, 4) if quantity > 0 else calculated_selling_price
+                        if existing_unit_price and existing_unit_price > calculated_unit_price:
+                            # Use the higher existing per-unit price × quantity
+                            final_selling_price = round(existing_unit_price * quantity, 2)
                             if cost_per_item > 0:
-                                actual_markup = (final_selling_price - cost_per_item) / cost_per_item
+                                actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
                             source = known_products[part_upper].get('source', 'accounting')
-                            self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f} ({int(actual_markup * 100)}% markup)")
+                            self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit × {quantity} = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
                 
                 profit_per_item = round(final_selling_price - effective_cost, 2)
                 
