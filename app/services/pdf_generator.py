@@ -52,10 +52,18 @@ def generate_invoice_pdf(invoice, user):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _brand(user):
-    raw = (getattr(user, 'invoice_colour', None) or DEFAULT_BRAND).lstrip('#')
-    if len(raw) == 3:
-        raw = ''.join(c*2 for c in raw)
-    return HexColor(f'#{raw}')
+    try:
+        raw = (getattr(user, 'invoice_colour', None) or DEFAULT_BRAND).strip().lstrip('#')
+        # Reject named colours like 'white', 'black' etc
+        if not all(c in '0123456789abcdefABCDEF' for c in raw):
+            raw = DEFAULT_BRAND.lstrip('#')
+        if len(raw) == 3:
+            raw = ''.join(c*2 for c in raw)
+        if len(raw) != 6:
+            raw = DEFAULT_BRAND.lstrip('#')
+        return HexColor(f'#{raw}')
+    except Exception:
+        return HexColor(DEFAULT_BRAND)
 
 def _lighten(colour, factor=0.93):
     r = int(colour.red * 255); g = int(colour.green * 255); b = int(colour.blue * 255)

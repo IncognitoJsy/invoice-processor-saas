@@ -1,5 +1,5 @@
 """Customer Invoice routes - full platform mode"""
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
@@ -556,6 +556,43 @@ def void(invoice_id):
     db.session.commit()
     flash(f'{invoice.invoice_number} voided.', 'success')
     return redirect(url_for('customer_invoices.index'))
+
+
+@bp.route('/<int:invoice_id>/send-email', methods=['POST'])
+@login_required
+@require_full_mode
+def send_email(invoice_id):
+    """Actually send invoice via connected email account"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+
+    if not invoice.customer.email:
+        if request.is_json:
+            return jsonify({'success': False, 'error': f'No email address for {invoice.customer.display_name}. Please add one first.'})
+        flash(f'Please add an email address for {invoice.customer.display_name} first.', 'error')
+        return redirect(url_for('customers.edit', customer_id=invoice.customer_id))
+
+    from app.services.email_sender import send_invoice_email
+    from app.services.pdf_generator import generate_invoice_pdf
+    try:
+        pdf_bytes = generate_invoice_pdf(invoice, current_user)
+    except Exception as e:
+        current_app.logger.warning(f"PDF generation failed, sending without attachment: {e}")
+        pdf_bytes = None
+
+    success, message = send_invoice_email(current_user, invoice, pdf_bytes=pdf_bytes)
+
+    if success:
+        invoice.status = 'sent'
+        invoice.sent_at = datetime.utcnow()
+        from app.extensions import db
+        db.session.commit()
+
+    if request.is_json:
+        return jsonify({'success': success, 'message': message})
+
+    flash(message, 'success' if success else 'error')
+    return redirect(url_for('customer_invoices.view', invoice_id=invoice_id))
 
 
 @bp.route('/<int:invoice_id>/send-reminder', methods=['POST'])
