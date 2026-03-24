@@ -509,6 +509,31 @@ def get_customers():
     })
 
 
+@bp.route('/api/<int:invoice_id>/pdf')
+@login_required
+@require_full_mode
+def download_pdf(invoice_id):
+    """Generate and download invoice as PDF"""
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    try:
+        from app.services.pdf_generator import generate_invoice_pdf
+        from flask import Response
+        pdf_bytes = generate_invoice_pdf(invoice, current_user)
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename="{invoice.invoice_number}.pdf"',
+                'Content-Type': 'application/pdf',
+            }
+        )
+    except Exception as e:
+        current_app.logger.error(f"PDF generation error: {e}")
+        flash('Error generating PDF. Please try again.', 'error')
+        return redirect(url_for('customer_invoices.view', invoice_id=invoice_id))
+
+
 @bp.route('/api/<int:invoice_id>/preview')
 @login_required
 @require_full_mode
