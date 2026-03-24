@@ -1,98 +1,6 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Billing - GoZappify
-        {% if current_user.platform_mode in ['full', 'both'] %}
-        <!-- Full Platform Plans -->
-        <div class="mt-10 mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">Full Platform Plans</h2>
-            <p class="text-gray-500 dark:text-gray-400 text-center mb-8">Invoicing, CRM &amp; AI processing — everything in one place</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-
-                <!-- Full Starter £39 -->
-                <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 {% if current_user.subscription_plan == 'full-starter' %}border-primary-500{% else %}border-gray-200 dark:border-gray-700{% endif %} p-6 relative">
-                    {% if current_user.subscription_plan == 'full-starter' %}
-                    <div class="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">CURRENT PLAN</span>
-                    </div>
-                    {% endif %}
-                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">Starter</h3>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For sole traders getting started</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-black text-gray-900 dark:text-white">£39</span>
-                        <span class="text-gray-400">/month</span>
-                    </div>
-                    <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>100 supplier invoices/month</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>CRM &amp; customer management</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>AI markup &amp; profit protection</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>PDF invoicing &amp; email sending</li>
-                    </ul>
-                    {% if current_user.subscription_plan == 'full-starter' %}
-                    <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
-                    {% else %}
-                    <div id="paypal-btn-full-starter" class="mt-2"></div>
-                    {% endif %}
-                </div>
-
-                <!-- Full Pro £79 -->
-                <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 {% if current_user.subscription_plan == 'full-pro' %}border-primary-500{% else %}border-primary-300 dark:border-primary-700{% endif %} p-6 relative">
-                    <div class="absolute -top-3 left-1/2 -translate-x-1/2">
-                        {% if current_user.subscription_plan == 'full-pro' %}
-                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">CURRENT PLAN</span>
-                        {% else %}
-                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</span>
-                        {% endif %}
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For busy contractors — unlimited everything</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-black text-gray-900 dark:text-white">£79</span>
-                        <span class="text-gray-400">/month</span>
-                    </div>
-                    <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><strong>Unlimited</strong> supplier invoices</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Everything in Starter</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Priority support</li>
-                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>New features first</li>
-                    </ul>
-                    {% if current_user.subscription_plan == 'full-pro' %}
-                    <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
-                    {% else %}
-                    <div id="paypal-btn-full-pro" class="mt-2"></div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <script>
-        // Full Platform PayPal buttons
-        {% if current_user.subscription_plan not in ['full-starter', 'full-pro'] %}
-        paypal.Buttons({
-            style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
-            createSubscription: function(data, actions) {
-                return actions.subscription.create({ plan_id: '{{ paypal_plan_full_starter }}' });
-            },
-            onApprove: function(data, actions) {
-                window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-starter&frequency=monthly';
-            }
-        }).render('#paypal-btn-full-starter');
-
-        paypal.Buttons({
-            style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
-            createSubscription: function(data, actions) {
-                return actions.subscription.create({ plan_id: '{{ paypal_plan_full_pro }}' });
-            },
-            onApprove: function(data, actions) {
-                window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-pro&frequency=monthly';
-            }
-        }).render('#paypal-btn-full-pro');
-        {% endif %}
-        </script>
-        {% endif %}
-
-{% endblock %}
+{% block title %}Billing - GoZappify{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
@@ -202,7 +110,8 @@
             <span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">Save 1 month</span>
         </div>
         
-        <!-- Pricing Cards -->
+        {% if current_user.platform_mode == 'sync' or current_user.platform_mode is none or current_user.platform_mode not in ['full'] %}
+        <!-- Pricing Cards (Sync Mode) -->
         <div class="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             
             <!-- Basic -->
@@ -372,4 +281,98 @@ function toggleBillingFrequency() {
     });
 }
 </script>
+        {% endif %}
+
+        {% if current_user.platform_mode in ['full', 'both'] %}
+        <!-- Full Platform Plans -->
+        <div class="mt-4 mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">Full Platform Plans</h2>
+            <p class="text-gray-500 dark:text-gray-400 text-center mb-8">Invoicing, CRM &amp; AI processing — everything in one place</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+
+                <!-- Full Starter £39 -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 {% if current_user.subscription_plan == 'full-starter' %}border-primary-500{% else %}border-gray-200 dark:border-gray-700{% endif %} p-6 relative">
+                    {% if current_user.subscription_plan == 'full-starter' %}
+                    <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">CURRENT PLAN</span>
+                    </div>
+                    {% endif %}
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">Starter</h3>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For sole traders getting started</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-black text-gray-900 dark:text-white">£39</span>
+                        <span class="text-gray-400">/month</span>
+                    </div>
+                    <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>100 supplier invoices/month</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>CRM &amp; customer management</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>AI markup &amp; profit protection</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>PDF invoicing &amp; email sending</li>
+                    </ul>
+                    {% if current_user.subscription_plan == 'full-starter' %}
+                    <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
+                    {% else %}
+                    <div id="paypal-btn-full-starter" class="mt-2"></div>
+                    {% endif %}
+                </div>
+
+                <!-- Full Pro £79 -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl border-2 {% if current_user.subscription_plan == 'full-pro' %}border-primary-500{% else %}border-primary-300 dark:border-primary-700{% endif %} p-6 relative">
+                    <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+                        {% if current_user.subscription_plan == 'full-pro' %}
+                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">CURRENT PLAN</span>
+                        {% else %}
+                        <span class="bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</span>
+                        {% endif %}
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For busy contractors — unlimited everything</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-black text-gray-900 dark:text-white">£79</span>
+                        <span class="text-gray-400">/month</span>
+                    </div>
+                    <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><strong>Unlimited</strong> supplier invoices</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Everything in Starter</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Priority support</li>
+                        <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>New features first</li>
+                    </ul>
+                    {% if current_user.subscription_plan == 'full-pro' %}
+                    <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
+                    {% else %}
+                    <div id="paypal-btn-full-pro" class="mt-2"></div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <script>
+        {% if current_user.subscription_plan not in ['full-starter', 'full-pro'] %}
+        if (typeof paypal !== 'undefined') {
+            paypal.Buttons({
+                style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
+                createSubscription: function(data, actions) {
+                    return actions.subscription.create({ plan_id: '{{ paypal_plan_full_starter }}' });
+                },
+                onApprove: function(data, actions) {
+                    window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-starter&frequency=monthly';
+                }
+            }).render('#paypal-btn-full-starter');
+
+            paypal.Buttons({
+                style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
+                createSubscription: function(data, actions) {
+                    return actions.subscription.create({ plan_id: '{{ paypal_plan_full_pro }}' });
+                },
+                onApprove: function(data, actions) {
+                    window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-pro&frequency=monthly';
+                }
+            }).render('#paypal-btn-full-pro');
+        }
+        {% endif %}
+        </script>
+        {% endif %}
+
 {% endblock %}
