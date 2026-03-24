@@ -218,10 +218,21 @@ def _build_classic(invoice, user, brand):
     light = _lighten(brand)
     story = []
 
+    # Build left column of header - logo + company name
+    left_col = []
+    logo = _get_logo_image(user)
+    if logo:
+        left_col.append(logo)
+        left_col.append(Spacer(1, 2*mm))
+    left_col.append(_p(user.company_name or 'Your Company', 16, 'white', True))
+    if user.trade_type:
+        left_col.append(_p(user.trade_type.title(), 9, '#bfdbfe'))
+    if user.tax_registered and user.tax_number:
+        left_col.append(_p(f'{user.tax_type or "Tax"} No: {user.tax_number}', 8, '#bfdbfe'))
+
     # Header band
     hdr = Table([[
-        [_p(user.company_name or 'Your Company', 16, 'white', True),
-         _p(user.trade_type.title() if user.trade_type else '', 9, '#bfdbfe')],
+        left_col,
         [_p(invoice.invoice_number, 22, 'white', True, TA_RIGHT),
          _p('INVOICE', 8, '#bfdbfe', align=TA_RIGHT),
          _p(invoice.status.upper(), 9, '#fbbf24', True, TA_RIGHT)],
@@ -272,9 +283,15 @@ def _build_minimal(invoice, user, brand):
     story = []
 
     # Simple top line — company left, invoice number right
+    left_minimal = []
+    logo = _get_logo_image(user)
+    if logo:
+        left_minimal.append(logo)
+        left_minimal.append(Spacer(1, 2*mm))
+    left_minimal.append(_p(user.company_name or 'Your Company', 18, '#111827', True))
+    left_minimal.append(_p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af'))
     top = Table([[
-        [_p(user.company_name or 'Your Company', 18, '#111827', True),
-         _p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af')],
+        left_minimal,
         [_p(invoice.invoice_number, 24, brand, True, TA_RIGHT),
          _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
@@ -348,8 +365,14 @@ def _build_bold(invoice, user, brand):
     ]))
     story.append(hdr)
 
+    bold_left = []
+    logo = _get_logo_image(user)
+    if logo:
+        bold_left.append(logo)
+        bold_left.append(Spacer(1, 2*mm))
+    bold_left.append(_p(user.company_name or 'Your Company', 11, 'white', True))
     sub = Table([[
-        _p(user.company_name or 'Your Company', 11, 'white', True),
+        bold_left,
         _p(invoice.status.upper(), 10, '#fbbf24', True, TA_RIGHT),
     ]], colWidths=[90*mm, 90*mm])
     sub.setStyle(TableStyle([
@@ -391,7 +414,12 @@ def _build_professional(invoice, user, brand):
     light = _lighten(brand, 0.95)
 
     # Header — company left sidebar, invoice details right
-    sidebar = [
+    sidebar = []
+    logo = _get_logo_image(user)
+    if logo:
+        sidebar.append(logo)
+        sidebar.append(Spacer(1, 2*mm))
+    sidebar += [
         _p(user.company_name or 'Your Company', 14, 'white', True),
         Spacer(1, 2*mm),
     ]
@@ -454,9 +482,15 @@ def _build_modern(invoice, user, brand):
     story = []
 
     # Top — no background, just text and accent line
+    left_modern = []
+    logo = _get_logo_image(user)
+    if logo:
+        left_modern.append(logo)
+        left_modern.append(Spacer(1, 2*mm))
+    left_modern.append(_p(user.company_name or 'Your Company', 16, '#111827', True))
+    left_modern.append(_p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af'))
     top = Table([[
-        [_p(user.company_name or 'Your Company', 16, '#111827', True),
-         _p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af')],
+        left_modern,
         [_p(invoice.invoice_number, 22, brand, True, TA_RIGHT),
          _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT),
          _p(f'Status: {invoice.status.upper()}', 8, '#6b7280', align=TA_RIGHT)],
@@ -504,7 +538,8 @@ def _build_branded(invoice, user, brand):
 
     # Large header
     hdr = Table([[
-        [_p(user.company_name or 'Your Company', 20, 'white', True),
+        [_get_logo_image(user) or _p('', 8, 'white'),
+         _p(user.company_name or 'Your Company', 20, 'white', True),
          _p(user.trade_type.title() if user.trade_type else '', 10, '#bfdbfe'),
          Spacer(1,3*mm),
          _p(f'Issue Date: {_date(invoice.issue_date)}', 8, '#e0f2fe'),
