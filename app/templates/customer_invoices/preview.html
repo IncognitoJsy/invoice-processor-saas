@@ -111,24 +111,54 @@
                 </div>
             </div>
 
-            <!-- Payment details -->
-            {% if current_user.bank_account_number or current_user.bank_iban %}
-            <div class="bg-gray-50 rounded-xl p-5 mb-4">
-                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Payment Details</p>
-                <div class="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-                    {% if current_user.bank_name %}<div><span class="text-gray-400">Bank: </span><span class="text-gray-700 font-medium">{{ current_user.bank_name }}</span></div>{% endif %}
-                    {% if current_user.bank_account_name %}<div><span class="text-gray-400">Account Name: </span><span class="text-gray-700 font-medium">{{ current_user.bank_account_name }}</span></div>{% endif %}
-                    {% if current_user.bank_account_number %}<div><span class="text-gray-400">Account No: </span><span class="text-gray-700 font-mono font-medium">{{ current_user.bank_account_number }}</span></div>{% endif %}
-                    {% if current_user.bank_sort_code %}<div><span class="text-gray-400">Sort Code: </span><span class="text-gray-700 font-mono font-medium">{{ current_user.bank_sort_code }}</span></div>{% endif %}
-                    {% if current_user.bank_iban %}<div class="col-span-2"><span class="text-gray-400">IBAN: </span><span class="text-gray-700 font-mono font-medium">{{ current_user.bank_iban }}</span></div>{% endif %}
-                </div>
-            </div>
-            {% endif %}
-
             {% if invoice.notes or current_user.invoice_notes %}
-            <p class="text-xs text-gray-400 mt-4">{{ invoice.notes or current_user.invoice_notes }}</p>
+            <p class="text-xs text-gray-400 mt-2 mb-6 text-center">{{ invoice.notes or current_user.invoice_notes }}</p>
             {% endif %}
         </div>
+
+        <!-- Bank details - centred at bottom -->
+        {% if current_user.bank_account_number or current_user.bank_iban %}
+        <div class="border-t-2 border-gray-900 mx-8 pt-6 pb-8 text-center">
+            <p class="text-xs font-black text-gray-900 uppercase tracking-widest mb-4">Payment Details</p>
+            <div class="flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm">
+                {% if current_user.bank_name %}
+                <div class="text-center">
+                    <p class="text-xs text-gray-400 uppercase tracking-wide">Bank</p>
+                    <p class="font-semibold text-gray-900">{{ current_user.bank_name }}</p>
+                </div>
+                {% endif %}
+                {% if current_user.bank_account_name %}
+                <div class="text-center">
+                    <p class="text-xs text-gray-400 uppercase tracking-wide">Account Name</p>
+                    <p class="font-semibold text-gray-900">{{ current_user.bank_account_name }}</p>
+                </div>
+                {% endif %}
+                {% if current_user.bank_account_number %}
+                <div class="text-center">
+                    <p class="text-xs text-gray-400 uppercase tracking-wide">Account Number</p>
+                    <p class="font-bold text-gray-900 font-mono text-base">{{ current_user.bank_account_number }}</p>
+                </div>
+                {% endif %}
+                {% if current_user.bank_sort_code %}
+                <div class="text-center">
+                    <p class="text-xs text-gray-400 uppercase tracking-wide">Sort Code</p>
+                    <p class="font-bold text-gray-900 font-mono text-base">{{ current_user.bank_sort_code }}</p>
+                </div>
+                {% endif %}
+                {% if current_user.bank_iban %}
+                <div class="text-center mt-2 w-full">
+                    <p class="text-xs text-gray-400 uppercase tracking-wide">IBAN</p>
+                    <p class="font-bold text-gray-900 font-mono text-base">{{ current_user.bank_iban }}</p>
+                </div>
+                {% endif %}
+            </div>
+            <p class="text-xs text-gray-400 mt-4">Please use <strong class="text-gray-600">{{ invoice.invoice_number }}</strong> as your payment reference</p>
+        </div>
+        {% else %}
+        <div class="mx-8 pb-6 text-center">
+            <p class="text-xs text-amber-600">Please add your bank details in Settings so customers know how to pay you.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
