@@ -1126,12 +1126,17 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                         existing_unit_price = known_products[part_upper].get('sales_price', 0)
                         calculated_unit_price = round(calculated_selling_price / quantity, 4) if quantity > 0 else calculated_selling_price
                         if existing_unit_price and existing_unit_price > calculated_unit_price:
-                            # Use the higher existing per-unit price × quantity
-                            final_selling_price = round(existing_unit_price * quantity, 2)
-                            if cost_per_item > 0:
-                                actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
-                            source = known_products[part_upper].get('source', 'accounting')
-                            self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit × {quantity} = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
+                            # Sanity check: if QB price is >10x calculated, it's stale/wrong data
+                            price_ratio = existing_unit_price / calculated_unit_price if calculated_unit_price > 0 else 999
+                            if price_ratio > 10:
+                                self.logger.warning(f"⚠️ Ignoring QB price for {part_upper} - {price_ratio:.0f}x higher than calculated (QB: £{existing_unit_price:.2f} vs calc: £{calculated_unit_price:.4f}) - likely stale QB data")
+                            else:
+                                # Use the higher existing per-unit price × quantity
+                                final_selling_price = round(existing_unit_price * quantity, 2)
+                                if cost_per_item > 0:
+                                    actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
+                                source = known_products[part_upper].get('source', 'accounting')
+                                self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit × {quantity} = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
                 
                 profit_per_item = round(final_selling_price - effective_cost, 2)
                 
