@@ -47,7 +47,7 @@ class User(db.Model, UserMixin):
     country = db.Column(db.String(50))
 
     # Bank / payment details (full platform mode)
-    logo_url = db.Column(db.String(500))
+    logo_url = db.Column(db.Text)
     invoice_colour = db.Column(db.String(20), default='#2563eb')
     invoice_template = db.Column(db.String(20), default='classic')
     bank_name = db.Column(db.String(100))
