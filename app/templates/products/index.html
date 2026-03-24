@@ -39,7 +39,7 @@
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">Type</th>
                     <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Buy</th>
                     <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sell</th>
-                    <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">Margin</th>
+                    <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">Markup</th>
                     <th class="px-6 py-3"></th>
                 </tr>
             </thead>
@@ -62,8 +62,8 @@
                     <td class="px-6 py-4 text-right text-sm text-gray-600 dark:text-gray-300 font-mono">£{{ "%.2f"|format(product.purchase_price or 0) }}</td>
                     <td class="px-6 py-4 text-right text-sm font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(product.sale_price or 0) }}</td>
                     <td class="px-6 py-4 text-right hidden md:table-cell">
-                        <span class="text-sm font-medium {% if product.margin_pct > 0 %}text-green-600 dark:text-green-400{% else %}text-gray-400{% endif %}">
-                            {{ product.margin_pct }}%
+                        <span class="text-sm font-medium {% if product.markup_pct > 0 %}text-green-600 dark:text-green-400{% else %}text-gray-400{% endif %}">
+                            {{ product.markup_pct }}%
                         </span>
                     </td>
                     <td class="px-6 py-4 text-right">
