@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('gmail_auth', __name__, url_prefix='/auth/gmail')
 
-# Read-only scope - we only need to read emails, not modify them
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# Read + Send scopes
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send']
 
 
 def _get_client_config():

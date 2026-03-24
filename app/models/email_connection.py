@@ -33,6 +33,16 @@ class EmailConnection(db.Model):
     imap_server = db.Column(db.String(255), nullable=True)
     imap_port = db.Column(db.Integer, nullable=True, default=993)
     use_ssl = db.Column(db.Boolean, nullable=True, default=True)
+
+    # SMTP fields for sending (IMAP users)
+    smtp_server = db.Column(db.String(255), nullable=True)
+    smtp_port = db.Column(db.Integer, nullable=True, default=587)
+    smtp_use_tls = db.Column(db.Boolean, nullable=True, default=True)
+
+    # SMTP fields for sending (IMAP users)
+    smtp_server = db.Column(db.String(255), nullable=True)
+    smtp_port = db.Column(db.Integer, nullable=True, default=587)
+    smtp_use_tls = db.Column(db.Boolean, nullable=True, default=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
