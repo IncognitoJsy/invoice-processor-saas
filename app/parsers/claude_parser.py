@@ -577,6 +577,9 @@ Extract all documents and return ONLY valid JSON with no markdown formatting, no
             "invoice_number": "EXACT invoice/quote/order number as shown on document - THIS IS CRITICAL",
             "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD, SARAH HOLT, MATT NORIS)",
             "total_net_amount": 2788.74,
+            "tax_rate": 5.0,
+            "tax_amount": 139.44,
+            "total_inc_tax": 2928.18,
             "items": [
                 {
                     "part_number": "exact part number from document (e.g. JFG320U, WMSSU83, 221-415, HV3PROAAUB075T2, MMT2SFWH)",
@@ -656,7 +659,12 @@ HANDLING UNKNOWN/NEW SUPPLIERS:
 42. Job reference may be labeled: Your Ref, Customer Ref, Order Ref, Job Ref, PO Number, Your Order, Reference, etc.
 43. For line items, map columns by their headers - do NOT assume a fixed column order
 44. If there is a subtotal/net total at the bottom, use it to verify your extraction (sum of line amounts should match)
-45. If you see VAT/GST amounts, extract the NET amount (before tax) as total_net_amount
+45. If you see VAT/GST/Tax amounts on the invoice:
+    - Extract the NET amount (before tax) as total_net_amount
+    - Extract the tax RATE as tax_rate (e.g. 5.0 for 5% GST, 20.0 for 20% VAT)
+    - Extract the tax AMOUNT as tax_amount (the actual £ amount of tax charged)
+    - Extract the GROSS total (inc tax) as total_inc_tax
+    - If no tax is shown, set tax_rate=0, tax_amount=0, total_inc_tax=total_net_amount
 46. For part numbers: extract exactly as shown, preserving dashes, slashes, and spaces
 47. For descriptions: capture the full text even if it wraps across multiple lines
 48. If a discount column exists, extract the discount percentage as a string
@@ -778,7 +786,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 
                 # Get supplier to determine pricing logic
                 supplier = invoice_data.get('supplier', 'Unknown')
-                items = self._transform_items(invoice_data.get('items', []), supplier)
+                inv_tax_rate = float(invoice_data.get('tax_rate') or 0)
+                items = self._transform_items(invoice_data.get('items', []), supplier, supplier_tax_rate=inv_tax_rate)
                 
                 if not items:
                     continue
@@ -795,12 +804,16 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'job_reference': invoice_data.get('job_reference'),
                     'supplier': supplier,
                     'invoice_number': invoice_number,
-                    'supplier_account_number': supplier_account_number,  # Same for all in consolidated
+                    'supplier_account_number': supplier_account_number,
                     'document_type': expected_document_type,
                     'method': 'claude_api',
                     'consolidated': True,
                     'order_number': idx + 1,
-                    'total_orders': len(invoices)
+                    'total_orders': len(invoices),
+                    'tax_rate': float(invoice_data.get('tax_rate') or 0),
+                    'tax_amount': float(invoice_data.get('tax_amount') or 0),
+                    'total_ex_tax': float(invoice_data.get('total_net_amount') or 0),
+                    'total_inc_tax': float(invoice_data.get('total_inc_tax') or 0),
                 })
                 
             except Exception as e:
@@ -839,7 +852,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         
         # Get supplier to determine pricing logic
         supplier = data.get('supplier', 'Unknown')
-        items = self._transform_items(data.get('items', []), supplier)
+        inv_tax_rate = float(data.get('tax_rate') or 0)
+        items = self._transform_items(data.get('items', []), supplier, supplier_tax_rate=inv_tax_rate)
         
         if not items:
             return {'success': False, 'error': 'No items found'}
@@ -863,7 +877,11 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             'supplier_account_number': supplier_account_number,
             'document_type': expected_document_type,
             'method': 'claude_api',
-            'consolidated': False
+            'consolidated': False,
+            'tax_rate': float(data.get('tax_rate') or 0),
+            'tax_amount': float(data.get('tax_amount') or 0),
+            'total_ex_tax': float(data.get('total_net_amount') or 0),
+            'total_inc_tax': float(data.get('total_inc_tax') or 0),
         }
     
     def _clean_invoice_number(self, invoice_number: str, supplier: str) -> str:
@@ -979,7 +997,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         else:
             return 0.70  # 70% markup
     
-    def _transform_items(self, items: List[Dict], supplier: str = 'Unknown') -> List[Dict]:
+    def _transform_items(self, items: List[Dict], supplier: str = 'Unknown', supplier_tax_rate: float = None) -> List[Dict]:
         """Transform items to our internal format with pricing
         
         Admin users: Use tiered markup based on discount percentage
@@ -1077,14 +1095,17 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 # If user IS tax registered, they reclaim input tax so cost
                 # remains ex-tax (already correct).
                 tax_registered = self.user_markup_settings.get('tax_registered', False)
-                supplier_tax_rate = self.user_markup_settings.get('tax_rate', 0.0)
+                # Use supplier tax rate from invoice extraction if available,
+                # otherwise fall back to user's country tax rate
+                invoice_tax_rate = supplier_tax_rate if supplier_tax_rate is not None else self.user_markup_settings.get('tax_rate', 0.0)
 
-                if not tax_registered and supplier_tax_rate > 0:
-                    # Cost they actually pay = ex-tax cost + irrecoverable tax
-                    effective_cost = round(cost_per_item * (1 + supplier_tax_rate / 100), 2)
+                if not tax_registered and invoice_tax_rate > 0:
+                    # Non-registered user cannot reclaim input tax
+                    # Their real cost = ex-tax cost + irrecoverable tax
+                    effective_cost = round(cost_per_item * (1 + invoice_tax_rate / 100), 2)
                     self.logger.info(
-                        f"💰 Non-registered user: cost_per_item £{cost_per_item:.2f} "
-                        f"+ {supplier_tax_rate}% tax = effective cost £{effective_cost:.2f}"
+                        f"💰 Non-registered user: cost £{cost_per_item:.2f} "
+                        f"+ {invoice_tax_rate}% supplier tax = effective cost £{effective_cost:.2f}"
                     )
                 else:
                     # Tax registered — markup on ex-tax cost (they reclaim input tax)
