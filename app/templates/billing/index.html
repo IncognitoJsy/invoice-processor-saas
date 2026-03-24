@@ -100,7 +100,8 @@
         
         <h2 class="text-xl font-bold text-gray-900 dark:text-white text-center mb-4">Choose Your Plan</h2>
         
-        <!-- Monthly / Annual Toggle -->
+        {% if current_user.platform_mode not in ['full'] %}
+        <!-- Monthly / Annual Toggle (Sync mode only) -->
         <div class="flex items-center justify-center gap-3 mb-8">
             <span id="label-monthly" class="text-sm font-semibold text-gray-900 dark:text-white">Monthly</span>
             <button id="billing-toggle" onclick="toggleBillingFrequency()" class="relative w-14 h-7 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors duration-200 focus:outline-none">
@@ -110,6 +111,8 @@
             <span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">Save 1 month</span>
         </div>
         
+        {% endif %}
+
         {% if current_user.platform_mode == 'sync' or current_user.platform_mode is none or current_user.platform_mode not in ['full'] %}
         <!-- Pricing Cards (Sync Mode) -->
         <div class="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
@@ -313,7 +316,7 @@ function toggleBillingFrequency() {
                     {% if current_user.subscription_plan == 'full-starter' %}
                     <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
                     {% else %}
-                    <div id="paypal-btn-full-starter" class="mt-2"></div>
+                    <a href="{{ url_for('billing.subscribe', plan='full-starter') }}" class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £39/month</a>
                     {% endif %}
                 </div>
 
@@ -342,37 +345,13 @@ function toggleBillingFrequency() {
                     {% if current_user.subscription_plan == 'full-pro' %}
                     <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
                     {% else %}
-                    <div id="paypal-btn-full-pro" class="mt-2"></div>
+                    <a href="{{ url_for('billing.subscribe', plan='full-pro') }}" class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £79/month</a>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        <script>
-        {% if current_user.subscription_plan not in ['full-starter', 'full-pro'] %}
-        if (typeof paypal !== 'undefined') {
-            paypal.Buttons({
-                style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
-                createSubscription: function(data, actions) {
-                    return actions.subscription.create({ plan_id: '{{ paypal_plan_full_starter }}' });
-                },
-                onApprove: function(data, actions) {
-                    window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-starter&frequency=monthly';
-                }
-            }).render('#paypal-btn-full-starter');
 
-            paypal.Buttons({
-                style: { shape: 'pill', color: 'blue', layout: 'vertical', label: 'subscribe' },
-                createSubscription: function(data, actions) {
-                    return actions.subscription.create({ plan_id: '{{ paypal_plan_full_pro }}' });
-                },
-                onApprove: function(data, actions) {
-                    window.location.href = '/billing/subscription/success?subscription_id=' + data.subscriptionID + '&plan=full-pro&frequency=monthly';
-                }
-            }).render('#paypal-btn-full-pro');
-        }
-        {% endif %}
-        </script>
         {% endif %}
 
 {% endblock %}
