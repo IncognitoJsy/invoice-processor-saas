@@ -470,6 +470,8 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
     avg_markup = None
     if total_cost > 0:
         avg_markup = ((total_selling - total_cost) / total_cost) * 100
+        # Cap at 999.99 to fit NUMERIC(5,2) column
+        avg_markup = min(avg_markup, 999.99)
     
     # Create invoice record
     invoice = Invoice(
