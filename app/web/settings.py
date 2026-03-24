@@ -217,6 +217,17 @@ def get_profile():
     })
 
 
+@bp.route('/update-invoice-style', methods=['POST'])
+@login_required
+def update_invoice_style():
+    """Update invoice template and colour"""
+    current_user.invoice_colour = request.form.get('invoice_colour', '#2563eb')
+    current_user.invoice_template = request.form.get('invoice_template', 'classic')
+    db.session.commit()
+    flash('Invoice style updated.', 'success')
+    return redirect(url_for('settings.index'))
+
+
 @bp.route('/update-bank-details', methods=['POST'])
 @login_required
 def update_bank_details():
