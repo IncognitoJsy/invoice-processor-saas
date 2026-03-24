@@ -7,6 +7,14 @@ from datetime import datetime
 import logging
 
 bp = Blueprint('customers', __name__, url_prefix='/customers')
+
+
+def _clean(val):
+    """Strip whitespace and return None for empty or literal 'None' strings"""
+    if val is None:
+        return None
+    val = str(val).strip()
+    return None if val.lower() in ('none', '') else val
 logger = logging.getLogger(__name__)
 
 
@@ -36,16 +44,16 @@ def new():
     if request.method == 'POST':
         customer = Customer(
             user_id=current_user.id,
-            name=request.form.get('name', '').strip(),
-            company_name=request.form.get('company_name', '').strip() or None,
-            email=request.form.get('email', '').strip() or None,
-            phone=request.form.get('phone', '').strip() or None,
-            address_line1=request.form.get('address_line1', '').strip() or None,
-            address_line2=request.form.get('address_line2', '').strip() or None,
-            city=request.form.get('city', '').strip() or None,
-            postcode=request.form.get('postcode', '').strip() or None,
-            country=request.form.get('country', '').strip() or None,
-            notes=request.form.get('notes', '').strip() or None,
+            name=_clean(request.form.get('name', '')),
+            company_name=_clean(request.form.get('company_name')),
+            email=_clean(request.form.get('email')),
+            phone=_clean(request.form.get('phone')),
+            address_line1=_clean(request.form.get('address_line1')),
+            address_line2=_clean(request.form.get('address_line2')),
+            city=_clean(request.form.get('city')),
+            postcode=_clean(request.form.get('postcode')),
+            country=_clean(request.form.get('country')),
+            notes=_clean(request.form.get('notes')),
         )
         db.session.add(customer)
         db.session.commit()
@@ -87,15 +95,15 @@ def view(customer_id):
 def edit(customer_id):
     customer = Customer.query.filter_by(id=customer_id, user_id=current_user.id).first_or_404()
     if request.method == 'POST':
-        customer.name = request.form.get('name', '').strip()
-        customer.company_name = request.form.get('company_name', '').strip() or None
-        customer.email = request.form.get('email', '').strip() or None
-        customer.phone = request.form.get('phone', '').strip() or None
-        customer.address_line1 = request.form.get('address_line1', '').strip() or None
-        customer.address_line2 = request.form.get('address_line2', '').strip() or None
-        customer.city = request.form.get('city', '').strip() or None
-        customer.postcode = request.form.get('postcode', '').strip() or None
-        customer.country = request.form.get('country', '').strip() or None
+        customer.name = _clean(request.form.get('name', ''))
+        customer.company_name = _clean(request.form.get('company_name'))
+        customer.email = _clean(request.form.get('email'))
+        customer.phone = _clean(request.form.get('phone'))
+        customer.address_line1 = _clean(request.form.get('address_line1'))
+        customer.address_line2 = _clean(request.form.get('address_line2'))
+        customer.city = _clean(request.form.get('city'))
+        customer.postcode = _clean(request.form.get('postcode'))
+        customer.country = _clean(request.form.get('country'))
         customer.notes = request.form.get('notes', '').strip() or None
         db.session.commit()
         flash('Customer updated successfully.', 'success')

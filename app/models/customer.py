@@ -27,7 +27,10 @@ class Customer(db.Model):
 
     @property
     def display_name(self):
-        return self.company_name or self.name
+        # Guard against literal string 'None' being stored
+        company = self.company_name if self.company_name and self.company_name.strip().lower() != 'none' else None
+        name = self.name if self.name and self.name.strip().lower() != 'none' else None
+        return company or name or self.email or 'Unknown'
 
     @property
     def full_address(self):
