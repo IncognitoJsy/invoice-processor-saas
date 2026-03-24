@@ -228,6 +228,85 @@ def update_invoice_style():
     return redirect(url_for('settings.index'))
 
 
+@bp.route('/upload-logo', methods=['POST'])
+@login_required
+def upload_logo():
+    """Upload company logo - stored as base64 data URL in database"""
+    import base64
+    from PIL import Image
+    import io
+
+    if 'logo' not in request.files:
+        flash('No file selected.', 'error')
+        return redirect(url_for('settings.index') + '#invoice-style')
+
+    file = request.files['logo']
+    if not file or file.filename == '':
+        flash('No file selected.', 'error')
+        return redirect(url_for('settings.index') + '#invoice-style')
+
+    # Validate file type
+    allowed = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in allowed:
+        flash('Please upload a PNG, JPG, GIF, WebP or SVG file.', 'error')
+        return redirect(url_for('settings.index') + '#invoice-style')
+
+    try:
+        file_data = file.read()
+
+        # For non-SVG images, resize to max 400px wide using Pillow
+        if ext != 'svg':
+            img = Image.open(io.BytesIO(file_data))
+            # Convert RGBA to RGB for JPEG
+            if img.mode in ('RGBA', 'P') and ext in ('jpg', 'jpeg'):
+                img = img.convert('RGB')
+            # Resize if too large
+            max_width = 400
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_size = (max_width, int(img.height * ratio))
+                img = img.resize(new_size, Image.LANCZOS)
+            # Save back to bytes
+            buf = io.BytesIO()
+            fmt = 'PNG' if ext == 'png' else 'JPEG' if ext in ('jpg', 'jpeg') else ext.upper()
+            img.save(buf, format=fmt, optimize=True)
+            file_data = buf.getvalue()
+
+        # Encode as base64 data URL
+        mime_types = {
+            'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+            'gif': 'image/gif', 'webp': 'image/webp', 'svg': 'image/svg+xml'
+        }
+        mime = mime_types.get(ext, 'image/png')
+        b64 = base64.b64encode(file_data).decode('utf-8')
+        data_url = f'data:{mime};base64,{b64}'
+
+        # Check size — max 500KB encoded
+        if len(data_url) > 700000:
+            flash('Logo file is too large. Please use an image under 200KB.', 'error')
+            return redirect(url_for('settings.index') + '#invoice-style')
+
+        current_user.logo_url = data_url
+        db.session.commit()
+        flash('Logo uploaded successfully.', 'success')
+
+    except Exception as e:
+        flash(f'Error processing image: {str(e)}', 'error')
+
+    return redirect(url_for('settings.index') + '#invoice-style')
+
+
+@bp.route('/remove-logo', methods=['POST'])
+@login_required
+def remove_logo():
+    """Remove company logo"""
+    current_user.logo_url = None
+    db.session.commit()
+    flash('Logo removed.', 'success')
+    return redirect(url_for('settings.index') + '#invoice-style')
+
+
 @bp.route('/update-bank-details', methods=['POST'])
 @login_required
 def update_bank_details():

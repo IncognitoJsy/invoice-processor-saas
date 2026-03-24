@@ -444,6 +444,42 @@ function togglePassword(fieldId) {
             </div>
             <form action="{{ url_for('settings.update_invoice_style') }}" method="POST" class="p-6">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <!-- Logo Upload -->
+                <div class="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Company Logo</label>
+                    <div class="flex items-start gap-6">
+                        <!-- Current logo preview -->
+                        <div class="flex-shrink-0">
+                            {% if current_user.logo_url %}
+                            <img src="{{ current_user.logo_url }}" alt="Company logo"
+                                 class="h-16 w-auto max-w-32 object-contain border border-gray-200 dark:border-gray-700 rounded-xl p-2 bg-white">
+                            {% else %}
+                            <div class="h-16 w-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex items-center justify-center bg-gray-50 dark:bg-gray-700/50">
+                                <svg class="w-8 h-8 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1">
+                            <form action="{{ url_for('settings.upload_logo') }}" method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:border-primary-400 transition">
+                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                                    <span class="text-sm text-gray-500 dark:text-gray-400" id="logo-filename">Click to upload logo (PNG, JPG, SVG)</span>
+                                    <input type="file" name="logo" accept=".png,.jpg,.jpeg,.gif,.webp,.svg" class="hidden"
+                                           onchange="document.getElementById('logo-filename').textContent = this.files[0]?.name || 'Click to upload logo'; this.form.submit()">
+                                </label>
+                            </form>
+                            <p class="text-xs text-gray-400 mt-2">Max 200KB. Recommended: PNG with transparent background, at least 200px wide.</p>
+                            {% if current_user.logo_url %}
+                            <form action="{{ url_for('settings.remove_logo') }}" method="POST" class="mt-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="text-xs text-red-500 hover:text-red-700 hover:underline">Remove logo</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Brand Colour</label>
                     <div class="flex items-center gap-4">

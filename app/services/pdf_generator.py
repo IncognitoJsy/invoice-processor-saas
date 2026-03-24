@@ -10,6 +10,31 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
                                  TableStyle, HRFlowable, KeepTogether)
 
 logger = logging.getLogger(__name__)
+
+
+def _get_logo_image(user):
+    """Return a ReportLab Image from user's base64 logo_url, or None"""
+    try:
+        if not user.logo_url or not user.logo_url.startswith('data:'):
+            return None
+        import base64
+        import io
+        from reportlab.platypus import Image as RLImage
+        # Strip data URL header
+        header, b64data = user.logo_url.split(',', 1)
+        img_bytes = base64.b64decode(b64data)
+        buf = io.BytesIO(img_bytes)
+        img = RLImage(buf)
+        # Scale to max 40mm wide, 15mm tall
+        max_w = 40 * mm
+        max_h = 15 * mm
+        ratio = min(max_w / img.drawWidth, max_h / img.drawHeight)
+        img.drawWidth = img.drawWidth * ratio
+        img.drawHeight = img.drawHeight * ratio
+        return img
+    except Exception as e:
+        logger.warning(f"Could not load logo: {e}")
+        return None
 DEFAULT_BRAND = '#2563eb'
 
 TEMPLATES = {
