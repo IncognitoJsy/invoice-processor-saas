@@ -442,9 +442,16 @@ function togglePassword(fieldId) {
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Invoice Style</h2>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose how your invoices look when sent to customers</p>
             </div>
-            <form action="{{ url_for('settings.update_invoice_style') }}" method="POST" class="p-6">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <!-- Logo Upload -->
+            </div>
+        </div>
+
+        <!-- Logo Upload Section (separate form) -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Company Logo</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Appears on invoices sent to customers</p>
+            </div>
+            <div class="p-6">
                 <div class="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Company Logo</label>
                     <div class="flex items-start gap-6">
@@ -492,6 +499,13 @@ function togglePassword(fieldId) {
                     </div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- Invoice Style Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+            <form action="{{ url_for('settings.update_invoice_style') }}" method="POST" class="p-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Brand Colour</label>
                     <div class="flex items-center gap-4">
