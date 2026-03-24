@@ -81,9 +81,16 @@ def _date(d):
     return d.strftime('%d %b %Y') if d else '—'
 
 def _p(text, size=9, colour='#374151', bold=False, align=TA_LEFT, leading=None):
+    if isinstance(colour, str):
+        try:
+            tc = HexColor(colour)
+        except Exception:
+            tc = HexColor('#374151')
+    else:
+        tc = colour  # already a HexColor/Color object
     return Paragraph(_esc(text), ParagraphStyle('_',
         fontSize=size,
-        textColor=HexColor(colour),
+        textColor=tc,
         fontName='Helvetica-Bold' if bold else 'Helvetica',
         alignment=align,
         leading=leading or size*1.4,
@@ -138,7 +145,7 @@ def _totals_block(invoice, user, brand, align=TA_RIGHT):
         ]
     rows.append([
         _p('TOTAL DUE', 13, '#111827', True, align),
-        _p(_fmt_money(invoice.total), 15, str(brand), True, align),
+        _p(_fmt_money(invoice.total), 15, brand, True, align),
     ])
     t = Table(rows, colWidths=[130*mm, 30*mm])
     t.setStyle(TableStyle([
@@ -243,7 +250,7 @@ def _build_minimal(invoice, user, brand):
     top = Table([[
         [_p(user.company_name or 'Your Company', 18, '#111827', True),
          _p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af')],
-        [_p(invoice.invoice_number, 24, str(brand), True, TA_RIGHT),
+        [_p(invoice.invoice_number, 24, brand, True, TA_RIGHT),
          _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     top.setStyle(TableStyle([
@@ -425,7 +432,7 @@ def _build_modern(invoice, user, brand):
     top = Table([[
         [_p(user.company_name or 'Your Company', 16, '#111827', True),
          _p(user.trade_type.title() if user.trade_type else '', 9, '#9ca3af')],
-        [_p(invoice.invoice_number, 22, str(brand), True, TA_RIGHT),
+        [_p(invoice.invoice_number, 22, brand, True, TA_RIGHT),
          _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT),
          _p(f'Status: {invoice.status.upper()}', 8, '#6b7280', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
@@ -446,7 +453,7 @@ def _build_modern(invoice, user, brand):
         Table([[
             [_label('Issue Date', TA_RIGHT), _p(_date(invoice.issue_date), 9, '#374151', True, TA_RIGHT),
              Spacer(1,2*mm),
-             _label('Due Date', TA_RIGHT), _p(_date(invoice.due_date), 9, str(brand), True, TA_RIGHT),
+             _label('Due Date', TA_RIGHT), _p(_date(invoice.due_date), 9, brand, True, TA_RIGHT),
              Spacer(1,1*mm),
              _p(invoice.payment_terms_label, 8, '#9ca3af', align=TA_RIGHT)]
         ]], colWidths=[85*mm]),

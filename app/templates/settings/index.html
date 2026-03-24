@@ -67,97 +67,6 @@
                 </div>
             </form>
         </div>
-        <!-- Invoice Style Section -->
-        {% if current_user.platform_mode in ['full', 'both'] %}
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6" id="invoice-style">
-            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Invoice Style</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose how your invoices look when sent to customers</p>
-            </div>
-            <form action="{{ url_for('settings.update_invoice_style') }}" method="POST" class="p-6">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <!-- Colour picker -->
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Brand Colour</label>
-                    <div class="flex items-center gap-4">
-                        <input type="color" name="invoice_colour"
-                               value="{{ current_user.invoice_colour or '#2563eb' }}"
-                               class="w-14 h-10 rounded-lg border border-gray-300 cursor-pointer">
-                        <div class="flex gap-2 flex-wrap">
-                            {% for colour in ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#be185d','#374151'] %}
-                            <button type="button" onclick="document.querySelector('[name=invoice_colour]').value='{{ colour }}'"
-                                    style="background:{{ colour }}"
-                                    class="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 shadow hover:scale-110 transition"></button>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">Used for headers, accents and totals on your invoices</p>
-                </div>
-
-                <!-- Template picker -->
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Invoice Template</label>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {% set templates = [
-                            ('classic', 'Classic', 'Coloured header band, clean table layout'),
-                            ('minimal', 'Minimal', 'Typography-focused, no background colour'),
-                            ('bold', 'Bold', 'Large header, strong contrast'),
-                            ('professional', 'Professional', 'Two-column with sidebar'),
-                            ('modern', 'Modern', 'Accent line, mostly white'),
-                            ('branded', 'Branded', 'Full colour header and footer'),
-                        ] %}
-                        {% for value, name, desc in templates %}
-                        <label class="relative cursor-pointer">
-                            <input type="radio" name="invoice_template" value="{{ value }}"
-                                   {% if (current_user.invoice_template or 'classic') == value %}checked{% endif %}
-                                   class="sr-only peer">
-                            <div class="p-4 border-2 rounded-xl transition peer-checked:border-primary-500 peer-checked:bg-primary-50 dark:peer-checked:bg-primary-900/20 border-gray-200 dark:border-gray-600 hover:border-primary-400">
-                                <!-- Mini preview -->
-                                <div class="w-full h-16 rounded-lg mb-3 overflow-hidden border border-gray-100 dark:border-gray-700 bg-white">
-                                    {% if value == 'classic' %}
-                                    <div class="h-6 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                    <div class="h-2 bg-gray-100 mx-2 mt-1 rounded"></div>
-                                    <div class="h-2 bg-gray-50 mx-2 mt-1 rounded"></div>
-                                    {% elif value == 'minimal' %}
-                                    <div class="px-2 pt-2"><div class="h-2 bg-gray-800 w-16 rounded mb-1"></div></div>
-                                    <div class="h-0.5 mx-2" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                    <div class="h-2 bg-gray-100 mx-2 mt-2 rounded"></div>
-                                    {% elif value == 'bold' %}
-                                    <div class="h-10 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                    <div class="h-2 bg-gray-100 mx-2 mt-1 rounded"></div>
-                                    {% elif value == 'professional' %}
-                                    <div class="flex h-full">
-                                        <div class="w-8 h-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                        <div class="flex-1 p-1"><div class="h-2 bg-gray-100 rounded mb-1"></div><div class="h-2 bg-gray-50 rounded"></div></div>
-                                    </div>
-                                    {% elif value == 'modern' %}
-                                    <div class="h-1 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                    <div class="p-2"><div class="h-2 bg-gray-800 w-12 rounded mb-2"></div><div class="h-1.5 bg-gray-100 rounded"></div></div>
-                                    {% elif value == 'branded' %}
-                                    <div class="h-7 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
-                                    <div class="h-2 bg-gray-100 mx-2 mt-1 rounded"></div>
-                                    <div class="h-4 w-full mt-1" style="background:{{ current_user.invoice_colour or '#2563eb' }}; opacity:0.7"></div>
-                                    {% endif %}
-                                </div>
-                                <p class="font-semibold text-sm text-gray-900 dark:text-white">{{ name }}</p>
-                                <p class="text-xs text-gray-400 mt-0.5">{{ desc }}</p>
-                            </div>
-                            <div class="absolute top-2 right-2 hidden peer-checked:flex w-5 h-5 bg-primary-600 rounded-full items-center justify-center">
-                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                            </div>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <div class="flex justify-end">
-                    <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
-                        Save Style
-                    </button>
-                </div>
-            </form>
-        </div>
         {% endif %}
 
 {% endblock %}
@@ -458,4 +367,157 @@ function togglePassword(fieldId) {
     }
 }
 </script>
+
+        {% if current_user.platform_mode in ['full', 'both'] %}
+        <!-- Bank Details Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6" id="bank-details">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Payment & Bank Details</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">These appear on all invoices sent to your customers</p>
+            </div>
+            <form action="{{ url_for('settings.update_bank_details') }}" method="POST" class="p-6 space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bank Name</label>
+                        <input type="text" name="bank_name" value="{{ current_user.bank_name or '' }}" placeholder="e.g. NatWest"
+                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Account Name</label>
+                        <input type="text" name="bank_account_name" value="{{ current_user.bank_account_name or '' }}" placeholder="e.g. Hartley Plumbing Ltd"
+                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Account Number</label>
+                        <input type="text" name="bank_account_number" value="{{ current_user.bank_account_number or '' }}" placeholder="e.g. 12345678"
+                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sort Code</label>
+                        <input type="text" name="bank_sort_code" value="{{ current_user.bank_sort_code or '' }}" placeholder="e.g. 01-02-03"
+                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition font-mono">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">IBAN <span class="text-gray-400 font-normal">(optional)</span></label>
+                        <input type="text" name="bank_iban" value="{{ current_user.bank_iban or '' }}" placeholder="e.g. GB29 NWBK 6016 1331 9268 19"
+                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition font-mono">
+                    </div>
+                </div>
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Payment Terms</label>
+                        <select name="default_payment_terms" class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                            <option value="receipt" {% if current_user.default_payment_terms == 'receipt' %}selected{% endif %}>Due on Receipt</option>
+                            <option value="7" {% if current_user.default_payment_terms == '7' %}selected{% endif %}>Net 7 Days</option>
+                            <option value="14" {% if current_user.default_payment_terms == '14' %}selected{% endif %}>Net 14 Days</option>
+                            <option value="30" {% if not current_user.default_payment_terms or current_user.default_payment_terms == '30' %}selected{% endif %}>Net 30 Days</option>
+                            <option value="60" {% if current_user.default_payment_terms == '60' %}selected{% endif %}>Net 60 Days</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Invoice Mode</label>
+                        <select name="default_invoice_mode" class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                            <option value="itemised" {% if not current_user.default_invoice_mode or current_user.default_invoice_mode == 'itemised' %}selected{% endif %}>Itemised</option>
+                            <option value="summary" {% if current_user.default_invoice_mode == 'summary' %}selected{% endif %}>Summary</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Invoice Notes</label>
+                        <textarea name="invoice_notes" rows="2" placeholder="e.g. Thank you for your business."
+                                  class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">{{ current_user.invoice_notes or '' }}</textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
+                        Save Payment Details
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Invoice Style Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6" id="invoice-style">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Invoice Style</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose how your invoices look when sent to customers</p>
+            </div>
+            <form action="{{ url_for('settings.update_invoice_style') }}" method="POST" class="p-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Brand Colour</label>
+                    <div class="flex items-center gap-4">
+                        <input type="color" name="invoice_colour" id="colour-picker"
+                               value="{{ current_user.invoice_colour or '#2563eb' }}"
+                               class="w-14 h-10 rounded-lg border border-gray-300 cursor-pointer">
+                        <div class="flex gap-2 flex-wrap">
+                            {% for colour in ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#be185d','#374151'] %}
+                            <button type="button" onclick="document.getElementById('colour-picker').value='{{ colour }}'"
+                                    style="background:{{ colour }}"
+                                    class="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 shadow hover:scale-110 transition"></button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Invoice Template</label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {% for value, name, desc in [
+                            ('classic', 'Classic', 'Coloured header, clean table'),
+                            ('minimal', 'Minimal', 'Typography-focused, no backgrounds'),
+                            ('bold', 'Bold', 'Large header, strong contrast'),
+                            ('professional', 'Professional', 'Two-column with sidebar'),
+                            ('modern', 'Modern', 'Accent line, mostly white'),
+                            ('branded', 'Branded', 'Full colour header and footer'),
+                        ] %}
+                        <label class="relative cursor-pointer">
+                            <input type="radio" name="invoice_template" value="{{ value }}"
+                                   {% if (current_user.invoice_template or 'classic') == value %}checked{% endif %}
+                                   class="sr-only peer">
+                            <div class="p-4 border-2 rounded-xl transition peer-checked:border-primary-500 peer-checked:bg-primary-50 dark:peer-checked:bg-primary-900/20 border-gray-200 dark:border-gray-600 hover:border-primary-400">
+                                <div class="w-full h-14 rounded-lg mb-2 overflow-hidden border border-gray-100 bg-white">
+                                    {% if value == 'classic' %}
+                                    <div class="h-5 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                    <div class="h-1.5 bg-gray-100 mx-2 mt-1 rounded"></div>
+                                    <div class="h-1.5 bg-gray-50 mx-2 mt-1 rounded"></div>
+                                    {% elif value == 'minimal' %}
+                                    <div class="px-2 pt-2"><div class="h-2 bg-gray-800 w-14 rounded mb-1"></div></div>
+                                    <div class="h-0.5 mx-2" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                    <div class="h-1.5 bg-gray-100 mx-2 mt-2 rounded"></div>
+                                    {% elif value == 'bold' %}
+                                    <div class="h-9 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                    <div class="h-1.5 bg-gray-100 mx-2 mt-1 rounded"></div>
+                                    {% elif value == 'professional' %}
+                                    <div class="flex h-full">
+                                        <div class="w-7 h-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                        <div class="flex-1 p-1"><div class="h-1.5 bg-gray-100 rounded mb-1"></div><div class="h-1.5 bg-gray-50 rounded"></div></div>
+                                    </div>
+                                    {% elif value == 'modern' %}
+                                    <div class="h-0.5 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                    <div class="p-2"><div class="h-2 bg-gray-800 w-10 rounded mb-2"></div><div class="h-1.5 bg-gray-100 rounded"></div></div>
+                                    {% elif value == 'branded' %}
+                                    <div class="h-6 w-full" style="background:{{ current_user.invoice_colour or '#2563eb' }}"></div>
+                                    <div class="h-1.5 bg-gray-100 mx-2 mt-1 rounded"></div>
+                                    <div class="h-3 w-full mt-1" style="background:{{ current_user.invoice_colour or '#2563eb' }}; opacity:0.6"></div>
+                                    {% endif %}
+                                </div>
+                                <p class="font-semibold text-sm text-gray-900 dark:text-white">{{ name }}</p>
+                                <p class="text-xs text-gray-400 mt-0.5">{{ desc }}</p>
+                            </div>
+                            <div class="absolute top-2 right-2 hidden peer-checked:flex w-5 h-5 bg-primary-600 rounded-full items-center justify-center">
+                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
+                        Save Style
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+
 {% endblock %}
