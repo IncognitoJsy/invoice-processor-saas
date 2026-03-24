@@ -251,27 +251,30 @@ def _add_itemised_lines(customer_invoice, supplier_invoice):
 
 
 def _add_summary_line(customer_invoice, supplier_invoice):
-    """Add a summary 'Materials Used' line"""
+    """Add a summary 'Materials Used' line.
+    There is always exactly ONE Materials Used line per customer invoice.
+    Each new supplier invoice processed adds its total to that single line.
+    """
     materials_product = get_or_create_materials_used(current_user.id)
     total_selling = float(supplier_invoice.total_selling or 0)
-    description = "Materials Used"
 
-    # Check if there's already a summary line from this supplier invoice
+    # Find the single cumulative Materials Used line on this invoice
     existing = CustomerInvoiceLine.query.filter_by(
         customer_invoice_id=customer_invoice.id,
-        source_invoice_id=supplier_invoice.id,
         line_type='summary'
     ).first()
 
     if existing:
-        existing.unit_price = total_selling
-        existing.line_total = total_selling
+        # Add the new supplier invoice total to the running total
+        existing.unit_price = round((existing.unit_price or 0) + total_selling, 2)
+        existing.line_total = existing.unit_price
     else:
+        # First supplier invoice added to this customer invoice
         line = CustomerInvoiceLine(
             customer_invoice_id=customer_invoice.id,
             source_invoice_id=supplier_invoice.id,
             product_service_id=materials_product.id,
-            description=description,
+            description='Materials Used',
             quantity=1,
             unit_price=total_selling,
             line_total=total_selling,
