@@ -119,9 +119,9 @@
                         <span class="text-gray-900">£{{ "%.2f"|format(invoice.tax_amount or 0) }}</span>
                     </div>
                     {% endif %}
-                    <div class="flex justify-between text-lg font-black pt-2 border-t-2 border-gray-900">
-                        <span>Total Due</span>
-                        <span>£{{ "%.2f"|format(invoice.total or 0) }}</span>
+                    <div class="flex justify-between text-xl font-black pt-2 border-t-2 border-gray-900">
+                        <span class="text-gray-900">Total Due</span>
+                        <span style="color: {{ current_user.invoice_colour or '#2563eb' }}">£{{ "%.2f"|format(invoice.total or 0) }}</span>
                     </div>
                 </div>
             </div>
