@@ -1148,12 +1148,15 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'quantity': quantity,
                     'original_unit_price': float(item.get('original_unit_price', 0) or 0),
                     'discount': discount,
-                    'cost_per_item': cost_per_item,
-                    'total_amount': discounted_total,  # Store the DISCOUNTED total
+                    # For non-tax-registered users buying from tax-charging suppliers,
+                    # store the tax-inclusive cost as their true cost.
+                    # For tax-registered users or tax-free suppliers, store ex-tax cost.
+                    'cost_per_item': effective_cost,
+                    'total_amount': discounted_total,  # Store the DISCOUNTED ex-tax total
                     'selling_price': final_selling_price,
-                    'calculated_selling_price': calculated_selling_price,  # Price from markup rules
-                    'qb_selling_price': qb_price,  # Price from QuickBooks (if exists)
-                    'markup_percent': min(int(actual_markup * 100), 999),  # Cap at 999 for DB
+                    'calculated_selling_price': calculated_selling_price,
+                    'qb_selling_price': qb_price,
+                    'markup_percent': min(int(actual_markup * 100), 999),
                     'profit_per_item': profit_per_item
                 })
             except Exception as e:
