@@ -23,6 +23,9 @@ def get_paypal_config():
         'plan_basic_annual': os.getenv('PAYPAL_PLAN_BASIC_ANNUAL'),
         'plan_pro_annual': os.getenv('PAYPAL_PLAN_PRO_ANNUAL'),
         'plan_ultimate_annual': os.getenv('PAYPAL_PLAN_ULTIMATE_ANNUAL'),
+        # Full platform plans
+        'plan_full_starter': os.getenv('PAYPAL_PLAN_FULL_STARTER'),
+        'plan_full_pro': os.getenv('PAYPAL_PLAN_FULL_PRO'),
     }
 
 
@@ -36,7 +39,9 @@ def index():
     return render_template('billing/index.html',
                           paypal_client_id=config['client_id'],
                           paypal_mode=config['mode'],
-                          update_payment_url=update_payment_url)
+                          update_payment_url=update_payment_url,
+                          paypal_plan_full_starter=config['plan_full_starter'],
+                          paypal_plan_full_pro=config['plan_full_pro'])
 
 
 @bp.route('/topup')
@@ -76,7 +81,14 @@ def subscribe(plan):
     frequency = 'annual' if plan.endswith('-annual') else 'monthly'
     base_plan = plan.replace('-annual', '')
     
-    if frequency == 'annual':
+    # Full platform plans are separate from sync plans
+    if base_plan in ('full-starter', 'full-pro'):
+        plan_ids = {
+            'full-starter': config['plan_full_starter'],
+            'full-pro': config['plan_full_pro'],
+        }
+        frequency = 'monthly'  # Full platform is monthly only for now
+    elif frequency == 'annual':
         plan_ids = {
             'basic': config['plan_basic_annual'],
             'pro': config['plan_pro_annual'],
@@ -88,7 +100,7 @@ def subscribe(plan):
             'pro': config['plan_pro'],
             'ultimate': config['plan_ultimate']
         }
-    
+
     if base_plan not in plan_ids:
         return jsonify({'error': 'Invalid plan'}), 400
     
@@ -145,6 +157,7 @@ def subscription_success():
             current_user.pending_subscription_id = None
             current_user.bonus_invoices = 0
             db.session.commit()
+            current_app.logger.info(f"✅ Subscription activated: user {current_user.id} → {plan}")
             
             freq_label = 'Annual' if frequency == 'annual' else 'Monthly'
             current_app.logger.info(f"Subscription activated for user {current_user.id}: {plan} ({freq_label})")
@@ -153,7 +166,10 @@ def subscription_success():
                 from app.services.email_service import get_email_service
                 email_service = get_email_service()
                 base_url = os.getenv('APP_URL', 'https://gozappify.com')
-                plan_names = {'basic': 'Basic', 'pro': 'Pro', 'ultimate': 'Ultimate'}
+                plan_names = {
+                    'basic': 'Basic', 'pro': 'Pro', 'ultimate': 'Ultimate',
+                    'full-starter': 'Full Platform Starter', 'full-pro': 'Full Platform Pro'
+                }
                 plan_name = f"{plan_names.get(plan, 'Basic')} ({freq_label})"
                 email_service.send_welcome_paid(current_user, plan_name, f"{base_url}/dashboard")
             except Exception as e:
