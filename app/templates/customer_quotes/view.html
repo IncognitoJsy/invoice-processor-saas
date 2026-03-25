@@ -1,0 +1,298 @@
+{% extends "base/layout.html" %}
+{% block title %}{{ quote.quote_number }} - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('customer_quotes.index') }}" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ quote.quote_number }}</h1>
+                <span class="px-2 py-1 text-xs font-semibold rounded-full
+                    {% if quote.status == 'accepted' %}bg-green-100 text-green-700
+                    {% elif quote.status == 'sent' %}bg-blue-100 text-blue-700
+                    {% elif quote.status == 'converted' %}bg-purple-100 text-purple-700
+                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {{ quote.display_status }}
+                </span>
+            </div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <a href="{{ url_for('customer_quotes.preview', quote_id=quote.id) }}" target="_blank"
+               class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">Preview</a>
+            <a href="{{ url_for('customer_quotes.download_pdf', quote_id=quote.id) }}"
+               class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">Download PDF</a>
+            {% if quote.status not in ['converted'] %}
+            <button onclick="sendQuote({{ quote.id }})"
+                    class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Send Quote
+            </button>
+            {% endif %}
+            {% if quote.status in ['accepted', 'sent', 'draft'] %}
+            <button onclick="convertQuote({{ quote.id }})"
+                    class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold transition">
+                Convert to Invoice
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if quote.status == 'accepted' %}
+    <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+        <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div>
+            <p class="font-semibold text-green-800 dark:text-green-200">Quote Accepted!</p>
+            <p class="text-sm text-green-600 dark:text-green-400">
+                Accepted {{ quote.accepted_at.strftime('%d %b %Y at %H:%M') if quote.accepted_at else '' }}
+                {% if quote.accepted_by_name %} by {{ quote.accepted_by_name }}{% endif %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main content -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Line Items -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Line Items</h2>
+                    {% if quote.status not in ['accepted', 'converted'] %}
+                    <button onclick="showAddLine()" class="text-sm text-primary-600 hover:text-primary-700 font-medium">+ Add Item</button>
+                    {% endif %}
+                </div>
+
+                <div id="lines-container">
+                {% if quote.lines.count() > 0 %}
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-500 uppercase">
+                            <th class="text-left px-5 py-3">Description</th>
+                            <th class="text-right px-3 py-3">Qty</th>
+                            <th class="text-right px-3 py-3">Unit Price</th>
+                            <th class="text-right px-5 py-3">Total</th>
+                            {% if quote.status not in ['accepted', 'converted'] %}
+                            <th class="px-3 py-3"></th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="lines-body" class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for line in quote.lines %}
+                    <tr id="line-{{ line.id }}">
+                        <td class="px-5 py-3 text-sm text-gray-900 dark:text-white">{{ line.description }}</td>
+                        <td class="px-3 py-3 text-sm text-right text-gray-600 dark:text-gray-300">{{ line.quantity|int if line.quantity == line.quantity|int else line.quantity }}</td>
+                        <td class="px-3 py-3 text-sm text-right text-gray-600 dark:text-gray-300">£{{ "%.2f"|format(line.unit_price or 0) }}</td>
+                        <td class="px-5 py-3 text-sm text-right font-semibold text-gray-900 dark:text-white">£{{ "%.2f"|format(line.line_total or 0) }}</td>
+                        {% if quote.status not in ['accepted', 'converted'] %}
+                        <td class="px-3 py-3">
+                            <button onclick="deleteLine({{ line.id }})" class="text-red-400 hover:text-red-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="p-8 text-center text-gray-400 text-sm" id="empty-lines">No items yet. Add your first line item.</div>
+                {% endif %}
+                </div>
+
+                <!-- Add line form -->
+                <div id="add-line-form" class="hidden p-5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div class="md:col-span-2">
+                            <input type="text" id="line-desc" placeholder="Description"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div>
+                            <input type="number" id="line-qty" placeholder="Qty" value="1" min="0.01" step="0.01"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div>
+                            <input type="number" id="line-price" placeholder="Unit price" min="0" step="0.01"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="addLine()" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition">Add</button>
+                        <button onclick="document.getElementById('add-line-form').classList.add('hidden')" class="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Totals -->
+                <div class="p-5 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-end">
+                        <div class="w-64 space-y-2">
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>Subtotal</span>
+                                <span id="subtotal">£{{ "%.2f"|format(quote.subtotal or 0) }}</span>
+                            </div>
+                            {% if quote.tax_rate %}
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>{{ current_user.tax_type or 'Tax' }} ({{ quote.tax_rate|int }}%)</span>
+                                <span id="tax-amount">£{{ "%.2f"|format(quote.tax_amount or 0) }}</span>
+                            </div>
+                            {% endif %}
+                            <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
+                                <span>Total</span>
+                                <span id="total">£{{ "%.2f"|format(quote.total or 0) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            {% if quote.status not in ['accepted', 'converted'] %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (shown on quote)</label>
+                <textarea id="quote-notes" rows="3" onblur="saveNotes()"
+                          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white resize-none"
+                          placeholder="Any notes or terms for this quote...">{{ quote.notes or '' }}</textarea>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-4">
+            <!-- Customer -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Customer</h3>
+                {% if quote.customer %}
+                <p class="font-medium text-gray-900 dark:text-white">{{ quote.customer.display_name }}</p>
+                <p class="text-sm text-gray-500">{{ quote.customer.email or '' }}</p>
+                <p class="text-sm text-gray-500">{{ quote.customer.phone or '' }}</p>
+                {% else %}
+                <p class="text-sm text-gray-400">No customer assigned</p>
+                {% endif %}
+                {% if quote.status not in ['accepted', 'converted'] %}
+                <select onchange="updateCustomer(this.value)" class="mt-3 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white">
+                    <option value="">— Change customer —</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if quote.customer_id == c.id %}selected{% endif %}>{{ c.display_name }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </div>
+
+            <!-- Dates -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Details</h3>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase font-semibold">Issue Date</p>
+                        <p class="text-gray-900 dark:text-white">{{ quote.issue_date.strftime('%d %b %Y') if quote.issue_date else '—' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase font-semibold">Valid Until</p>
+                        {% if quote.status not in ['accepted', 'converted'] %}
+                        <input type="date" id="expiry-date" value="{{ quote.expiry_date.isoformat() if quote.expiry_date else '' }}"
+                               onchange="updateExpiry(this.value)"
+                               class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white mt-1">
+                        {% else %}
+                        <p class="text-gray-900 dark:text-white">{{ quote.expiry_date.strftime('%d %b %Y') if quote.expiry_date else '—' }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if quote.converted_invoice_id %}
+            <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                <p class="text-sm font-semibold text-purple-800 dark:text-purple-200">Converted to Invoice</p>
+                <a href="{{ url_for('customer_invoices.view', invoice_id=quote.converted_invoice_id) }}"
+                   class="text-sm text-purple-600 hover:underline">View Invoice →</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+const quoteId = {{ quote.id }};
+const csrf = '{{ csrf_token() }}';
+
+function showAddLine() {
+    document.getElementById('add-line-form').classList.remove('hidden');
+    document.getElementById('line-desc').focus();
+}
+
+async function addLine() {
+    const desc = document.getElementById('line-desc').value.trim();
+    const qty = parseFloat(document.getElementById('line-qty').value) || 1;
+    const price = parseFloat(document.getElementById('line-price').value) || 0;
+    if (!desc) { alert('Please enter a description'); return; }
+    const r = await fetch(`/customer-quotes/${quoteId}/add-line`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({description: desc, quantity: qty, unit_price: price})
+    });
+    const d = await r.json();
+    if (d.success) location.reload();
+    else alert(d.error);
+}
+
+async function deleteLine(lineId) {
+    if (!confirm('Remove this line?')) return;
+    const r = await fetch(`/customer-quotes/${quoteId}/delete-line/${lineId}`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById(`line-${lineId}`).remove();
+        document.getElementById('subtotal').textContent = '£' + d.subtotal.toFixed(2);
+        document.getElementById('total').textContent = '£' + d.total.toFixed(2);
+        if (document.getElementById('tax-amount')) document.getElementById('tax-amount').textContent = '£' + d.tax_amount.toFixed(2);
+    }
+}
+
+async function sendQuote(id) {
+    if (!confirm('Send this quote to the customer?')) return;
+    const r = await fetch(`/customer-quotes/${id}/send`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    const d = await r.json();
+    if (d.success) { alert(d.message); location.reload(); }
+    else alert(d.error);
+}
+
+async function convertQuote(id) {
+    if (!confirm('Convert this quote to an invoice?')) return;
+    const r = await fetch(`/customer-quotes/${id}/convert`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    const d = await r.json();
+    if (d.success) window.location = d.redirect;
+    else alert(d.error);
+}
+
+async function updateCustomer(customerId) {
+    await fetch(`/customer-quotes/${quoteId}/update`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({customer_id: customerId})
+    });
+    location.reload();
+}
+
+async function updateExpiry(val) {
+    await fetch(`/customer-quotes/${quoteId}/update`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({expiry_date: val})
+    });
+}
+
+async function saveNotes() {
+    const notes = document.getElementById('quote-notes').value;
+    await fetch(`/customer-quotes/${quoteId}/update`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({notes: notes})
+    });
+}
+</script>
+{% endblock %}

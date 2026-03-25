@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accept Quote {{ quote.quote_number }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-lg w-full">
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div class="p-8 text-white text-center" style="background-color: {{ quote.user.invoice_colour or '#2563eb' }}">
+                <h1 class="text-2xl font-bold">{{ quote.user.company_name or 'Your Contractor' }}</h1>
+                <p class="text-white/80 mt-1">Quote {{ quote.quote_number }}</p>
+            </div>
+            <div class="p-8">
+                <div class="text-center mb-6">
+                    <p class="text-gray-500 text-sm mb-1">Total Amount</p>
+                    <p class="text-4xl font-black text-gray-900">£{{ "%.2f"|format(quote.total or 0) }}</p>
+                    {% if quote.expiry_date %}
+                    <p class="text-sm text-gray-400 mt-1">Valid until {{ quote.expiry_date.strftime('%d %B %Y') }}</p>
+                    {% endif %}
+                </div>
+
+                {% if quote.lines.count() > 0 %}
+                <div class="border border-gray-200 rounded-xl overflow-hidden mb-6">
+                    {% for line in quote.lines %}
+                    <div class="flex justify-between items-center px-4 py-3 {% if not loop.last %}border-b border-gray-100{% endif %}">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">{{ line.description }}</p>
+                            <p class="text-xs text-gray-400">{{ line.quantity|int if line.quantity == line.quantity|int else line.quantity }} × £{{ "%.2f"|format(line.unit_price or 0) }}</p>
+                        </div>
+                        <p class="text-sm font-semibold text-gray-900">£{{ "%.2f"|format(line.line_total or 0) }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if quote.notes %}
+                <div class="bg-gray-50 rounded-xl p-4 mb-6 text-sm text-gray-600">{{ quote.notes }}</div>
+                {% endif %}
+
+                <form action="/customer-quotes/accept/{{ token }}/confirm" method="POST">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+                        <input type="text" name="name" placeholder="Enter your name to confirm acceptance"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:border-transparent"
+                               style="--tw-ring-color: {{ quote.user.invoice_colour or '#2563eb' }}">
+                    </div>
+                    <button type="submit" class="w-full py-4 text-white font-bold text-lg rounded-xl transition hover:opacity-90"
+                            style="background-color: {{ quote.user.invoice_colour or '#2563eb' }}">
+                        ✓ Accept This Quote
+                    </button>
+                </form>
+                <p class="text-xs text-center text-gray-400 mt-4">By clicking Accept, you agree to the terms of this quote.</p>
+            </div>
+        </div>
+        <p class="text-center text-xs text-gray-400 mt-4">Powered by GoZappify</p>
+    </div>
+</body>
+</html>

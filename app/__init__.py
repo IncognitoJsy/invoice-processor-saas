@@ -156,7 +156,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
-    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth, voice_to_quote, customers, products, customer_invoices, tax_reports
+    from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth, voice_to_quote, customers, products, customer_invoices, tax_reports, customer_quotes
     from app.web import quotes
     from app.web import user_api
     from app.web import tasks
@@ -188,6 +188,8 @@ def register_blueprints(app):
     app.register_blueprint(customer_invoices.bp)
     app.register_blueprint(tax_reports.bp)
     csrf.exempt(tax_reports.bp)
+    app.register_blueprint(customer_quotes.bp)
+    csrf.exempt(customer_quotes.bp)
     
     # Scheduled tasks (called by external cron)
     app.register_blueprint(tasks.bp)
