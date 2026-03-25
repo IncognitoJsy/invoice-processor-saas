@@ -428,7 +428,41 @@ def update_due_date(invoice_id):
     due_date_str = data.get('due_date')
     if due_date_str:
         try:
-            invoice.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+            new_due = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+            invoice.due_date = new_due
+            # Recalculate payment terms based on days between issue and due date
+            if invoice.issue_date:
+                days_diff = (new_due - invoice.issue_date).days
+                if days_diff <= 0:
+                    invoice.payment_terms = '0'
+                elif days_diff <= 7:
+                    invoice.payment_terms = '7'
+                elif days_diff <= 14:
+                    invoice.payment_terms = '14'
+                elif days_diff <= 30:
+                    invoice.payment_terms = '30'
+                elif days_diff <= 60:
+                    invoice.payment_terms = '60'
+                else:
+                    invoice.payment_terms = str(days_diff)
+            db.session.commit()
+            return jsonify({'success': True, 'payment_terms_label': invoice.payment_terms_label})
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid date'}), 400
+    return jsonify({'success': False, 'error': 'No date provided'}), 400
+
+
+@bp.route('/<int:invoice_id>/update-issue-date', methods=['POST'])
+@login_required
+@require_full_mode
+def update_issue_date(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    issue_date_str = data.get('issue_date')
+    if issue_date_str:
+        try:
+            invoice.issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
             db.session.commit()
             return jsonify({'success': True})
         except ValueError:

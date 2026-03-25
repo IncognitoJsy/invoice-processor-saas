@@ -174,7 +174,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                 {{ inv.due_date.strftime('%d %b %Y') }}
                                 {% set days_left = (inv.due_date - now).days %}
                                 {% if days_left <= 7 %}
-                                <span class="block text-xs text-amber-600 dark:text-amber-400">Due in {{ days_left }}d</span>
+                                <span class="block text-xs text-amber-600 dark:text-amber-400">Due in {{ days_left }} day{{ 's' if days_left != 1 }}</span>
                                 {% endif %}
                             </span>
                             {% endif %}
