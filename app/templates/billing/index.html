@@ -335,7 +335,7 @@ function toggleBillingFrequency() {
                     <a href="{{ url_for('billing.subscribe', plan='full-starter') }}" id="full-starter-monthly-btn"
                        class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £39/month</a>
                     <a href="{{ url_for('billing.subscribe', plan='full-starter-annual') }}" id="full-starter-annual-btn"
-                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £429/year</a>
+                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm" style="display:none">Subscribe — £429/year</a>
                     {% endif %}
                 </div>
 
@@ -371,7 +371,7 @@ function toggleBillingFrequency() {
                     <a href="{{ url_for('billing.subscribe', plan='full-pro') }}" id="full-pro-monthly-btn"
                        class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £79/month</a>
                     <a href="{{ url_for('billing.subscribe', plan='full-pro-annual') }}" id="full-pro-annual-btn"
-                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £869/year</a>
+                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm" style="display:none">Subscribe — £869/year</a>
                     {% endif %}
                 </div>
             </div>
@@ -392,8 +392,10 @@ function toggleFullBilling() {
     document.querySelectorAll('.full-price-monthly, .full-period-monthly, .full-monthly-note').forEach(el => el.classList.toggle('hidden', fullAnnual));
     document.querySelectorAll('.full-price-annual, .full-period-annual, .full-annual-note').forEach(el => el.classList.toggle('hidden', !fullAnnual));
     ['full-starter', 'full-pro'].forEach(plan => {
-        document.getElementById(`${plan}-monthly-btn`)?.classList.toggle('hidden', fullAnnual);
-        document.getElementById(`${plan}-annual-btn`)?.classList.toggle('hidden', !fullAnnual);
+        const monthly = document.getElementById(`${plan}-monthly-btn`);
+        const annual = document.getElementById(`${plan}-annual-btn`);
+        if (monthly) monthly.style.display = fullAnnual ? 'none' : 'block';
+        if (annual) annual.style.display = fullAnnual ? 'block' : 'none';
     });
 }
 </script>
