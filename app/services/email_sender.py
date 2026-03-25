@@ -314,3 +314,85 @@ def _guess_smtp_server(imap_server):
     if not imap_server:
         return None
     return imap_server.replace('imap.', 'smtp.').replace('imap', 'smtp')
+
+
+def send_quote_email(user, quote, pdf_bytes, accept_url):
+    """Send quote email to customer with PDF attachment and accept link"""
+    customer = quote.customer
+    if not customer or not customer.email:
+        raise ValueError("Customer has no email address")
+
+    subject = f"Quote {quote.quote_number} from {user.company_name or 'Your Contractor'}"
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: {user.invoice_colour or '#2563eb'}; padding: 24px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">{user.company_name or 'Your Contractor'}</h1>
+        </div>
+        <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+            <p style="color: #374151;">Dear {customer.display_name},</p>
+            <p style="color: #374151;">Please find attached your quote <strong>{quote.quote_number}</strong>
+            for a total of <strong>£{quote.total:.2f}</strong>.</p>
+            {"<p style='color: #6b7280; font-size: 14px;'>This quote is valid until " + quote.expiry_date.strftime('%d %B %Y') + ".</p>" if quote.expiry_date else ""}
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="{accept_url}" style="background: {user.invoice_colour or '#2563eb'}; color: white;
+                   padding: 14px 32px; border-radius: 8px; text-decoration: none;
+                   font-weight: bold; font-size: 16px; display: inline-block;">
+                    ✓ Accept This Quote
+                </a>
+            </div>
+            <p style="color: #6b7280; font-size: 13px; text-align: center;">
+                Or open this link: <a href="{accept_url}" style="color: {user.invoice_colour or '#2563eb'};">{accept_url}</a>
+            </p>
+            {f'<div style="background: white; border-left: 3px solid {user.invoice_colour or "#2563eb"}; padding: 12px; margin: 16px 0; border-radius: 0 4px 4px 0;"><p style="color: #374151; margin: 0; font-size: 14px;">{quote.notes}</p></div>' if quote.notes else ''}
+            <p style="color: #6b7280; font-size: 13px;">The full quote is attached as a PDF for your records.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+            <p style="color: #9ca3af; font-size: 12px;">{user.company_name or ''}</p>
+        </div>
+    </div>
+    """
+
+    _send_email(user, customer.email, subject, html,
+                attachment=pdf_bytes,
+                attachment_name=f"{quote.quote_number}.pdf")
+
+
+def send_quote_email(user, quote, pdf_bytes, accept_url):
+    """Send quote email to customer with PDF attachment and accept link"""
+    customer = quote.customer
+    if not customer or not customer.email:
+        raise ValueError("Customer has no email address")
+
+    subject = f"Quote {quote.quote_number} from {user.company_name or 'Your Contractor'}"
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: {user.invoice_colour or '#2563eb'}; padding: 24px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">{user.company_name or 'Your Contractor'}</h1>
+        </div>
+        <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+            <p style="color: #374151;">Dear {customer.display_name},</p>
+            <p style="color: #374151;">Please find attached your quote <strong>{quote.quote_number}</strong>
+            for a total of <strong>£{quote.total:.2f}</strong>.</p>
+            {"<p style='color: #6b7280; font-size: 14px;'>This quote is valid until " + quote.expiry_date.strftime('%d %B %Y') + ".</p>" if quote.expiry_date else ""}
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="{accept_url}" style="background: {user.invoice_colour or '#2563eb'}; color: white;
+                   padding: 14px 32px; border-radius: 8px; text-decoration: none;
+                   font-weight: bold; font-size: 16px; display: inline-block;">
+                    ✓ Accept This Quote
+                </a>
+            </div>
+            <p style="color: #6b7280; font-size: 13px; text-align: center;">
+                Or open this link: <a href="{accept_url}" style="color: {user.invoice_colour or '#2563eb'};">{accept_url}</a>
+            </p>
+            {f'<div style="background: white; border-left: 3px solid {user.invoice_colour or "#2563eb"}; padding: 12px; margin: 16px 0; border-radius: 0 4px 4px 0;"><p style="color: #374151; margin: 0; font-size: 14px;">{quote.notes}</p></div>' if quote.notes else ''}
+            <p style="color: #6b7280; font-size: 13px;">The full quote is attached as a PDF for your records.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+            <p style="color: #9ca3af; font-size: 12px;">{user.company_name or ''}</p>
+        </div>
+    </div>
+    """
+
+    _send_email(user, customer.email, subject, html,
+                attachment=pdf_bytes,
+                attachment_name=f"{quote.quote_number}.pdf")

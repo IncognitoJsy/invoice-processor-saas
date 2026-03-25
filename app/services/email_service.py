@@ -415,3 +415,28 @@ def get_email_service() -> EmailService:
     if _email_service is None:
         _email_service = EmailService()
     return _email_service
+
+    def send_quote_accepted_notification(self, user, quote, quote_url):
+        """Notify contractor that customer accepted their quote"""
+        try:
+            subject = f"🎉 Quote {quote.quote_number} Accepted!"
+            html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+                <h2 style="color: #16a34a;">Quote Accepted!</h2>
+                <p>Great news — <strong>{quote.customer.display_name if quote.customer else 'Your customer'}</strong>
+                has accepted quote <strong>{quote.quote_number}</strong>
+                for <strong>£{quote.total:.2f}</strong>.</p>
+                {"<p>Accepted by: " + quote.accepted_by_name + "</p>" if quote.accepted_by_name else ""}
+                <p>You can now convert this quote to an invoice in GoZappify.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="{quote_url}" style="background: #2563eb; color: white;
+                       padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                        View Quote &amp; Convert to Invoice
+                    </a>
+                </div>
+            </div>
+            """
+            self._send_via_smtp_or_ses(user.email, subject, html)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send quote accepted notification: {e}")
