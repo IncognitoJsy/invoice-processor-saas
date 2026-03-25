@@ -432,7 +432,10 @@ def update_due_date(invoice_id):
             invoice.due_date = new_due
             # Recalculate payment terms based on days between issue and due date
             if invoice.issue_date:
-                days_diff = (new_due - invoice.issue_date).days
+                issue = invoice.issue_date
+                if hasattr(issue, 'date') and callable(issue.date):
+                    issue = issue.date()
+                days_diff = (new_due - issue).days
                 if days_diff <= 0:
                     invoice.payment_terms = '0'
                 elif days_diff <= 7:
