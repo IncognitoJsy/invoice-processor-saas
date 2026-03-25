@@ -1,23 +1,6 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Billing - GoZappify<script>
-let fullAnnual = false;
-function toggleFullBilling() {
-    fullAnnual = !fullAnnual;
-    const dot = document.getElementById('full-toggle-dot');
-    const toggle = document.getElementById('full-billing-toggle');
-    dot.style.transform = fullAnnual ? 'translateX(28px)' : '';
-    toggle.classList.toggle('bg-primary-600', fullAnnual);
-    toggle.classList.toggle('bg-gray-300', !fullAnnual);
-    document.querySelectorAll('.full-price-monthly, .full-period-monthly, .full-monthly-note').forEach(el => el.classList.toggle('hidden', fullAnnual));
-    document.querySelectorAll('.full-price-annual, .full-period-annual, .full-annual-note').forEach(el => el.classList.toggle('hidden', !fullAnnual));
-    ['full-starter', 'full-pro'].forEach(plan => {
-        document.getElementById(`${plan}-monthly-btn`)?.classList.toggle('hidden', fullAnnual);
-        document.getElementById(`${plan}-annual-btn`)?.classList.toggle('hidden', !fullAnnual);
-    });
-}
-</script>
-{% endblock %}
+{% block title %}Billing - GoZappify{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
@@ -397,4 +380,21 @@ function toggleBillingFrequency() {
 
         {% endif %}
 
+<script>
+let fullAnnual = false;
+function toggleFullBilling() {
+    fullAnnual = !fullAnnual;
+    const dot = document.getElementById('full-toggle-dot');
+    const toggle = document.getElementById('full-billing-toggle');
+    dot.style.transform = fullAnnual ? 'translateX(28px)' : '';
+    toggle.classList.toggle('bg-primary-600', fullAnnual);
+    toggle.classList.toggle('bg-gray-300', !fullAnnual);
+    document.querySelectorAll('.full-price-monthly, .full-period-monthly, .full-monthly-note').forEach(el => el.classList.toggle('hidden', fullAnnual));
+    document.querySelectorAll('.full-price-annual, .full-period-annual, .full-annual-note').forEach(el => el.classList.toggle('hidden', !fullAnnual));
+    ['full-starter', 'full-pro'].forEach(plan => {
+        document.getElementById(`${plan}-monthly-btn`)?.classList.toggle('hidden', fullAnnual);
+        document.getElementById(`${plan}-annual-btn`)?.classList.toggle('hidden', !fullAnnual);
+    });
+}
+</script>
 {% endblock %}
