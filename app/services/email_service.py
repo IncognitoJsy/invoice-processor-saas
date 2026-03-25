@@ -419,24 +419,36 @@ def get_email_service() -> EmailService:
     def send_quote_accepted_notification(self, user, quote, quote_url):
         """Notify contractor that customer accepted their quote"""
         try:
-            subject = f"🎉 Quote {quote.quote_number} Accepted!"
+            if not self.api_key:
+                current_app.logger.warning("RESEND_API_KEY not set - quote accepted notification not sent")
+                return
+            customer_name = quote.customer.display_name if quote.customer else 'Your customer'
+            subject = f"Quote {quote.quote_number} Accepted!"
             html = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
-                <h2 style="color: #16a34a;">Quote Accepted!</h2>
-                <p>Great news — <strong>{quote.customer.display_name if quote.customer else 'Your customer'}</strong>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f9fafb; border-radius: 8px;">
+                <div style="background: #16a34a; padding: 20px 24px; border-radius: 8px 8px 0 0; margin: -24px -24px 24px;">
+                    <h2 style="color: white; margin: 0;">&#x1F389; Quote Accepted!</h2>
+                </div>
+                <p style="color: #374151;">Great news — <strong>{customer_name}</strong>
                 has accepted quote <strong>{quote.quote_number}</strong>
                 for <strong>£{quote.total:.2f}</strong>.</p>
-                {"<p>Accepted by: " + quote.accepted_by_name + "</p>" if quote.accepted_by_name else ""}
-                <p>You can now convert this quote to an invoice in GoZappify.</p>
+                {('<p style="color: #6b7280;">Accepted by: ' + quote.accepted_by_name + '</p>') if quote.accepted_by_name else ''}
+                <p style="color: #374151;">Log in to GoZappify to convert this quote to an invoice.</p>
                 <div style="text-align: center; margin: 24px 0;">
                     <a href="{quote_url}" style="background: #2563eb; color: white;
-                       padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                       padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
                         View Quote &amp; Convert to Invoice
                     </a>
                 </div>
+                <p style="color: #9ca3af; font-size: 12px; text-align: center;">GoZappify — gozappify.com</p>
             </div>
             """
-            self._send_via_smtp_or_ses(user.email, subject, html)
+            resend.Emails.send({{
+                "from": self.from_email,
+                "to": [user.email],
+                "subject": subject,
+                "html": html
+            }})
+            current_app.logger.info(f"Quote accepted notification sent to {user.email}")
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Failed to send quote accepted notification: {e}")
+            current_app.logger.error(f"Failed to send quote accepted notification: {{e}}")
