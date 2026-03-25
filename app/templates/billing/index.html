@@ -1,6 +1,23 @@
 {% extends "base/layout.html" %}
 
-{% block title %}Billing - GoZappify{% endblock %}
+{% block title %}Billing - GoZappify<script>
+let fullAnnual = false;
+function toggleFullBilling() {
+    fullAnnual = !fullAnnual;
+    const dot = document.getElementById('full-toggle-dot');
+    const toggle = document.getElementById('full-billing-toggle');
+    dot.style.transform = fullAnnual ? 'translateX(28px)' : '';
+    toggle.classList.toggle('bg-primary-600', fullAnnual);
+    toggle.classList.toggle('bg-gray-300', !fullAnnual);
+    document.querySelectorAll('.full-price-monthly, .full-period-monthly, .full-monthly-note').forEach(el => el.classList.toggle('hidden', fullAnnual));
+    document.querySelectorAll('.full-price-annual, .full-period-annual, .full-annual-note').forEach(el => el.classList.toggle('hidden', !fullAnnual));
+    ['full-starter', 'full-pro'].forEach(plan => {
+        document.getElementById(`${plan}-monthly-btn`)?.classList.toggle('hidden', fullAnnual);
+        document.getElementById(`${plan}-annual-btn`)?.classList.toggle('hidden', !fullAnnual);
+    });
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
@@ -290,7 +307,19 @@ function toggleBillingFrequency() {
         <!-- Full Platform Plans -->
         <div class="mt-4 mb-8">
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">Full Platform Plans</h2>
-            <p class="text-gray-500 dark:text-gray-400 text-center mb-8">Invoicing, CRM &amp; AI processing — everything in one place</p>
+            <p class="text-gray-500 dark:text-gray-400 text-center mb-4">Invoicing, CRM &amp; AI processing — everything in one place</p>
+
+            <!-- Annual toggle -->
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <span class="text-sm font-semibold text-gray-900 dark:text-white">Monthly</span>
+                <button id="full-billing-toggle" onclick="toggleFullBilling()"
+                        class="relative w-14 h-7 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors duration-200 focus:outline-none">
+                    <span id="full-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200"></span>
+                </button>
+                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Annual</span>
+                <span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">1 month free</span>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
 
                 <!-- Full Starter £39 -->
@@ -302,10 +331,14 @@ function toggleBillingFrequency() {
                     {% endif %}
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Starter</h3>
                     <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For sole traders getting started</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-black text-gray-900 dark:text-white">£39</span>
-                        <span class="text-gray-400">/month</span>
+                    <div class="mb-1">
+                        <span class="full-price-monthly text-4xl font-black text-gray-900 dark:text-white">£39</span>
+                        <span class="full-price-annual text-4xl font-black text-gray-900 dark:text-white hidden">£429</span>
+                        <span class="full-period-monthly text-gray-400">/month</span>
+                        <span class="full-period-annual text-gray-400 hidden">/year</span>
                     </div>
+                    <p class="full-annual-note text-xs text-green-600 dark:text-green-400 mb-5 hidden">£35.75/mo — save £39/year</p>
+                    <p class="full-monthly-note text-xs text-transparent mb-5">‎</p>
                     <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
                         <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>100 supplier invoices/month</li>
                         <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
@@ -316,7 +349,10 @@ function toggleBillingFrequency() {
                     {% if current_user.subscription_plan == 'full-starter' %}
                     <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
                     {% else %}
-                    <a href="{{ url_for('billing.subscribe', plan='full-starter') }}" class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £39/month</a>
+                    <a href="{{ url_for('billing.subscribe', plan='full-starter') }}" id="full-starter-monthly-btn"
+                       class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £39/month</a>
+                    <a href="{{ url_for('billing.subscribe', plan='full-starter-annual') }}" id="full-starter-annual-btn"
+                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £429/year</a>
                     {% endif %}
                 </div>
 
@@ -331,10 +367,14 @@ function toggleBillingFrequency() {
                     </div>
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
                     <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">For busy contractors — unlimited everything</p>
-                    <div class="mb-6">
-                        <span class="text-4xl font-black text-gray-900 dark:text-white">£79</span>
-                        <span class="text-gray-400">/month</span>
+                    <div class="mb-1">
+                        <span class="full-price-monthly text-4xl font-black text-gray-900 dark:text-white">£79</span>
+                        <span class="full-price-annual text-4xl font-black text-gray-900 dark:text-white hidden">£869</span>
+                        <span class="full-period-monthly text-gray-400">/month</span>
+                        <span class="full-period-annual text-gray-400 hidden">/year</span>
                     </div>
+                    <p class="full-annual-note text-xs text-green-600 dark:text-green-400 mb-5 hidden">£72.42/mo — save £79/year</p>
+                    <p class="full-monthly-note text-xs text-transparent mb-5">‎</p>
                     <ul class="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-300">
                         <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><strong>Unlimited</strong> supplier invoices</li>
                         <li class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited customer invoices</li>
@@ -345,7 +385,10 @@ function toggleBillingFrequency() {
                     {% if current_user.subscription_plan == 'full-pro' %}
                     <a href="{{ url_for('billing.manage') }}" class="block w-full text-center py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">Manage Subscription</a>
                     {% else %}
-                    <a href="{{ url_for('billing.subscribe', plan='full-pro') }}" class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £79/month</a>
+                    <a href="{{ url_for('billing.subscribe', plan='full-pro') }}" id="full-pro-monthly-btn"
+                       class="block w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £79/month</a>
+                    <a href="{{ url_for('billing.subscribe', plan='full-pro-annual') }}" id="full-pro-annual-btn"
+                       class="hidden w-full text-center py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Subscribe — £869/year</a>
                     {% endif %}
                 </div>
             </div>

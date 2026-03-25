@@ -26,6 +26,8 @@ def get_paypal_config():
         # Full platform plans
         'plan_full_starter': os.getenv('PAYPAL_PLAN_FULL_STARTER'),
         'plan_full_pro': os.getenv('PAYPAL_PLAN_FULL_PRO'),
+        'plan_full_starter_annual': os.getenv('PAYPAL_PLAN_FULL_STARTER_ANNUAL'),
+        'plan_full_pro_annual': os.getenv('PAYPAL_PLAN_FULL_PRO_ANNUAL'),
     }
 
 
@@ -41,7 +43,9 @@ def index():
                           paypal_mode=config['mode'],
                           update_payment_url=update_payment_url,
                           paypal_plan_full_starter=config['plan_full_starter'],
-                          paypal_plan_full_pro=config['plan_full_pro'])
+                          paypal_plan_full_pro=config['plan_full_pro'],
+                          paypal_plan_full_starter_annual=config['plan_full_starter_annual'],
+                          paypal_plan_full_pro_annual=config['plan_full_pro_annual'])
 
 
 @bp.route('/topup')
@@ -83,11 +87,16 @@ def subscribe(plan):
     
     # Full platform plans are separate from sync plans
     if base_plan in ('full-starter', 'full-pro'):
-        plan_ids = {
-            'full-starter': config['plan_full_starter'],
-            'full-pro': config['plan_full_pro'],
-        }
-        frequency = 'monthly'  # Full platform is monthly only for now
+        if frequency == 'annual':
+            plan_ids = {
+                'full-starter': config['plan_full_starter_annual'],
+                'full-pro': config['plan_full_pro_annual'],
+            }
+        else:
+            plan_ids = {
+                'full-starter': config['plan_full_starter'],
+                'full-pro': config['plan_full_pro'],
+            }
     elif frequency == 'annual':
         plan_ids = {
             'basic': config['plan_basic_annual'],
