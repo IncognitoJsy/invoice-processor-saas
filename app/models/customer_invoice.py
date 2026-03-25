@@ -61,7 +61,15 @@ class CustomerInvoice(db.Model):
 
     @property
     def payment_terms_label(self):
-        return self.PAYMENT_TERMS.get(self.payment_terms, f'Net {self.payment_terms} Days')
+        if self.payment_terms in self.PAYMENT_TERMS:
+            return self.PAYMENT_TERMS[self.payment_terms]
+        try:
+            days = int(self.payment_terms or 30)
+            if days == 0:
+                return 'Due on Receipt'
+            return f'Net {days} Days'
+        except (ValueError, TypeError):
+            return f'Net {self.payment_terms} Days'
 
     @property
     def is_overdue(self):
