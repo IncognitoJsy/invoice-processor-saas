@@ -54,6 +54,7 @@ def new():
             postcode=_clean(request.form.get('postcode')),
             country=_clean(request.form.get('country')),
             notes=_clean(request.form.get('notes')),
+            payment_terms=_clean(request.form.get('payment_terms')) or '30',
         )
         db.session.add(customer)
         db.session.commit()
@@ -104,6 +105,7 @@ def edit(customer_id):
         customer.city = _clean(request.form.get('city'))
         customer.postcode = _clean(request.form.get('postcode'))
         customer.country = _clean(request.form.get('country'))
+        customer.payment_terms = _clean(request.form.get('payment_terms')) or '30'
         customer.notes = request.form.get('notes', '').strip() or None
         db.session.commit()
         flash('Customer updated successfully.', 'success')
