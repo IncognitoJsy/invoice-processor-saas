@@ -31,6 +31,7 @@ class CustomerInvoice(db.Model):
 
     PAYMENT_TERMS = {
         'receipt': 'Due on Receipt',
+        '0': 'Due on Receipt',
         '7': 'Net 7 Days',
         '14': 'Net 14 Days',
         '30': 'Net 30 Days',
@@ -64,14 +65,16 @@ class CustomerInvoice(db.Model):
 
     @property
     def is_overdue(self):
-        if self.status in ['paid', 'sent'] and self.due_date:
-            return datetime.utcnow() > self.due_date
+        if self.status in ['open', 'sent'] and self.due_date:
+            from datetime import date
+            return date.today() > self.due_date
         return False
 
     @property
     def days_overdue(self):
         if self.is_overdue and self.due_date:
-            return (datetime.utcnow() - self.due_date).days
+            from datetime import date
+            return (date.today() - self.due_date).days
         return 0
 
     def to_dict(self):

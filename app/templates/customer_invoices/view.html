@@ -70,7 +70,25 @@
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Issue Date</p>
-                    <p class="font-medium text-gray-900 dark:text-white">{{ invoice.issue_date.strftime('%d %b %Y') if invoice.issue_date else '—' }}</p>
+                    <div id="issue-date-display" class="flex items-center gap-2">
+                        <span class="font-medium text-gray-900 dark:text-white" id="issue-date-text">
+                            {{ invoice.issue_date.strftime('%d %b %Y') if invoice.issue_date else '—' }}
+                        </span>
+                        {% if invoice.status == 'open' %}
+                        <button onclick="editIssueDate()" class="text-gray-400 hover:text-primary-600 transition" title="Edit issue date">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div id="issue-date-edit" class="hidden">
+                        <input type="date" id="issue-date-input"
+                               value="{{ invoice.issue_date.strftime('%Y-%m-%d') if invoice.issue_date else '' }}"
+                               class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500">
+                        <div class="flex gap-2 mt-1">
+                            <button onclick="saveIssueDate({{ invoice.id }})" class="text-xs text-primary-600 font-semibold hover:underline">Save</button>
+                            <button onclick="cancelIssueDate()" class="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Due Date</p>
@@ -93,7 +111,7 @@
                             <button onclick="cancelDueDate()" class="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                         </div>
                     </div>
-                    <p class="text-xs text-gray-400 mt-0.5">{{ invoice.payment_terms_label }}</p>
+                    <p class="text-xs text-gray-400 mt-0.5" id="payment-terms-label">{{ invoice.payment_terms_label }}</p>
                 </div>
             </div>
         </div>
@@ -336,7 +354,41 @@ async function saveDueDate(invoiceId) {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({due_date: date})
     });
-    if (res.ok) window.location.reload();
+    if (res.ok) {
+        const d = await res.json();
+        // Update display
+        const formatted = new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+        document.getElementById("due-date-display").querySelector('span').textContent = formatted;
+        // Update terms label
+        if (d.payment_terms_label) {
+            document.getElementById("payment-terms-label").textContent = d.payment_terms_label;
+        }
+        cancelDueDate();
+    }
+}
+
+function editIssueDate() {
+    document.getElementById("issue-date-display").classList.add("hidden");
+    document.getElementById("issue-date-edit").classList.remove("hidden");
+}
+
+function cancelIssueDate() {
+    document.getElementById("issue-date-display").classList.remove("hidden");
+    document.getElementById("issue-date-edit").classList.add("hidden");
+}
+
+async function saveIssueDate(invoiceId) {
+    const date = document.getElementById("issue-date-input").value;
+    const res = await fetch("/customer-invoices/" + invoiceId + "/update-issue-date", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({issue_date: date})
+    });
+    if (res.ok) {
+        const formatted = new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+        document.getElementById("issue-date-text").textContent = formatted;
+        cancelIssueDate();
+    }
 }
 
 function calcNewLine() {
