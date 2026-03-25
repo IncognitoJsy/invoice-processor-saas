@@ -352,47 +352,81 @@ def send_quote_email(user, quote, pdf_bytes, accept_url):
     </div>
     """
 
-    _send_email(user, customer.email, subject, html,
-                attachment=pdf_bytes,
-                attachment_name=f"{quote.quote_number}.pdf")
+    connection = get_email_connection(user)
+    if not connection:
+        raise ValueError("No email account connected. Please set up email in Settings.")
 
+    # Build a minimal invoice-like object for the sending functions
+    class _QuoteMailCtx:
+        def __init__(self):
+            self.customer = customer
+    ctx = _QuoteMailCtx()
 
-def send_quote_email(user, quote, pdf_bytes, accept_url):
-    """Send quote email to customer with PDF attachment and accept link"""
-    customer = quote.customer
+    if connection.provider == 'gmail':
+        success, msg = _send_via_gmail(connection, user, ctx, subject, html, '', pdf_bytes)
+    else:
+        success, msg = _send_via_smtp(connection, user, ctx, subject, html, '', pdf_bytes)
+
+    if not success:
+        raise ValueError(msg)
+
+def send_reminder_email(user, invoice, pdf_bytes=None):
+    """Send payment reminder email to customer for outstanding invoice"""
+    customer = invoice.customer
     if not customer or not customer.email:
         raise ValueError("Customer has no email address")
 
-    subject = f"Quote {quote.quote_number} from {user.company_name or 'Your Contractor'}"
+    days_overdue = 0
+    if invoice.due_date:
+        from datetime import date
+        delta = date.today() - invoice.due_date
+        days_overdue = max(0, delta.days)
+
+    if days_overdue > 0:
+        subject = f"Payment Reminder — {invoice.invoice_number} ({days_overdue} days overdue)"
+        urgency = f"<p style='color: #dc2626; font-weight: bold;'>This invoice is now {days_overdue} days overdue.</p>"
+    else:
+        subject = f"Payment Reminder — {invoice.invoice_number}"
+        urgency = f"<p style='color: #6b7280;'>This invoice is due on {invoice.due_date.strftime('%d %B %Y') if invoice.due_date else 'soon'}.</p>"
+
+    brand = user.invoice_colour or '#2563eb'
 
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: {user.invoice_colour or '#2563eb'}; padding: 24px; border-radius: 8px 8px 0 0;">
+        <div style="background: {brand}; padding: 24px; border-radius: 8px 8px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">{user.company_name or 'Your Contractor'}</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">Payment Reminder</p>
         </div>
         <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
             <p style="color: #374151;">Dear {customer.display_name},</p>
-            <p style="color: #374151;">Please find attached your quote <strong>{quote.quote_number}</strong>
-            for a total of <strong>£{quote.total:.2f}</strong>.</p>
-            {"<p style='color: #6b7280; font-size: 14px;'>This quote is valid until " + quote.expiry_date.strftime('%d %B %Y') + ".</p>" if quote.expiry_date else ""}
-            <div style="text-align: center; margin: 32px 0;">
-                <a href="{accept_url}" style="background: {user.invoice_colour or '#2563eb'}; color: white;
-                   padding: 14px 32px; border-radius: 8px; text-decoration: none;
-                   font-weight: bold; font-size: 16px; display: inline-block;">
-                    ✓ Accept This Quote
-                </a>
+            <p style="color: #374151;">This is a friendly reminder that invoice <strong>{invoice.invoice_number}</strong>
+            for <strong>£{invoice.total:.2f}</strong> remains outstanding.</p>
+            {urgency}
+            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <table style="width: 100%; font-size: 14px;">
+                    <tr><td style="color: #6b7280; padding: 4px 0;">Invoice Number</td><td style="color: #111827; font-weight: bold; text-align: right;">{invoice.invoice_number}</td></tr>
+                    <tr><td style="color: #6b7280; padding: 4px 0;">Amount Due</td><td style="color: #111827; font-weight: bold; text-align: right;">£{invoice.total:.2f}</td></tr>
+                    {"<tr><td style='color: #6b7280; padding: 4px 0;'>Due Date</td><td style='color: #dc2626; font-weight: bold; text-align: right;'>" + invoice.due_date.strftime('%d %B %Y') + "</td></tr>" if invoice.due_date else ""}
+                </table>
             </div>
-            <p style="color: #6b7280; font-size: 13px; text-align: center;">
-                Or open this link: <a href="{accept_url}" style="color: {user.invoice_colour or '#2563eb'};">{accept_url}</a>
-            </p>
-            {f'<div style="background: white; border-left: 3px solid {user.invoice_colour or "#2563eb"}; padding: 12px; margin: 16px 0; border-radius: 0 4px 4px 0;"><p style="color: #374151; margin: 0; font-size: 14px;">{quote.notes}</p></div>' if quote.notes else ''}
-            <p style="color: #6b7280; font-size: 13px;">The full quote is attached as a PDF for your records.</p>
+            {"<div style='background: #f3f4f6; border-radius: 8px; padding: 12px 16px; margin: 16px 0;'><p style='color: #374151; margin: 0; font-size: 13px; font-weight: bold;'>Payment Details</p>" + ("<p style='color: #374151; margin: 4px 0 0; font-size: 13px;'>Bank: " + (user.bank_name or '') + "</p>" if user.bank_name else "") + ("<p style='color: #374151; margin: 4px 0 0; font-size: 13px;'>Account: " + (user.bank_account_number or '') + "</p>" if user.bank_account_number else "") + ("<p style='color: #374151; margin: 4px 0 0; font-size: 13px;'>Sort Code: " + (user.bank_sort_code or '') + "</p>" if user.bank_sort_code else "") + ("<p style='color: #374151; margin: 4px 0 0; font-size: 13px;'>IBAN: " + (user.bank_iban or '') + "</p>" if user.bank_iban else "") + "</div>" if (user.bank_name or user.bank_account_number or user.bank_iban) else ""}
+            <p style="color: #6b7280; font-size: 13px;">If you have already made payment please disregard this reminder.
+            If you have any queries please don't hesitate to get in touch.</p>
+            <p style="color: #6b7280; font-size: 13px; margin-top: 16px;">The invoice is attached for your reference.</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
             <p style="color: #9ca3af; font-size: 12px;">{user.company_name or ''}</p>
         </div>
     </div>
     """
 
-    _send_email(user, customer.email, subject, html,
-                attachment=pdf_bytes,
-                attachment_name=f"{quote.quote_number}.pdf")
+    connection = get_email_connection(user)
+    if not connection:
+        raise ValueError("No email account connected. Please set up email in Settings.")
+
+    if connection.provider == 'gmail':
+        success, msg = _send_via_gmail(connection, user, invoice, subject, html, '', pdf_bytes)
+    else:
+        success, msg = _send_via_smtp(connection, user, invoice, subject, html, '', pdf_bytes)
+
+    if not success:
+        raise ValueError(msg)

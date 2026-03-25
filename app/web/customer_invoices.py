@@ -601,9 +601,22 @@ def send_email(invoice_id):
 def send_reminder(invoice_id):
     invoice = CustomerInvoice.query.filter_by(
         id=invoice_id, user_id=current_user.id).first_or_404()
-    # TODO: wire up email sending — for now just flash a message
-    flash(f'Reminder sent to {invoice.customer.email or "customer"} for {invoice.invoice_number}.', 'success')
-    return redirect(url_for('customer_invoices.index'))
+
+    if not invoice.customer or not invoice.customer.email:
+        flash('Customer has no email address. Please update their profile first.', 'error')
+        return redirect(url_for('customer_invoices.view', invoice_id=invoice_id))
+
+    try:
+        from app.services.pdf_generator import generate_invoice_pdf
+        from app.services.email_sender import send_reminder_email
+        pdf = generate_invoice_pdf(invoice, current_user)
+        send_reminder_email(current_user, invoice, pdf)
+        flash(f'Reminder sent to {invoice.customer.email} for {invoice.invoice_number}.', 'success')
+    except Exception as e:
+        current_app.logger.error(f"Failed to send reminder for {invoice.invoice_number}: {e}")
+        flash(f'Failed to send reminder: {str(e)}', 'error')
+
+    return redirect(url_for('customer_invoices.view', invoice_id=invoice_id))
 
 
 @bp.route('/<int:invoice_id>/delete', methods=['POST'])
