@@ -8,7 +8,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
             <!-- Progress -->
             <div class="flex items-center justify-between mb-8">
-                <span class="text-sm text-gray-500 dark:text-gray-400">Step 3 of 4</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400">Step {{ step_override or 6 }} of {{ total_steps or 7 }}</span>
                 <div class="flex gap-2">
                     <div class="w-8 h-2 bg-primary-600 rounded-full"></div>
                     <div class="w-8 h-2 bg-primary-600 rounded-full"></div>

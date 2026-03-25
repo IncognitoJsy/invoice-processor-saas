@@ -97,6 +97,24 @@ def step(step):
     elif step == 6:
         # Settings (markup + accounts)
         mode = current_user.platform_mode or 'sync'
+
+        # Full platform users only need markup setting — no accounting accounts
+        if mode == 'full':
+            return render_template('setup/step3_settings.html',
+                                   qb_connected=False,
+                                   income_accounts=[],
+                                   expense_accounts=[],
+                                   current_income_account=None,
+                                   current_expense_account=None,
+                                   xero_connected=False,
+                                   xero_sales_accounts=[],
+                                   xero_expense_accounts=[],
+                                   current_xero_sales_account=None,
+                                   current_xero_expense_account=None,
+                                   step_override=6,
+                                   total_steps=6,
+                                   platform_mode=mode)
+
         qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
         qb_connected = qb and qb.access_token and qb.is_active
         xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
@@ -123,9 +141,14 @@ def step(step):
                                current_xero_sales_account=current_xero_sales,
                                current_xero_expense_account=current_xero_expense,
                                step_override=6,
-                               total_steps=7)
+                               total_steps=7,
+                               platform_mode=mode)
 
     elif step == 7:
+        mode = current_user.platform_mode or 'sync'
+        # Full platform users go straight to dashboard from step 6
+        if mode == 'full':
+            return redirect(url_for('dashboard.index'))
         qb = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
         qb_connected = qb and qb.access_token and qb.is_active
         xero = XeroConnection.query.filter_by(user_id=current_user.id).first()
@@ -232,6 +255,12 @@ def save_settings():
             if xero_expense_account:
                 xero.default_expense_account_code = xero_expense_account
         db.session.commit()
+        # Full platform users are done after settings — no accounting step needed
+        if current_user.platform_mode == 'full':
+            current_user.setup_completed = True
+            db.session.commit()
+            flash('Setup complete! Welcome to GoZappify.', 'success')
+            return redirect(url_for('dashboard.index'))
         return redirect(url_for('setup.step', step=7))
     except ValueError:
         flash('Please enter a valid number for markup.', 'error')
