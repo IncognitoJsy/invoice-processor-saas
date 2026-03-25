@@ -234,8 +234,7 @@ def _build_classic(invoice, user, brand):
     hdr = Table([[
         left_col,
         [_p(invoice.invoice_number, 22, 'white', True, TA_RIGHT),
-         _p('INVOICE', 8, '#bfdbfe', align=TA_RIGHT),
-         _p(invoice.status.upper(), 9, '#fbbf24', True, TA_RIGHT)],
+         _p('INVOICE', 8, '#bfdbfe', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     hdr.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), brand),
@@ -373,7 +372,7 @@ def _build_bold(invoice, user, brand):
     bold_left.append(_p(user.company_name or 'Your Company', 11, 'white', True))
     sub = Table([[
         bold_left,
-        _p(invoice.status.upper(), 10, '#fbbf24', True, TA_RIGHT),
+        _p('', 10, 'white'),
     ]], colWidths=[90*mm, 90*mm])
     sub.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), brand),
@@ -493,7 +492,7 @@ def _build_modern(invoice, user, brand):
         left_modern,
         [_p(invoice.invoice_number, 22, brand, True, TA_RIGHT),
          _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT),
-         _p(f'Status: {invoice.status.upper()}', 8, '#6b7280', align=TA_RIGHT)],
+         ],
     ]], colWidths=[95*mm, 85*mm])
     top.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP')]))
     story.append(top)
@@ -547,7 +546,7 @@ def _build_branded(invoice, user, brand):
         [_p(invoice.invoice_number, 28, 'white', True, TA_RIGHT),
          _p('INVOICE', 9, '#bfdbfe', align=TA_RIGHT),
          Spacer(1,3*mm),
-         _p(invoice.status.upper(), 10, '#fbbf24', True, TA_RIGHT),
+
          _p(invoice.payment_terms_label, 8, '#bfdbfe', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     hdr.setStyle(TableStyle([
