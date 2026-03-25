@@ -385,8 +385,19 @@ async function saveIssueDate(invoiceId) {
         body: JSON.stringify({issue_date: date})
     });
     if (res.ok) {
+        const d = await res.json();
+        // Update issue date display
         const formatted = new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
         document.getElementById("issue-date-text").textContent = formatted;
+        // Update due date display and input to reflect new calculated due date
+        if (d.due_formatted) {
+            document.getElementById("due-date-display").querySelector('span').textContent = d.due_formatted;
+            document.getElementById("due-date-input").value = d.new_due_date;
+        }
+        // Update terms label
+        if (d.payment_terms_label) {
+            document.getElementById("payment-terms-label").textContent = d.payment_terms_label;
+        }
         cancelIssueDate();
     }
 }

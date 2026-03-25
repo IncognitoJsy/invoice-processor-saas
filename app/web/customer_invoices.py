@@ -462,9 +462,24 @@ def update_issue_date(invoice_id):
     issue_date_str = data.get('issue_date')
     if issue_date_str:
         try:
-            invoice.issue_date = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+            from datetime import timedelta
+            new_issue = datetime.strptime(issue_date_str, '%Y-%m-%d').date()
+            invoice.issue_date = new_issue
+            # Recalculate due date based on stored payment terms
+            terms = invoice.payment_terms or '30'
+            try:
+                days = int(terms)
+            except ValueError:
+                days = 30
+            invoice.due_date = new_issue + timedelta(days=days)
             db.session.commit()
-            return jsonify({'success': True})
+            due_formatted = invoice.due_date.strftime('%d %b %Y')
+            return jsonify({
+                'success': True,
+                'new_due_date': invoice.due_date.strftime('%Y-%m-%d'),
+                'due_formatted': due_formatted,
+                'payment_terms_label': invoice.payment_terms_label
+            })
         except ValueError:
             return jsonify({'success': False, 'error': 'Invalid date'}), 400
     return jsonify({'success': False, 'error': 'No date provided'}), 400

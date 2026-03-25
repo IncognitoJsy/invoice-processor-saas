@@ -55,6 +55,19 @@
                     <textarea name="notes" rows="3"
                               class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">{{ customer.notes if customer else '' }}</textarea>
                 </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Payment Terms</label>
+                    <select name="payment_terms"
+                            class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                        <option value="0" {% if customer and customer.payment_terms == '0' %}selected{% endif %}>Due on Receipt</option>
+                        <option value="7" {% if customer and customer.payment_terms == '7' %}selected{% endif %}>Net 7 Days</option>
+                        <option value="14" {% if customer and customer.payment_terms == '14' %}selected{% endif %}>Net 14 Days</option>
+                        <option value="30" {% if not customer or not customer.payment_terms or customer.payment_terms == '30' %}selected{% endif %}>Net 30 Days</option>
+                        <option value="60" {% if customer and customer.payment_terms == '60' %}selected{% endif %}>Net 60 Days</option>
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">Used as the default when creating invoices for this customer</p>
+                </div>
             </div>
             <div class="flex justify-between pt-2">
                 <a href="{{ url_for('customers.index') }}" class="px-6 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-medium transition">Cancel</a>
