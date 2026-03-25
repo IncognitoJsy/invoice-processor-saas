@@ -67,17 +67,27 @@ def index():
     tab = request.args.get('tab', 'open')
     all_invoices = CustomerInvoice.query.filter_by(user_id=current_user.id).all()
 
-    # Update overdue status
+    # Update overdue status for sent invoices
+    from datetime import date
+    today = date.today()
+    changed = False
     for inv in all_invoices:
-        if inv.status == 'sent' and inv.due_date and datetime.utcnow() > inv.due_date:
-            inv.status = 'overdue'
-    db.session.commit()
+        if inv.status == 'sent' and inv.due_date:
+            due = inv.due_date.date() if hasattr(inv.due_date, 'date') and callable(inv.due_date.date) else inv.due_date
+            if today > due:
+                inv.status = 'overdue'
+                changed = True
+    if changed:
+        db.session.commit()
 
     # Split into tabs
-    open_invoices = [i for i in all_invoices if i.status == 'open']
+    # Open = not yet sent, not overdue
+    open_invoices = [i for i in all_invoices if i.status == 'open' and not i.is_overdue]
+    # Outstanding = sent OR open-but-overdue OR overdue status
     outstanding = sorted(
-        [i for i in all_invoices if i.status in ['sent', 'overdue']],
-        key=lambda x: (x.status != 'overdue', x.due_date or datetime.max)
+        [i for i in all_invoices if i.status in ['sent', 'overdue'] or
+         (i.status == 'open' and i.is_overdue)],
+        key=lambda x: (not x.is_overdue, x.due_date or datetime.max)
     )
     paid_invoices = sorted(
         [i for i in all_invoices if i.status == 'paid'],
