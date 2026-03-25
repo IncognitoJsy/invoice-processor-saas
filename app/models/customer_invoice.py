@@ -66,15 +66,17 @@ class CustomerInvoice(db.Model):
     @property
     def is_overdue(self):
         if self.status in ['open', 'sent'] and self.due_date:
-            from datetime import date
-            return date.today() > self.due_date
+            from datetime import date, datetime
+            due = self.due_date.date() if isinstance(self.due_date, datetime) else self.due_date
+            return date.today() > due
         return False
 
     @property
     def days_overdue(self):
         if self.is_overdue and self.due_date:
-            from datetime import date
-            return (date.today() - self.due_date).days
+            from datetime import date, datetime
+            due = self.due_date.date() if isinstance(self.due_date, datetime) else self.due_date
+            return (date.today() - due).days
         return 0
 
     def to_dict(self):
