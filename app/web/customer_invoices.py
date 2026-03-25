@@ -438,14 +438,6 @@ def update_due_date(invoice_id):
                 days_diff = (new_due - issue).days
                 if days_diff <= 0:
                     invoice.payment_terms = '0'
-                elif days_diff <= 7:
-                    invoice.payment_terms = '7'
-                elif days_diff <= 14:
-                    invoice.payment_terms = '14'
-                elif days_diff <= 30:
-                    invoice.payment_terms = '30'
-                elif days_diff <= 60:
-                    invoice.payment_terms = '60'
                 else:
                     invoice.payment_terms = str(days_diff)
             db.session.commit()
