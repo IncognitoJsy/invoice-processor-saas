@@ -1,82 +1,142 @@
 {% extends "base/layout.html" %}
-{% block title %}Quotes - GoZappify{% endblock %}
+{% block title %}My Quotes - GoZappify{% endblock %}
 {% block content %}
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
     <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Quotes</h1>
-            <p class="text-gray-500 dark:text-gray-400 mt-1">Create and send quotes to your customers</p>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">My Quotes</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Manage quotes sent to your customers</p>
         </div>
         <a href="{{ url_for('customer_quotes.new') }}"
-           class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+           class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             New Quote
         </a>
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
-        {% for tab, label in [('all','All'),('draft','Draft'),('sent','Sent'),('accepted','Accepted'),('converted','Converted')] %}
-        <button onclick="filterQuotes('{{ tab }}')" id="tab-{{ tab }}"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition tab-btn
-                {% if loop.first %}bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700{% endif %}">
-            {{ label }}
-            <span class="ml-1 text-xs bg-gray-200 dark:bg-gray-600 rounded-full px-2 py-0.5 count-{{ tab }}">
-                {{ quotes|selectattr('status','equalto',tab)|list|length if tab != 'all' else quotes|length }}
+    <div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+        {% set tabs = [
+            ('draft', 'Draft', counts.draft),
+            ('sent', 'Sent', counts.sent),
+            ('accepted', 'Accepted', counts.accepted),
+            ('declined', 'Declined', counts.declined),
+            ('converted', 'Converted', counts.converted),
+        ] %}
+        {% for tab_key, tab_label, tab_count in tabs %}
+        <a href="{{ url_for('customer_quotes.index', tab=tab_key) }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2
+               {% if tab == tab_key %}bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm
+               {% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+            {{ tab_label }}
+            {% if tab_count > 0 %}
+            <span class="px-1.5 py-0.5 rounded-full text-xs font-bold
+                {% if tab_key == 'accepted' %}bg-green-100 text-green-700
+                {% elif tab_key == 'declined' %}bg-red-100 text-red-700
+                {% elif tab_key == 'sent' %}bg-blue-100 text-blue-700
+                {% else %}bg-gray-200 text-gray-600{% endif %}">
+                {{ tab_count }}
             </span>
-        </button>
+            {% endif %}
+        </a>
         {% endfor %}
     </div>
 
+    <!-- Quotes table -->
     {% if quotes %}
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
         <table class="w-full">
             <thead>
-                <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Quote</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Valid Until</th>
-                    <th class="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
-                    <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-5 py-3"></th>
+                <tr class="border-b border-gray-200 dark:border-gray-700">
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Quote</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expires</th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for quote in quotes %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer quote-row" data-status="{{ quote.status }}"
-                    onclick="window.location='{{ url_for('customer_quotes.view', quote_id=quote.id) }}'">
-                    <td class="px-5 py-3 font-mono font-semibold text-primary-600 dark:text-primary-400 text-sm">{{ quote.quote_number }}</td>
-                    <td class="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ quote.customer.display_name if quote.customer else '—' }}</td>
-                    <td class="px-5 py-3 text-sm text-gray-500">{{ quote.issue_date.strftime('%d %b %Y') if quote.issue_date else '—' }}</td>
-                    <td class="px-5 py-3 text-sm text-gray-500">{{ quote.expiry_date.strftime('%d %b %Y') if quote.expiry_date else '—' }}</td>
-                    <td class="px-5 py-3 text-sm text-right font-semibold text-gray-900 dark:text-white">£{{ "%.2f"|format(quote.total or 0) }}</td>
-                    <td class="px-5 py-3">
-                        <span class="px-2 py-1 text-xs font-semibold rounded-full
-                            {% if quote.status == 'accepted' %}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
-                            {% elif quote.status == 'sent' %}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
-                            {% elif quote.status == 'converted' %}bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400
-                            {% elif quote.status == 'declined' %}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
-                            {% else %}bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400{% endif %}">
-                            {{ quote.display_status }}
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for q in quotes %}
+                {% set q_expired = q.expiry_date and q.expiry_date < today and q.status not in ['accepted', 'converted', 'declined'] %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <td class="px-6 py-4 cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        <p class="font-mono font-bold text-gray-900 dark:text-white">{{ q.quote_number }}</p>
+                    </td>
+                    <td class="px-6 py-4 cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        {% if q.customer %}
+                        <p class="font-medium text-gray-900 dark:text-white">{{ q.customer.display_name }}</p>
+                        <p class="text-xs text-gray-400">{{ q.customer.email or '' }}</p>
+                        {% else %}<span class="text-gray-400">—</span>{% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-gray-500 text-sm cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        {{ q.issue_date.strftime('%d %b %Y') if q.issue_date else '—' }}
+                    </td>
+                    <td class="px-6 py-4 text-sm cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        {% if q.expiry_date %}
+                        <span class="{% if q_expired %}text-red-500 font-semibold{% else %}text-gray-500{% endif %}">
+                            {{ q.expiry_date.strftime('%d %b %Y') if q.expiry_date else '—' }}
+                            {% if q_expired %}<span class="block text-xs">Expired</span>{% endif %}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right font-semibold text-gray-900 dark:text-white font-mono cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        £{{ "%.2f"|format(q.total or 0) }}
+                    </td>
+                    <td class="px-6 py-4 text-center cursor-pointer" onclick="window.location='{{ url_for('customer_quotes.view', quote_id=q.id) }}'">
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+                            {% if q.status == 'accepted' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
+                            {% elif q.status == 'converted' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
+                            {% elif q.status == 'declined' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                            {% elif q.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
+                            {% elif q_expired %}bg-orange-100 text-orange-700
+                            {% else %}bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                            {% if q_expired and q.status not in ['accepted','converted','declined'] %}Expired
+                            {% else %}{{ q.status|title }}{% endif %}
                         </span>
                     </td>
-                    <td class="px-5 py-3 text-right" onclick="event.stopPropagation()">
-                        <div class="relative inline-block">
-                            <button onclick="toggleMenu({{ quote.id }})"
-                                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                            </button>
-                            <div id="menu-{{ quote.id }}" class="hidden absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-                                <a href="{{ url_for('customer_quotes.view', quote_id=quote.id) }}" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl">View/Edit</a>
-                                <a href="{{ url_for('customer_quotes.preview', quote_id=quote.id) }}" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Preview</a>
-                                <a href="{{ url_for('customer_quotes.download_pdf', quote_id=quote.id) }}" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Download PDF</a>
-                                {% if quote.status == 'accepted' %}
-                                <button onclick="convertQuote({{ quote.id }})" class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-purple-600 dark:text-purple-400 hover:bg-gray-50 dark:hover:bg-gray-700">Convert to Invoice</button>
-                                {% endif %}
-                                {% if quote.status not in ['converted'] %}
-                                <button onclick="deleteQuote({{ quote.id }}, '{{ quote.quote_number }}')" class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl">Delete</button>
-                                {% endif %}
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-2" x-data="{open: false}">
+                            <a href="{{ url_for('customer_quotes.view', quote_id=q.id) }}"
+                               class="text-sm font-medium text-primary-600 hover:text-primary-700">View/Edit</a>
+                            <div class="relative">
+                                <button @click="open = !open"
+                                        class="p-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div x-show="open" @click.away="open = false"
+                                     class="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-10 py-1">
+                                    <a href="{{ url_for('customer_quotes.view', quote_id=q.id) }}"
+                                       class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        View / Edit
+                                    </a>
+                                    {% if q.status in ['draft', 'sent'] and not q_expired %}
+                                    <button onclick="openAcceptModal({{ q.id }}, '{{ q.quote_number }}')"
+                                            class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                        ✓ Mark Accepted
+                                    </button>
+                                    <button onclick="declineQuote({{ q.id }})"
+                                            class="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                        ✗ Mark Declined
+                                    </button>
+                                    {% endif %}
+                                    {% if q.status == 'accepted' %}
+                                    <button onclick="convertQuote({{ q.id }})"
+                                            class="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-left">
+                                        Convert to Invoice
+                                    </button>
+                                    {% endif %}
+                                    <form action="{{ url_for('customer_quotes.delete', quote_id=q.id) }}" method="POST"
+                                          onsubmit="return confirm('Delete this quote?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit"
+                                                class="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 w-full text-left">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -87,77 +147,89 @@
     </div>
     {% else %}
     <div class="text-center py-16">
-        <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">No quotes yet</h3>
-        <p class="text-gray-500 mb-4">Create your first quote to send to a customer</p>
-        <button onclick="document.getElementById('new-quote-modal').classList.remove('hidden')"
-                class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition">
-            Create First Quote
-        </button>
+        <p class="text-gray-400 mb-4">No {{ tab }} quotes yet.</p>
+        <a href="{{ url_for('customer_quotes.new') }}" class="px-5 py-2.5 bg-primary-600 text-white rounded-xl font-semibold text-sm hover:bg-primary-700 transition">
+            Create your first quote
+        </a>
     </div>
     {% endif %}
 </div>
 
-<!-- New Quote Modal -->
-<div id="new-quote-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md">
-        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">New Quote</h3>
-            <button onclick="document.getElementById('new-quote-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+<!-- Accept Modal -->
+<div id="accept-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Mark Quote as Accepted</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Accepted By</label>
+                <input type="text" id="accept-name" placeholder="Customer name"
+                       class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Accepted</label>
+                <input type="date" id="accept-date"
+                       class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+            <div class="flex items-center gap-3">
+                <input type="checkbox" id="accept-convert" class="w-4 h-4 rounded text-primary-600">
+                <label for="accept-convert" class="text-sm text-gray-700 dark:text-gray-300">Also convert to invoice</label>
+            </div>
         </div>
-        <form action="{{ url_for('customer_quotes.create') }}" method="POST" class="p-6">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Customer (optional)</label>
-                <select name="customer_id" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm">
-                    <option value="">— Select customer —</option>
-                    {% for c in customers %}
-                    <option value="{{ c.id }}">{{ c.display_name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="flex gap-3">
-                <button type="button" onclick="document.getElementById('new-quote-modal').classList.add('hidden')"
-                        class="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 transition text-sm">Cancel</button>
-                <button type="submit" class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">Create Quote</button>
-            </div>
-        </form>
+        <div class="flex gap-3 mt-6">
+            <button onclick="closeAcceptModal()" class="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="confirmAccept()" class="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold">Confirm</button>
+        </div>
     </div>
 </div>
 
 <script>
-function toggleMenu(id) {
-    document.querySelectorAll('[id^="menu-"]').forEach(m => { if (m.id !== `menu-${id}`) m.classList.add('hidden'); });
-    document.getElementById(`menu-${id}`).classList.toggle('hidden');
-}
-document.addEventListener('click', e => { if (!e.target.closest('[id^="menu-"]') && !e.target.closest('button')) document.querySelectorAll('[id^="menu-"]').forEach(m => m.classList.add('hidden')); });
+const csrf = '{{ csrf_token() }}';
+let acceptQuoteId = null;
 
-function filterQuotes(status) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('bg-white','dark:bg-gray-700','shadow','text-gray-900','dark:text-white'));
-    document.getElementById(`tab-${status}`).classList.add('bg-white','dark:bg-gray-700','shadow','text-gray-900','dark:text-white');
-    document.querySelectorAll('.quote-row').forEach(r => {
-        r.style.display = (status === 'all' || r.dataset.status === status) ? '' : 'none';
+function openAcceptModal(id, number) {
+    acceptQuoteId = id;
+    document.getElementById('accept-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('accept-name').value = '';
+    document.getElementById('accept-convert').checked = false;
+    document.getElementById('accept-modal').classList.remove('hidden');
+}
+
+function closeAcceptModal() {
+    document.getElementById('accept-modal').classList.add('hidden');
+}
+
+async function confirmAccept() {
+    const r = await fetch(`/customer-quotes/${acceptQuoteId}/accept-manual`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+            name: document.getElementById('accept-name').value,
+            date: document.getElementById('accept-date').value,
+            convert: document.getElementById('accept-convert').checked
+        })
     });
+    const d = await r.json();
+    if (d.success) { if (d.redirect) window.location = d.redirect; else location.reload(); }
+    else alert(d.error || 'Failed');
+}
+
+async function declineQuote(id) {
+    if (!confirm('Mark this quote as declined?')) return;
+    const r = await fetch(`/customer-quotes/${id}/decline`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    if ((await r.json()).success) location.reload();
 }
 
 async function convertQuote(id) {
     if (!confirm('Convert this quote to an invoice?')) return;
-    const r = await fetch(`/customer-quotes/${id}/convert`, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'}});
+    const r = await fetch(`/customer-quotes/${id}/convert-to-invoice`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
     const d = await r.json();
     if (d.success) window.location = d.redirect;
-    else alert(d.error);
-}
-
-async function deleteQuote(id, num) {
-    if (!confirm(`Delete quote ${num}?`)) return;
-    const r = await fetch(`/customer-quotes/${id}/delete`, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'}});
-    const d = await r.json();
-    if (d.success) location.reload();
-    else alert(d.error);
 }
 </script>
 {% endblock %}
