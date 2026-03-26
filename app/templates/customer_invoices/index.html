@@ -45,7 +45,7 @@
             <button onclick="closePaymentModal()" class="flex-1 py-3 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
                 Cancel
             </button>
-            <button onclick="savePayment()" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition text-sm">
+            <button onclick="savePayment()" id="save-payment-btn" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition text-sm">
                 Save Payment
             </button>
         </div>
@@ -55,10 +55,12 @@
 <script>
 let paymentInvoiceId = null;
 let paymentInvoiceNumber = null;
+let paymentTotal = 0;
 
 function openPaymentModal(invoiceId, invoiceNumber, total) {
     paymentInvoiceId = invoiceId;
     paymentInvoiceNumber = invoiceNumber;
+    paymentTotal = parseFloat(total || 0);
     document.getElementById('payment-modal-subtitle').textContent = 'Recording payment for ' + invoiceNumber;
     document.getElementById('payment-date').value = new Date().toISOString().split('T')[0];
     document.getElementById('payment-memo').value = '';
@@ -76,6 +78,8 @@ function closePaymentModal() {
 
 async function savePayment() {
     if (!paymentInvoiceId) return;
+    const btn = document.getElementById('save-payment-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
     const res = await fetch('/customer-invoices/' + paymentInvoiceId + '/receive-payment', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -83,12 +87,16 @@ async function savePayment() {
             payment_date: document.getElementById('payment-date').value,
             payment_method: document.getElementById('payment-method').value,
             memo: document.getElementById('payment-memo').value,
+            amount: paymentTotal,
         })
     });
     const data = await res.json();
     if (data.success) {
         closePaymentModal();
         window.location.reload();
+    } else {
+        alert(data.error || 'Failed to record payment');
+        if (btn) { btn.disabled = false; btn.textContent = 'Record Payment'; }
     }
 }
 
@@ -112,7 +120,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
     <div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
         {% set tabs = [
             ('open', 'Open', counts.open),
-            ('outstanding', 'Outstanding', counts.outstanding),
+            ('outstanding', 'Overdue', counts.outstanding),
             ('paid', 'Paid', counts.paid),
             ('void', 'Void', counts.void),
         ] %}
@@ -244,7 +252,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                                     {% if inv.status in ['open', 'sent', 'overdue'] %}
                                     <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
 
-                                    <button @click="open = false; openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
+                                    <button onclick="event.stopPropagation(); document.querySelectorAll('[x-data]').forEach(el => el.__x && el.__x.$data && (el.__x.$data.open = false)); openPaymentModal({{ inv.id }}, '{{ inv.invoice_number }}', {{ inv.total or 0 }})"
                                             class="flex items-center gap-2 px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 w-full text-left">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         Receive Payment
@@ -302,7 +310,7 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
         </h3>
         <p class="text-gray-500 dark:text-gray-400">
             {% if tab == 'open' %}Process a supplier invoice and assign it to a customer to get started.
-            {% elif tab == 'outstanding' %}No invoices are currently outstanding.
+            {% elif tab == 'outstanding' %}No overdue invoices.
             {% elif tab == 'paid' %}No paid invoices yet.
             {% else %}No voided invoices.{% endif %}
         </p>
