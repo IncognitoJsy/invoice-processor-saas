@@ -19,10 +19,26 @@ def _next_quote_number(user):
 @bp.route('/')
 @login_required
 def index():
-    quotes = CustomerQuote.query.filter_by(user_id=current_user.id)\
-        .order_by(CustomerQuote.created_at.desc()).all()
-    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
-    return render_template('customer_quotes/index.html', quotes=quotes, customers=customers)
+    from datetime import date
+    tab = request.args.get('tab', 'draft')
+    all_quotes = CustomerQuote.query.filter_by(user_id=current_user.id)        .order_by(CustomerQuote.created_at.desc()).all()
+
+    tab_invoices = {
+        'draft': [q for q in all_quotes if q.status == 'draft'],
+        'sent': [q for q in all_quotes if q.status == 'sent'],
+        'accepted': [q for q in all_quotes if q.status == 'accepted'],
+        'declined': [q for q in all_quotes if q.status == 'declined'],
+        'converted': [q for q in all_quotes if q.status == 'converted'],
+    }
+    counts = {k: len(v) for k, v in tab_invoices.items()}
+    quotes = tab_invoices.get(tab, tab_invoices['draft'])
+
+    return render_template('customer_quotes/index.html',
+        quotes=quotes,
+        tab=tab,
+        counts=counts,
+        today=date.today(),
+    )
 
 
 @bp.route('/new')

@@ -344,7 +344,7 @@ async function markQuoteDeclined(id) {
 
 async function convertQuote(id) {
     if (!confirm('Convert this quote to an invoice?')) return;
-    const r = await fetch(`/customer-quotes/${id}/convert`, {
+    const r = await fetch(`/customer-quotes/${id}/convert-to-invoice`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
     });
