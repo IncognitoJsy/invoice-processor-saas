@@ -73,8 +73,14 @@ def view(customer_id):
         customer_id=customer_id, user_id=current_user.id
     ).order_by(CustomerInvoice.created_at.desc()).all()
     open_invoices = [i for i in invoices if i.status == 'open']
-    outstanding = [i for i in invoices if i.status in ['sent', 'overdue']]
+    outstanding = [i for i in invoices if i.status in ['open', 'sent', 'overdue']]
     paid_invoices = [i for i in invoices if i.status == 'paid']
+
+    from app.models.customer_payment import CustomerPayment
+    payments = CustomerPayment.query.filter_by(
+        user_id=current_user.id, customer_id=customer_id
+    ).order_by(CustomerPayment.payment_date.desc()).all()
+
     total_invoiced = sum(i.total or 0 for i in invoices if i.status != 'void')
     total_outstanding = sum(i.total or 0 for i in outstanding)
     total_paid = sum(i.total or 0 for i in paid_invoices)
