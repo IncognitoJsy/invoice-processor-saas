@@ -266,6 +266,76 @@ def convert_to_invoice(quote_id):
                     'redirect': url_for('customer_invoices.view', invoice_id=invoice.id)})
 
 
+@bp.route('/<int:quote_id>/accept-manual', methods=['POST'])
+@login_required
+def accept_manual(quote_id):
+    """Manually mark quote as accepted from customer profile"""
+    quote = CustomerQuote.query.filter_by(id=quote_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    name = data.get('name', '')
+    date_str = data.get('date', '')
+    convert = data.get('convert', False)
+
+    quote.status = 'accepted'
+    quote.accepted_at = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.utcnow()
+    quote.accepted_by_name = name
+    db.session.commit()
+
+    if convert:
+        # Convert to invoice
+        from datetime import timedelta
+        inv_num = current_user.next_invoice_number or 1
+        current_user.next_invoice_number = inv_num + 1
+        invoice_number = f"{current_user.invoice_prefix or 'INV'}-{inv_num:03d}"
+        from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
+        from datetime import date
+        terms = quote.payment_terms or current_user.default_payment_terms or '30'
+        due = date.today() + timedelta(days=int(terms) if terms.isdigit() else 30)
+        invoice = CustomerInvoice(
+            user_id=current_user.id,
+            customer_id=quote.customer_id,
+            invoice_number=invoice_number,
+            status='open',
+            issue_date=date.today(),
+            due_date=due,
+            subtotal=quote.subtotal,
+            tax_rate=quote.tax_rate,
+            tax_amount=quote.tax_amount,
+            total=quote.total,
+            notes=quote.notes,
+            payment_terms=terms,
+        )
+        db.session.add(invoice)
+        db.session.flush()
+        for i, line in enumerate(quote.lines.order_by(CustomerQuoteLine.sort_order)):
+            inv_line = CustomerInvoiceLine(
+                customer_invoice_id=invoice.id,
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                line_total=line.line_total,
+                sort_order=i,
+            )
+            db.session.add(inv_line)
+        quote.status = 'converted'
+        quote.converted_invoice_id = invoice.id
+        db.session.commit()
+        return jsonify({'success': True, 'redirect': url_for('customer_invoices.view', invoice_id=invoice.id)})
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/<int:quote_id>/decline', methods=['POST'])
+@login_required
+def decline(quote_id):
+    """Mark quote as declined"""
+    quote = CustomerQuote.query.filter_by(id=quote_id, user_id=current_user.id).first_or_404()
+    quote.status = 'declined'
+    db.session.commit()
+    return jsonify({'success': True})
+
+
 @bp.route('/<int:quote_id>/delete', methods=['POST'])
 @login_required
 def delete(quote_id):

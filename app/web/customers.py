@@ -72,8 +72,13 @@ def view(customer_id):
     invoices = CustomerInvoice.query.filter_by(
         customer_id=customer_id, user_id=current_user.id
     ).order_by(CustomerInvoice.created_at.desc()).all()
-    open_invoices = [i for i in invoices if i.status == 'open']
-    outstanding = [i for i in invoices if i.status in ['open', 'sent', 'overdue']]
+    from datetime import date as date_type
+    today = date_type.today()
+
+    # Categorise invoices
+    unpaid = [i for i in invoices if i.status in ['open', 'sent', 'overdue']]
+    sent_invoices = [i for i in invoices if i.status in ['sent', 'overdue']]
+    overdue_invoices = [i for i in invoices if i.is_overdue]
     paid_invoices = [i for i in invoices if i.status == 'paid']
 
     from app.models.customer_payment import CustomerPayment
@@ -81,18 +86,26 @@ def view(customer_id):
         user_id=current_user.id, customer_id=customer_id
     ).order_by(CustomerPayment.payment_date.desc()).all()
 
-    total_invoiced = sum(i.total or 0 for i in invoices if i.status != 'void')
-    total_outstanding = sum(i.total or 0 for i in outstanding)
+    from app.models.customer_quote import CustomerQuote
+    quotes = CustomerQuote.query.filter_by(
+        user_id=current_user.id, customer_id=customer_id
+    ).order_by(CustomerQuote.created_at.desc()).all()
+
+    total_open = sum(i.total or 0 for i in unpaid)
+    total_sent = sum(i.total or 0 for i in sent_invoices)
+    total_overdue = sum(i.total or 0 for i in overdue_invoices)
     total_paid = sum(i.total or 0 for i in paid_invoices)
     return render_template('customers/view.html',
+        today=today,
         customer=customer,
         invoices=invoices,
-        open_invoices=open_invoices,
-        outstanding=outstanding,
+        unpaid=unpaid,
         payments=payments,
+        quotes=quotes,
         paid_invoices=paid_invoices,
-        total_invoiced=total_invoiced,
-        total_outstanding=total_outstanding,
+        total_open=total_open,
+        total_sent=total_sent,
+        total_overdue=total_overdue,
         total_paid=total_paid,
     )
 
