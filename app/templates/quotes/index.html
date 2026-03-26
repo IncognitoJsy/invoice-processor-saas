@@ -289,7 +289,7 @@ function quotesPage() {
             this.uploading = true; this.uploadSuccess = false; this.uploadError = false; this.wrongDocType = false;
             const formData = new FormData(); this.files.forEach(file => formData.append('files', file)); formData.append('use_claude', 'true'); formData.append('document_type', 'quote');
             try {
-                const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                const response = await fetch('/api/upload/single', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (response.ok) { this.uploadSuccess = true; this.uploadMessage = 'Successfully processed ' + (data.results?.length || 1) + ' quote(s)!'; this.files = []; loadQuotes(); }
                 else { if (data.error && data.error.toLowerCase().includes('invoice')) { this.wrongDocType = true; } else { this.uploadError = true; this.errorMessage = data.error || 'Processing failed'; } }
