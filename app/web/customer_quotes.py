@@ -53,52 +53,6 @@ def new():
     )
 
 
-@bp.route('/create-manual', methods=['POST'])
-@login_required
-def create_manual():
-    """Create quote from manual entry"""
-    from datetime import date, timedelta
-    data = request.get_json()
-    quote_num = current_user.next_quote_number or 1
-    current_user.next_quote_number = quote_num + 1
-    quote_number = f"{current_user.quote_prefix or 'QUO'}-{quote_num:03d}"
-    try:
-        issue = datetime.strptime(data['issue_date'], '%Y-%m-%d').date()
-        expiry = datetime.strptime(data['due_date'], '%Y-%m-%d').date()
-    except:
-        issue = date.today()
-        expiry = date.today() + timedelta(days=30)
-    quote = CustomerQuote(
-        user_id=current_user.id,
-        customer_id=data['customer_id'],
-        quote_number=quote_number,
-        status='draft',
-        issue_date=issue,
-        expiry_date=expiry,
-        subtotal=data.get('subtotal', 0),
-        tax_rate=data.get('tax_rate', 0),
-        tax_amount=data.get('tax_amount', 0),
-        total=data.get('total', 0),
-        notes=data.get('notes', ''),
-        payment_terms=data.get('payment_terms', '30'),
-    )
-    quote.generate_token()
-    db.session.add(quote)
-    db.session.flush()
-    for line in data.get('lines', []):
-        q_line = CustomerQuoteLine(
-            quote_id=quote.id,
-            description=line['description'],
-            quantity=line['quantity'],
-            unit_price=line['unit_price'],
-            line_total=line['line_total'],
-            sort_order=line.get('sort_order', 0),
-        )
-        db.session.add(q_line)
-    db.session.commit()
-    return jsonify({'success': True, 'redirect': url_for('customer_quotes.view', quote_id=quote.id)})
-
-
 @bp.route('/create', methods=['POST'])
 @login_required
 def create():
@@ -419,3 +373,49 @@ def delete(quote_id):
     db.session.delete(quote)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@bp.route('/create-manual', methods=['POST'])
+@login_required
+def create_manual():
+    """Create quote from manual entry"""
+    from datetime import date, timedelta, datetime as dt
+    data = request.get_json()
+    quote_num = current_user.next_quote_number or 1
+    current_user.next_quote_number = quote_num + 1
+    quote_number = f"{current_user.quote_prefix or 'QUO'}-{quote_num:03d}"
+    try:
+        issue = dt.strptime(data['issue_date'], '%Y-%m-%d').date()
+        expiry = dt.strptime(data['due_date'], '%Y-%m-%d').date()
+    except:
+        issue = date.today()
+        expiry = date.today() + timedelta(days=30)
+    quote = CustomerQuote(
+        user_id=current_user.id,
+        customer_id=data['customer_id'],
+        quote_number=quote_number,
+        status='draft',
+        issue_date=issue,
+        expiry_date=expiry,
+        subtotal=data.get('subtotal', 0),
+        tax_rate=data.get('tax_rate', 0),
+        tax_amount=data.get('tax_amount', 0),
+        total=data.get('total', 0),
+        notes=data.get('notes', ''),
+        payment_terms=data.get('payment_terms', '30'),
+    )
+    quote.generate_token()
+    db.session.add(quote)
+    db.session.flush()
+    for line in data.get('lines', []):
+        q_line = CustomerQuoteLine(
+            quote_id=quote.id,
+            description=line['description'],
+            quantity=line['quantity'],
+            unit_price=line['unit_price'],
+            line_total=line['line_total'],
+            sort_order=line.get('sort_order', 0),
+        )
+        db.session.add(q_line)
+    db.session.commit()
+    return jsonify({'success': True, 'redirect': url_for('customer_quotes.view', quote_id=quote.id)})

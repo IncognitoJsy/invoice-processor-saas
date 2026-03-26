@@ -709,3 +709,81 @@ def delete(invoice_id):
     db.session.commit()
     flash(f'{num} deleted.', 'success')
     return redirect(url_for('customer_invoices.index'))
+
+
+@bp.route('/new')
+@login_required
+@require_full_mode
+def new():
+    """Manual invoice creation page"""
+    from app.models.customer import Customer
+    from app.models.product_service import ProductService
+    from datetime import date, timedelta
+    customer_id = request.args.get('customer_id', type=int)
+    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
+    selected_customer = Customer.query.filter_by(id=customer_id, user_id=current_user.id).first() if customer_id else None
+    products = ProductService.query.filter_by(user_id=current_user.id).order_by(ProductService.name).all()
+    today = date.today()
+    default_terms = current_user.default_payment_terms or '30'
+    try:
+        due_date = today + timedelta(days=int(default_terms))
+    except:
+        due_date = today + timedelta(days=30)
+    return render_template('customer_invoices/new.html',
+        customers=customers,
+        selected_customer=selected_customer,
+        products=products,
+        today=today.strftime('%Y-%m-%d'),
+        default_due=due_date.strftime('%Y-%m-%d'),
+        default_expiry=due_date.strftime('%Y-%m-%d'),
+        default_terms=default_terms,
+        next_number=f"{current_user.invoice_prefix or 'INV'}-{current_user.next_invoice_number or 1:03d}",
+        doc_type='invoice',
+        back_url=url_for('customer_invoices.index'),
+    )
+
+
+@bp.route('/create-manual', methods=['POST'])
+@login_required
+@require_full_mode
+def create_manual():
+    """Create invoice from manual entry"""
+    from datetime import date, timedelta
+    data = request.get_json()
+    inv_num = current_user.next_invoice_number or 1
+    current_user.next_invoice_number = inv_num + 1
+    invoice_number = f"{current_user.invoice_prefix or 'INV'}-{inv_num:03d}"
+    try:
+        issue = datetime.strptime(data['issue_date'], '%Y-%m-%d').date()
+        due = datetime.strptime(data['due_date'], '%Y-%m-%d').date()
+    except:
+        issue = date.today()
+        due = date.today() + timedelta(days=30)
+    invoice = CustomerInvoice(
+        user_id=current_user.id,
+        customer_id=data['customer_id'],
+        invoice_number=invoice_number,
+        status='open',
+        issue_date=issue,
+        due_date=due,
+        subtotal=data.get('subtotal', 0),
+        tax_rate=data.get('tax_rate', 0),
+        tax_amount=data.get('tax_amount', 0),
+        total=data.get('total', 0),
+        notes=data.get('notes', ''),
+        payment_terms=data.get('payment_terms', '30'),
+    )
+    db.session.add(invoice)
+    db.session.flush()
+    for line in data.get('lines', []):
+        inv_line = CustomerInvoiceLine(
+            customer_invoice_id=invoice.id,
+            description=line['description'],
+            quantity=line['quantity'],
+            unit_price=line['unit_price'],
+            line_total=line['line_total'],
+            sort_order=line.get('sort_order', 0),
+        )
+        db.session.add(inv_line)
+    db.session.commit()
+    return jsonify({'success': True, 'redirect': url_for('customer_invoices.view', invoice_id=invoice.id)})
