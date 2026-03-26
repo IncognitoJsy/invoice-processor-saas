@@ -108,8 +108,11 @@ def index():
         'void': void_invoices,
     }.get(tab, open_invoices)
 
+    from app.models.customer import Customer
+    all_customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
     return render_template('customer_invoices/index.html',
         invoices=tab_invoices,
+        all_customers=all_customers,
         tab=tab,
         counts=counts,
         now=datetime.utcnow(),
