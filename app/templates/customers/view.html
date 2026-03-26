@@ -12,10 +12,13 @@
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ customer.display_name }}</h1>
         </div>
         <div class="flex gap-2">
-            <a href="{{ url_for('customer_invoices.create_for_customer', customer_id=customer.id) if false else url_for('customer_invoices.index') }}"
-               onclick="event.preventDefault(); createInvoice({{ customer.id }})"
+            <a href="{{ url_for('customer_invoices.new', customer_id=customer.id) }}"
                class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
                 + New Invoice
+            </a>
+            <a href="{{ url_for('customer_quotes.new', customer_id=customer.id) }}"
+               class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                + New Quote
             </a>
             <a href="{{ url_for('customers.edit', customer_id=customer.id) }}"
                class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
@@ -97,9 +100,9 @@
                    class="block w-full text-center py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition">
                     Record Payment
                 </a>
-                <a href="{{ url_for('customer_quotes.index') }}"
+                <a href="{{ url_for('customer_quotes.new', customer_id=customer.id) }}"
                    class="block w-full text-center py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    New Quote
+                    + New Quote
                 </a>
             </div>
         </div>
@@ -349,22 +352,6 @@ async function convertQuote(id) {
     if (d.success) window.location = d.redirect;
 }
 
-function createInvoice(customerId) {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/customer-invoices/create';
-    const csrf_input = document.createElement('input');
-    csrf_input.type = 'hidden';
-    csrf_input.name = 'csrf_token';
-    csrf_input.value = csrf;
-    const cid = document.createElement('input');
-    cid.type = 'hidden';
-    cid.name = 'customer_id';
-    cid.value = customerId;
-    form.appendChild(csrf_input);
-    form.appendChild(cid);
-    document.body.appendChild(form);
-    form.submit();
-}
+
 </script>
 {% endblock %}
