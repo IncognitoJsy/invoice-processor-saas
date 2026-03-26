@@ -81,13 +81,12 @@ def index():
         db.session.commit()
 
     # Split into tabs
-    # Open = not yet sent, not overdue
-    open_invoices = [i for i in all_invoices if i.status == 'open' and not i.is_overdue]
-    # Outstanding = sent OR open-but-overdue OR overdue status
+    # Open = open or sent but not yet overdue
+    open_invoices = [i for i in all_invoices if i.status in ['open', 'sent'] and not i.is_overdue]
+    # Overdue = overdue status OR past due date
     outstanding = sorted(
-        [i for i in all_invoices if i.status in ['sent', 'overdue'] or
-         (i.status == 'open' and i.is_overdue)],
-        key=lambda x: (not x.is_overdue, x.due_date or datetime.max)
+        [i for i in all_invoices if i.status == 'overdue' or i.is_overdue],
+        key=lambda x: x.due_date or datetime.max
     )
     paid_invoices = sorted(
         [i for i in all_invoices if i.status == 'paid'],
