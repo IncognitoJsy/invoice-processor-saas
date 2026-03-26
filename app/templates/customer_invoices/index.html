@@ -114,7 +114,7 @@ async function selectBulkCustomer(id, name) {
     document.getElementById('bulk-date').value = new Date().toISOString().split('T')[0];
 
     // Load open invoices for this customer
-    const res = await fetch('/customer-invoices/api/customer/' + id + '/open');
+    const res = await fetch('/customer-invoices/api/customer/' + id + '/open-invoices');
     const data = await res.json();
 
     const container = document.getElementById('bulk-invoices-container');
