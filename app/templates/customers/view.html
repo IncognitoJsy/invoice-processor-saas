@@ -1,21 +1,24 @@
 {% extends "base/layout.html" %}
 {% block title %}{{ customer.display_name }} - GoZappify{% endblock %}
 {% block content %}
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Header -->
-    <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <a href="{{ url_for('customers.index') }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium">← Back to Customers</a>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-2">{{ customer.display_name }}</h1>
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('customers.index') }}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ customer.display_name }}</h1>
         </div>
-        <div class="flex gap-3">
-            <a href="{{ url_for('customer_invoices.index') }}?customer={{ customer.id }}"
-               class="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm">
+        <div class="flex gap-2">
+            <a href="{{ url_for('customer_invoices.create_for_customer', customer_id=customer.id) if false else url_for('customer_invoices.index') }}"
+               onclick="event.preventDefault(); createInvoice({{ customer.id }})"
+               class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
                 + New Invoice
             </a>
             <a href="{{ url_for('customers.edit', customer_id=customer.id) }}"
-               class="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
+               class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 Edit
             </a>
         </div>
@@ -23,199 +26,356 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        <!-- Left: Contact details + stats -->
+        <!-- Left column: Contact + Account Summary -->
         <div class="space-y-4">
-            <!-- Contact -->
-            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+
+            <!-- Contact Details -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
                 <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Contact Details</h2>
-                <div class="space-y-3">
+                <div class="space-y-2.5">
                     {% if customer.email %}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 text-sm">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                        <a href="mailto:{{ customer.email }}" class="text-sm text-primary-600 hover:underline truncate">{{ customer.email }}</a>
+                        <a href="mailto:{{ customer.email }}" class="text-primary-600 hover:underline">{{ customer.email }}</a>
                     </div>
                     {% endif %}
                     {% if customer.phone %}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-                        <span class="text-sm text-gray-600 dark:text-gray-300">{{ customer.phone }}</span>
+                        {{ customer.phone }}
                     </div>
                     {% endif %}
                     {% if customer.full_address %}
-                    <div class="flex items-start gap-3">
+                    <div class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        <span class="text-sm text-gray-600 dark:text-gray-300">{{ customer.full_address }}</span>
+                        {{ customer.full_address }}
                     </div>
                     {% endif %}
-                    {% if customer.payment_terms %}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 text-sm text-gray-500">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span class="text-sm text-gray-600 dark:text-gray-300">
-                            {% if customer.payment_terms in ['0', 'receipt'] %}Due on Receipt
-                            {% elif customer.payment_terms %}Net {{ customer.payment_terms }} Days
-                            {% else %}Net 30 Days{% endif %}
-                        </span>
+                        {% if customer.payment_terms in ['0', 'receipt'] %}Due on Receipt
+                        {% elif customer.payment_terms %}Net {{ customer.payment_terms }} Days
+                        {% else %}Net 30 Days{% endif %}
                     </div>
-                    {% endif %}
-                    {% if customer.notes %}
-                    <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
-                        <p class="text-xs text-gray-400 mb-1">Notes</p>
-                        <p class="text-sm text-gray-600 dark:text-gray-300">{{ customer.notes }}</p>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
 
-            <!-- Financial summary -->
-            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <!-- Account Summary -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
                 <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Account Summary</h2>
                 <div class="space-y-3">
                     <div class="flex justify-between items-center">
-                        <span class="text-sm text-gray-500">Total Invoiced</span>
-                        <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(total_invoiced) }}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm text-gray-500">Outstanding</span>
-                        <span class="font-semibold {% if total_outstanding > 0 %}text-amber-600 dark:text-amber-400{% else %}text-gray-900 dark:text-white{% endif %} font-mono">
-                            £{{ "%.2f"|format(total_outstanding) }}
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Open Invoices</span>
+                        <span class="font-semibold {% if total_open > 0 %}text-amber-600 dark:text-amber-400{% else %}text-gray-900 dark:text-white{% endif %} font-mono text-sm">
+                            £{{ "%.2f"|format(total_open) }}
                         </span>
                     </div>
-                    <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <span class="text-sm text-gray-500">Total Paid</span>
-                        <span class="font-semibold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(total_paid) }}</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Sent</span>
+                        <span class="font-semibold text-blue-600 dark:text-blue-400 font-mono text-sm">
+                            £{{ "%.2f"|format(total_sent) }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Overdue</span>
+                        <span class="font-semibold {% if total_overdue > 0 %}text-red-600 dark:text-red-400{% else %}text-gray-400{% endif %} font-mono text-sm">
+                            £{{ "%.2f"|format(total_overdue) }}
+                        </span>
+                    </div>
+                    <div class="border-t border-gray-200 dark:border-gray-700 pt-3 flex justify-between items-center">
+                        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Paid</span>
+                        <span class="font-bold text-green-600 dark:text-green-400 font-mono">
+                            £{{ "%.2f"|format(total_paid) }}
+                        </span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Quick actions -->
+            <div class="flex flex-col gap-2">
+                <a href="{{ url_for('customer_payments.index', customer_id=customer.id) }}"
+                   class="block w-full text-center py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition">
+                    Record Payment
+                </a>
+                <a href="{{ url_for('customer_quotes.index') }}"
+                   class="block w-full text-center py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    New Quote
+                </a>
             </div>
         </div>
 
-        <!-- Right: Invoices -->
+        <!-- Right column: Open invoices + History -->
         <div class="lg:col-span-2 space-y-4">
 
-            <!-- Open invoices -->
-            {% if open_invoices %}
+            <!-- Open Invoices -->
+            {% if unpaid %}
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm">
-                <div class="p-5 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between bg-amber-50 dark:bg-amber-900/20 rounded-t-2xl">
-                    <h2 class="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                <div class="p-5 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between bg-amber-50/50 dark:bg-amber-900/10 rounded-t-2xl">
+                    <h2 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                         Open Invoices
                     </h2>
-                    <span class="text-xs font-bold text-amber-600 dark:text-amber-400">{{ open_invoices|length }}</span>
+                    <span class="text-xs font-bold text-amber-600 dark:text-amber-400">{{ unpaid|length }}</span>
                 </div>
                 <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                    {% for inv in open_invoices %}
+                    {% for inv in unpaid|sort(attribute='due_date') %}
                     <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <div class="flex items-center gap-3">
-                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
-                            <span class="text-sm text-gray-500">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
-                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-primary-600 hover:text-primary-700 font-medium">View →</a>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Outstanding -->
-            {% if outstanding %}
-            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 shadow-sm">
-                <div class="p-5 border-b border-red-200 dark:border-red-800 flex items-center justify-between bg-red-50 dark:bg-red-900/20 rounded-t-2xl">
-                    <h2 class="font-semibold text-red-800 dark:text-red-300 flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                        Outstanding
-                    </h2>
-                    <span class="text-xs font-bold text-red-600 dark:text-red-400">£{{ "%.2f"|format(total_outstanding) }}</span>
-                </div>
-                <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                    {% for inv in outstanding %}
-                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <div class="flex items-center gap-3">
-                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
-                            <span class="text-sm {% if inv.is_overdue %}text-red-500{% else %}text-gray-500{% endif %}">
-                                Due {{ inv.due_date.strftime('%d %b %Y') if inv.due_date else '—' }}
-                                {% if inv.is_overdue %} — {{ inv.days_overdue }}d overdue{% endif %}
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
-                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-primary-600 hover:text-primary-700 font-medium">View →</a>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Transaction History — invoices + payments interleaved -->
-            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <h2 class="font-semibold text-gray-900 dark:text-white">Invoice History</h2>
-                    <span class="text-xs text-gray-400">{{ invoices|length }} total</span>
-                </div>
-                {% if invoices or payments %}
-                <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                    {# Build interleaved list — invoices and payments sorted by date desc #}
-                    {% set ns = namespace(items=[]) %}
-                    {% for inv in invoices %}
-                        {% set ns.items = ns.items + [{'type': 'invoice', 'date': inv.issue_date, 'obj': inv}] %}
-                    {% endfor %}
-                    {% for pay in payments %}
-                        {% set ns.items = ns.items + [{'type': 'payment', 'date': pay.payment_date, 'obj': pay}] %}
-                    {% endfor %}
-                    {% for item in ns.items|sort(attribute='date', reverse=True) %}
-                        {% if item.type == 'payment' %}
-                        {# Payment row #}
-                        <div class="p-4 flex items-center justify-between bg-green-50/50 dark:bg-green-900/10">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-                                    <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                </div>
-                                <div>
-                                    <p class="text-sm font-semibold text-green-700 dark:text-green-400">Payment Received</p>
-                                    <p class="text-xs text-gray-400">
-                                        {{ item.obj.method_label }}
-                                        {% if item.obj.reference %} · Ref: {{ item.obj.reference }}{% endif %}
-                                        · {{ item.obj.payment_date.strftime('%d %b %Y') if item.obj.payment_date else '—' }}
-                                    </p>
-                                </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                                   class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm">{{ inv.invoice_number }}</a>
+                                {% if inv.is_overdue %}
+                                <span class="text-xs font-semibold text-red-500">(Overdue {{ inv.days_overdue }} day{{ 's' if inv.days_overdue != 1 }})</span>
+                                {% elif inv.status == 'sent' %}
+                                <span class="text-xs text-blue-500">(Sent)</span>
+                                {% endif %}
                             </div>
-                            <span class="font-bold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(item.obj.amount or 0) }}</span>
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                Due {{ inv.due_date.strftime('%d %b %Y') if inv.due_date else '—' }}
+                            </p>
                         </div>
-                        {% else %}
-                        {# Invoice row #}
-                        {% set inv = item.obj %}
-                        <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                            <div class="flex items-center gap-3">
-                                <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-sm text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                    {% if inv.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
-                                    {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
-                                    {% elif inv.status == 'overdue' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
-                                    {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
-                                    {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
-                                    {{ inv.status|title }}
-                                </span>
-                                <span class="text-xs text-gray-400 hidden sm:inline">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="text-sm font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                        <div class="flex items-center gap-3">
+                            <span class="font-semibold text-gray-900 dark:text-white font-mono text-sm">£{{ "%.2f"|format(inv.total or 0) }}</span>
                             <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-gray-400 hover:text-primary-600">→</a>
                         </div>
                     </div>
-                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Transaction History -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">History</h2>
+                    <span class="text-xs text-gray-400">{{ (invoices|length) + (payments|length) + (quotes|length) }} entries</span>
+                </div>
+
+                {% set ns = namespace(items=[]) %}
+                {% for inv in invoices %}
+                    {% set ns.items = ns.items + [{'type': 'invoice', 'date': inv.issue_date, 'obj': inv}] %}
+                {% endfor %}
+                {% for pay in payments %}
+                    {% set ns.items = ns.items + [{'type': 'payment', 'date': pay.payment_date, 'obj': pay}] %}
+                {% endfor %}
+                {% for q in quotes %}
+                    {% set ns.items = ns.items + [{'type': 'quote', 'date': q.issue_date, 'obj': q}] %}
+                {% endfor %}
+
+                {% if ns.items %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for item in ns.items|sort(attribute='date', reverse=True) %}
+
+                    {% if item.type == 'payment' %}
+                    <!-- Payment row -->
+                    <div class="p-4 flex items-center justify-between bg-green-50/40 dark:bg-green-900/10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-green-700 dark:text-green-400">Payment Received</p>
+                                <p class="text-xs text-gray-400">
+                                    {{ item.obj.method_label }}
+                                    {% if item.obj.reference %} · {{ item.obj.reference }}{% endif %}
+                                    · {{ item.obj.payment_date.strftime('%d %b %Y') if item.obj.payment_date else '—' }}
+                                </p>
+                            </div>
+                        </div>
+                        <span class="font-bold text-green-600 dark:text-green-400 font-mono text-sm">£{{ "%.2f"|format(item.obj.amount or 0) }}</span>
+                    </div>
+
+                    {% elif item.type == 'quote' %}
+                    <!-- Quote row -->
+                    {% set q = item.obj %}
+                    {% set q_expired = q.expiry_date and q.expiry_date < today and q.status not in ['accepted', 'converted', 'declined'] %}
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ url_for('customer_quotes.view', quote_id=q.id) }}"
+                                       class="font-mono font-semibold text-purple-600 dark:text-purple-400 hover:underline text-sm">{{ q.quote_number }}</a>
+                                    <span class="text-xs px-1.5 py-0.5 rounded font-medium
+                                        {% if q.status == 'accepted' %}bg-green-100 text-green-700
+                                        {% elif q.status == 'converted' %}bg-blue-100 text-blue-700
+                                        {% elif q.status == 'declined' %}bg-red-100 text-red-700
+                                        {% elif q_expired %}bg-orange-100 text-orange-700
+                                        {% elif q.status == 'sent' %}bg-blue-100 text-blue-700
+                                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                        {% if q_expired %}Expired{% else %}{{ q.display_status }}{% endif %}
+                                    </span>
+                                    {% if q_expired %}
+                                    <span class="text-xs text-orange-500">({{ (today - q.expiry_date).days }}d ago)</span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-xs text-gray-400 mt-0.5">{{ q.issue_date.strftime('%d %b %Y') if q.issue_date else '—' }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-gray-900 dark:text-white font-mono text-sm">£{{ "%.2f"|format(q.total or 0) }}</span>
+                            {% if q.status not in ['accepted', 'converted', 'declined'] %}
+                            <div class="relative" x-data="{open: false}">
+                                <button @click="open = !open" class="p-1 text-gray-400 hover:text-gray-600 rounded">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div x-show="open" @click.away="open = false"
+                                     class="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                                    <button onclick="markQuoteAccepted({{ q.id }})" class="w-full text-left px-4 py-2.5 text-sm text-green-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl">✓ Mark Accepted</button>
+                                    <button onclick="markQuoteDeclined({{ q.id }})" class="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl">✗ Mark Declined</button>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if q.status == 'accepted' %}
+                            <button onclick="convertQuote({{ q.id }})" class="text-xs text-blue-600 hover:underline font-medium">Convert →</button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% else %}
+                    <!-- Invoice row -->
+                    {% set inv = item.obj %}
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                                       class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm">{{ inv.invoice_number }}</a>
+                                    <span class="text-xs px-1.5 py-0.5 rounded font-medium
+                                        {% if inv.status == 'paid' %}bg-green-100 text-green-700
+                                        {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700
+                                        {% elif inv.status == 'overdue' or inv.is_overdue %}bg-red-100 text-red-700
+                                        {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
+                                        {% else %}bg-amber-100 text-amber-700{% endif %}">
+                                        {% if inv.is_overdue and inv.status != 'paid' %}Overdue{% else %}{{ inv.status|title }}{% endif %}
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-400 mt-0.5">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-semibold text-gray-900 dark:text-white font-mono text-sm">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-gray-400 hover:text-primary-600">→</a>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% endfor %}
                 </div>
                 {% else %}
                 <div class="p-8 text-center">
-                    <p class="text-gray-400 text-sm">No invoices yet for this customer.</p>
-                    <a href="{{ url_for('customer_invoices.index') }}" class="inline-block mt-3 text-sm text-primary-600 hover:underline">Create first invoice →</a>
+                    <p class="text-gray-400 text-sm">No history yet for this customer.</p>
                 </div>
                 {% endif %}
             </div>
-
         </div>
     </div>
 </div>
+
+<!-- Quote Accept Modal -->
+<div id="quote-accept-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Mark Quote as Accepted</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Accepted By</label>
+                <input type="text" id="accept-name" placeholder="Customer name"
+                       class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Accepted</label>
+                <input type="date" id="accept-date"
+                       class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+            <div class="flex items-center gap-3">
+                <input type="checkbox" id="accept-convert" class="w-4 h-4 rounded text-primary-600">
+                <label for="accept-convert" class="text-sm text-gray-700 dark:text-gray-300">Also convert to invoice</label>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="closeAcceptModal()" class="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">Cancel</button>
+            <button onclick="confirmAccept()" class="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const csrf = '{{ csrf_token() }}';
+let acceptQuoteId = null;
+const today = new Date().toISOString().split('T')[0];
+
+function markQuoteAccepted(id) {
+    acceptQuoteId = id;
+    document.getElementById('accept-date').value = today;
+    document.getElementById('accept-name').value = '';
+    document.getElementById('accept-convert').checked = false;
+    document.getElementById('quote-accept-modal').classList.remove('hidden');
+}
+
+function closeAcceptModal() {
+    document.getElementById('quote-accept-modal').classList.add('hidden');
+    acceptQuoteId = null;
+}
+
+async function confirmAccept() {
+    const name = document.getElementById('accept-name').value;
+    const date = document.getElementById('accept-date').value;
+    const convert = document.getElementById('accept-convert').checked;
+
+    const r = await fetch(`/customer-quotes/${acceptQuoteId}/accept-manual`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({name, date, convert})
+    });
+    const d = await r.json();
+    if (d.success) {
+        if (d.redirect) window.location = d.redirect;
+        else location.reload();
+    } else {
+        alert(d.error || 'Failed');
+    }
+}
+
+async function markQuoteDeclined(id) {
+    if (!confirm('Mark this quote as declined?')) return;
+    const r = await fetch(`/customer-quotes/${id}/decline`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    if ((await r.json()).success) location.reload();
+}
+
+async function convertQuote(id) {
+    if (!confirm('Convert this quote to an invoice?')) return;
+    const r = await fetch(`/customer-quotes/${id}/convert`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}
+    });
+    const d = await r.json();
+    if (d.success) window.location = d.redirect;
+}
+
+function createInvoice(customerId) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/customer-invoices/create';
+    const csrf_input = document.createElement('input');
+    csrf_input.type = 'hidden';
+    csrf_input.name = 'csrf_token';
+    csrf_input.value = csrf;
+    const cid = document.createElement('input');
+    cid.type = 'hidden';
+    cid.name = 'customer_id';
+    cid.value = customerId;
+    form.appendChild(csrf_input);
+    form.appendChild(cid);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
 {% endblock %}
