@@ -51,8 +51,9 @@
                     <div class="flex items-center gap-3">
                         <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         <span class="text-sm text-gray-600 dark:text-gray-300">
-                            {% if customer.payment_terms == 'receipt' %}Due on Receipt
-                            {% else %}Net {{ customer.payment_terms }} Days{% endif %}
+                            {% if customer.payment_terms in ['0', 'receipt'] %}Due on Receipt
+                            {% elif customer.payment_terms %}Net {{ customer.payment_terms }} Days
+                            {% else %}Net 30 Days{% endif %}
                         </span>
                     </div>
                     {% endif %}
@@ -147,33 +148,63 @@
             </div>
             {% endif %}
 
-            <!-- All invoices history -->
+            <!-- Transaction History — invoices + payments interleaved -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <h2 class="font-semibold text-gray-900 dark:text-white">Invoice History</h2>
                     <span class="text-xs text-gray-400">{{ invoices|length }} total</span>
                 </div>
-                {% if invoices %}
+                {% if invoices or payments %}
                 <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {# Build interleaved list — invoices and payments sorted by date desc #}
+                    {% set ns = namespace(items=[]) %}
                     {% for inv in invoices %}
-                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <div class="flex items-center gap-3">
-                            <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-sm text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                {% if inv.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
-                                {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
-                                {% elif inv.status == 'overdue' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
-                                {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
-                                {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
-                                {{ inv.status|title }}
-                            </span>
-                            <span class="text-xs text-gray-400 hidden sm:inline">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
+                        {% set ns.items = ns.items + [{'type': 'invoice', 'date': inv.issue_date, 'obj': inv}] %}
+                    {% endfor %}
+                    {% for pay in payments %}
+                        {% set ns.items = ns.items + [{'type': 'payment', 'date': pay.payment_date, 'obj': pay}] %}
+                    {% endfor %}
+                    {% for item in ns.items|sort(attribute='date', reverse=True) %}
+                        {% if item.type == 'payment' %}
+                        {# Payment row #}
+                        <div class="p-4 flex items-center justify-between bg-green-50/50 dark:bg-green-900/10">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-green-700 dark:text-green-400">Payment Received</p>
+                                    <p class="text-xs text-gray-400">
+                                        {{ item.obj.method_label }}
+                                        {% if item.obj.reference %} · Ref: {{ item.obj.reference }}{% endif %}
+                                        · {{ item.obj.payment_date.strftime('%d %b %Y') if item.obj.payment_date else '—' }}
+                                    </p>
+                                </div>
+                            </div>
+                            <span class="font-bold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(item.obj.amount or 0) }}</span>
+                        </div>
+                        {% else %}
+                        {# Invoice row #}
+                        {% set inv = item.obj %}
+                        <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                            <div class="flex items-center gap-3">
+                                <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="font-mono font-semibold text-sm text-primary-600 dark:text-primary-400 hover:underline">{{ inv.invoice_number }}</a>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                    {% if inv.status == 'paid' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
+                                    {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400
+                                    {% elif inv.status == 'overdue' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                                    {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
+                                    {% else %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% endif %}">
+                                    {{ inv.status|title }}
+                                </span>
+                                <span class="text-xs text-gray-400 hidden sm:inline">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
                         </div>
                         <div class="flex items-center gap-4">
                             <span class="text-sm font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</span>
                             <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}" class="text-xs text-gray-400 hover:text-primary-600">→</a>
                         </div>
                     </div>
+                        {% endif %}
                     {% endfor %}
                 </div>
                 {% else %}

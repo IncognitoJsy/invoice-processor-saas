@@ -83,6 +83,7 @@ def view(customer_id):
         invoices=invoices,
         open_invoices=open_invoices,
         outstanding=outstanding,
+        payments=payments,
         paid_invoices=paid_invoices,
         total_invoiced=total_invoiced,
         total_outstanding=total_outstanding,

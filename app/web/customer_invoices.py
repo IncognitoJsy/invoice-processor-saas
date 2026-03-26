@@ -328,18 +328,41 @@ def receive_payment(invoice_id):
         id=invoice_id, user_id=current_user.id).first_or_404()
 
     data = request.get_json() or request.form
-    payment_date = data.get('payment_date')
+    payment_date_str = data.get('payment_date')
     payment_method = data.get('payment_method', 'bank_transfer')
-    memo = data.get('memo', '')
+    memo = data.get('memo', '') or data.get('reference', '')
+
+    from datetime import date as date_type
+    if payment_date_str:
+        try:
+            paid_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            paid_date = date_type.today()
+    else:
+        paid_date = date_type.today()
 
     invoice.status = 'paid'
-    if payment_date:
-        try:
-            invoice.paid_at = datetime.strptime(payment_date, '%Y-%m-%d')
-        except ValueError:
-            invoice.paid_at = datetime.utcnow()
-    else:
-        invoice.paid_at = datetime.utcnow()
+    invoice.paid_at = datetime.combine(paid_date, datetime.min.time())
+
+    # Create CustomerPayment record for history tracking
+    if invoice.customer_id:
+        from app.models.customer_payment import CustomerPayment, CustomerInvoicePayment
+        payment = CustomerPayment(
+            user_id=current_user.id,
+            customer_id=invoice.customer_id,
+            amount=invoice.total or 0,
+            payment_date=paid_date,
+            payment_method=payment_method,
+            reference=memo or None,
+        )
+        db.session.add(payment)
+        db.session.flush()
+        link = CustomerInvoicePayment(
+            payment_id=payment.id,
+            invoice_id=invoice.id,
+            amount_applied=invoice.total or 0,
+        )
+        db.session.add(link)
 
     db.session.commit()
 
