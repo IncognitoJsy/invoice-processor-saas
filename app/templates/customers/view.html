@@ -188,7 +188,7 @@
                     {% elif item.type == 'quote' %}
                     <!-- Quote row -->
                     {% set q = item.obj %}
-                    {% set q_expired = q.expiry_date and q.expiry_date < today and q.status not in ['accepted', 'converted', 'declined'] %}
+                    {% set q_exp_date = q.expiry_date.date() if q.expiry_date and q.expiry_date.__class__.__name__ == 'datetime' else q.expiry_date %}{% set q_expired = q_exp_date and q_exp_date < today and q.status not in ['accepted', 'converted', 'declined'] %}
                     <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <div class="flex items-center gap-3">
                             <div class="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
