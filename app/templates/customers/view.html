@@ -151,20 +151,9 @@
                     <span class="text-xs text-gray-400">{{ (invoices|length) + (payments|length) + (quotes|length) }} entries</span>
                 </div>
 
-                {% set ns = namespace(items=[]) %}
-                {% for inv in invoices %}
-                    {% set ns.items = ns.items + [{'type': 'invoice', 'date': inv.issue_date, 'obj': inv}] %}
-                {% endfor %}
-                {% for pay in payments %}
-                    {% set ns.items = ns.items + [{'type': 'payment', 'date': pay.payment_date, 'obj': pay}] %}
-                {% endfor %}
-                {% for q in quotes %}
-                    {% set ns.items = ns.items + [{'type': 'quote', 'date': q.issue_date, 'obj': q}] %}
-                {% endfor %}
-
-                {% if ns.items %}
+                {% if timeline %}
                 <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                    {% for item in ns.items|sort(attribute='date', reverse=True) %}
+                    {% for item in timeline %}
 
                     {% if item.type == 'payment' %}
                     <!-- Payment row -->
