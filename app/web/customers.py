@@ -84,7 +84,9 @@ def view(customer_id):
     def _safe_due(inv):
         d = inv.due_date
         if d is None: return date_type.max
-        return d.date() if hasattr(d, 'date') and callable(d.date) else d
+        if hasattr(d, 'date') and callable(d.date):
+            return d.date()
+        return d if isinstance(d, date_type) else date_type.max
     unpaid = sorted([i for i in invoices if i.status in ['open', 'sent', 'overdue']], key=_safe_due)
     sent_invoices = [i for i in invoices if i.status in ['sent', 'overdue']]
     overdue_invoices = [i for i in invoices if i.status == 'overdue' or i.is_overdue]
