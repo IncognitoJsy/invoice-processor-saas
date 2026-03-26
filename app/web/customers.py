@@ -78,7 +78,7 @@ def view(customer_id):
     # Categorise invoices
     unpaid = [i for i in invoices if i.status in ['open', 'sent', 'overdue']]
     sent_invoices = [i for i in invoices if i.status in ['sent', 'overdue']]
-    overdue_invoices = [i for i in invoices if i.is_overdue]
+    overdue_invoices = [i for i in invoices if i.status == 'overdue' or i.is_overdue]
     paid_invoices = [i for i in invoices if i.status == 'paid']
 
     from app.models.customer_payment import CustomerPayment
