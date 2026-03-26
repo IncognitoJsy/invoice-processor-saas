@@ -103,6 +103,26 @@ def view(customer_id):
     total_sent = sum(i.total or 0 for i in sent_invoices)
     total_overdue = sum(i.total or 0 for i in overdue_invoices)
     total_paid = sum(i.total or 0 for i in paid_invoices)
+    # Build pre-sorted timeline to avoid datetime/date comparison in Jinja
+    from datetime import datetime as dt_type
+    timeline = []
+    for inv in invoices:
+        d = inv.issue_date
+        if d is None: d = date_type.min
+        if isinstance(d, dt_type): d = d.date()
+        timeline.append({'type': 'invoice', 'date': d, 'date_sort': d, 'obj': inv})
+    for pay in payments:
+        d = pay.payment_date
+        if d is None: d = date_type.min
+        if isinstance(d, dt_type): d = d.date()
+        timeline.append({'type': 'payment', 'date': d, 'date_sort': d, 'obj': pay})
+    for q in quotes:
+        d = q.issue_date
+        if d is None: d = date_type.min
+        if isinstance(d, dt_type): d = d.date()
+        timeline.append({'type': 'quote', 'date': d, 'date_sort': d, 'obj': q})
+    timeline.sort(key=lambda x: x['date_sort'], reverse=True)
+
     return render_template('customers/view.html',
         today=today,
         customer=customer,
@@ -110,6 +130,7 @@ def view(customer_id):
         unpaid=unpaid,
         payments=payments,
         quotes=quotes,
+        timeline=timeline,
         paid_invoices=paid_invoices,
         total_open=total_open,
         total_sent=total_sent,
