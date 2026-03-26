@@ -1,0 +1,318 @@
+{% extends "base/layout.html" %}
+{% block title %}New {{ doc_type|title }} - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <div class="flex items-center gap-4 mb-6">
+        <a href="{{ back_url }}" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">New {{ doc_type|title }}</h1>
+            <p class="text-sm text-gray-400 font-mono mt-0.5">{{ next_number }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Main content -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Line Items -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Line Items</h2>
+                    <button onclick="addLine()" class="text-sm text-primary-600 hover:text-primary-700 font-medium">+ Add Item</button>
+                </div>
+
+                <div id="lines-container" class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <!-- Lines added dynamically -->
+                </div>
+
+                <!-- Add line form -->
+                <div id="add-line-form" class="p-5 bg-gray-50 dark:bg-gray-700/30 rounded-b-2xl">
+                    <!-- Product search -->
+                    <div class="relative mb-3">
+                        <input type="text" id="line-desc" placeholder="Description or search products by name/part number..."
+                               oninput="searchProducts(this.value)"
+                               class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500">
+                        <div id="product-suggestions" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Quantity</label>
+                            <input type="number" id="line-qty" value="1" min="0.01" step="0.01"
+                                   onchange="updateLineTotal()"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Unit Price (£)</label>
+                            <input type="number" id="line-price" value="0" min="0" step="0.01"
+                                   onchange="updateLineTotal()"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Total</label>
+                            <div class="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white" id="line-total">£0.00</div>
+                        </div>
+                    </div>
+                    <button onclick="confirmAddLine()"
+                            class="mt-3 px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+                        Add Line
+                    </button>
+                </div>
+
+                <!-- Totals -->
+                <div class="p-5 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-end">
+                        <div class="w-56 space-y-2">
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>Subtotal</span>
+                                <span id="subtotal-display">£0.00</span>
+                            </div>
+                            {% if current_user.tax_registered and current_user.tax_rate %}
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>{{ current_user.tax_type or 'Tax' }} ({{ current_user.tax_rate }}%)</span>
+                                <span id="tax-display">£0.00</span>
+                            </div>
+                            {% endif %}
+                            <div class="flex justify-between font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
+                                <span>Total</span>
+                                <span id="total-display">£0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes <span class="text-gray-400 font-normal">(shown on {{ doc_type }})</span></label>
+                <textarea id="doc-notes" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white resize-none"
+                          placeholder="Any notes or terms...">{{ current_user.invoice_notes or '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-4">
+
+            <!-- Customer -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Customer</h3>
+                <select id="customer-select"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500"
+                        onchange="customerChanged(this.value)">
+                    <option value="">— Select customer —</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" data-terms="{{ c.payment_terms or '30' }}"
+                            {% if selected_customer and selected_customer.id == c.id %}selected{% endif %}>
+                        {{ c.display_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <a href="{{ url_for('customers.create') }}" class="block text-xs text-primary-600 hover:underline mt-2">+ Add new customer</a>
+            </div>
+
+            <!-- Dates -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Details</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Issue Date</label>
+                        <input type="date" id="issue-date" value="{{ today }}"
+                               onchange="recalcDueDate()"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">{{ 'Valid Until' if doc_type == 'quote' else 'Due Date' }}</label>
+                        <input type="date" id="due-date" value="{{ default_expiry if doc_type == 'quote' else default_due }}"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Payment Terms</label>
+                        <select id="payment-terms" onchange="termsChanged(this.value)"
+                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                            <option value="0" {% if default_terms == '0' %}selected{% endif %}>Due on Receipt</option>
+                            <option value="7" {% if default_terms == '7' %}selected{% endif %}>Net 7 Days</option>
+                            <option value="14" {% if default_terms == '14' %}selected{% endif %}>Net 14 Days</option>
+                            <option value="30" {% if default_terms == '30' %}selected{% endif %}>Net 30 Days</option>
+                            <option value="60" {% if default_terms == '60' %}selected{% endif %}>Net 60 Days</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save buttons -->
+            <div class="space-y-2">
+                <button onclick="saveDoc('draft')"
+                        class="w-full py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    Save as Draft
+                </button>
+                <button onclick="saveDoc('send')"
+                        class="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+                    Save & View
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const docType = '{{ doc_type }}';
+const csrf = '{{ csrf_token() }}';
+const taxRate = {{ current_user.tax_rate or 0 }};
+let lines = [];
+let lineIdCounter = 0;
+
+// Products data for search
+const products = [
+    {% for p in products %}
+    {id: {{ p.id }}, name: {{ p.name|tojson }}, sku: {{ (p.sku or '')|tojson }}, price: {{ p.selling_price or p.cost_price or 0 }}},
+    {% endfor %}
+];
+
+function searchProducts(val) {
+    const suggestions = document.getElementById('product-suggestions');
+    if (!val || val.length < 2) { suggestions.classList.add('hidden'); return; }
+    const matches = products.filter(p =>
+        p.name.toLowerCase().includes(val.toLowerCase()) ||
+        p.sku.toLowerCase().includes(val.toLowerCase())
+    ).slice(0, 8);
+    if (!matches.length) { suggestions.classList.add('hidden'); return; }
+    suggestions.innerHTML = matches.map(p => `
+        <button onclick="selectProduct(${JSON.stringify(p.name).replace(/'/g, "\'")} , ${p.price}, '${p.sku}')"
+                class="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm flex justify-between items-center">
+            <span class="text-gray-900 dark:text-white">${p.name} ${p.sku ? '<span class=\'text-xs text-gray-400\'>' + p.sku + '</span>' : ''}</span>
+            <span class="text-primary-600 font-semibold">£${p.price.toFixed(2)}</span>
+        </button>
+    `).join('');
+    suggestions.classList.remove('hidden');
+}
+
+function selectProduct(name, price, sku) {
+    document.getElementById('line-desc').value = name + (sku ? ' (' + sku + ')' : '');
+    document.getElementById('line-price').value = price.toFixed(2);
+    document.getElementById('product-suggestions').classList.add('hidden');
+    updateLineTotal();
+}
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('#line-desc') && !e.target.closest('#product-suggestions')) {
+        document.getElementById('product-suggestions').classList.add('hidden');
+    }
+});
+
+function updateLineTotal() {
+    const qty = parseFloat(document.getElementById('line-qty').value) || 0;
+    const price = parseFloat(document.getElementById('line-price').value) || 0;
+    document.getElementById('line-total').textContent = '£' + (qty * price).toFixed(2);
+}
+
+function confirmAddLine() {
+    const desc = document.getElementById('line-desc').value.trim();
+    if (!desc) { alert('Please enter a description'); return; }
+    const qty = parseFloat(document.getElementById('line-qty').value) || 1;
+    const price = parseFloat(document.getElementById('line-price').value) || 0;
+    const total = qty * price;
+    const id = ++lineIdCounter;
+    lines.push({id, desc, qty, price, total});
+    renderLines();
+    // Reset fields
+    document.getElementById('line-desc').value = '';
+    document.getElementById('line-qty').value = '1';
+    document.getElementById('line-price').value = '0';
+    document.getElementById('line-total').textContent = '£0.00';
+    updateTotals();
+}
+
+function removeLine(id) {
+    lines = lines.filter(l => l.id !== id);
+    renderLines();
+    updateTotals();
+}
+
+function renderLines() {
+    const container = document.getElementById('lines-container');
+    if (!lines.length) {
+        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">No items yet — add your first line below</div>';
+        return;
+    }
+    container.innerHTML = lines.map(l => `
+        <div class="flex items-center gap-3 px-5 py-3">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 dark:text-white truncate">${l.desc}</p>
+                <p class="text-xs text-gray-400">${l.qty} × £${l.price.toFixed(2)}</p>
+            </div>
+            <span class="text-sm font-semibold text-gray-900 dark:text-white font-mono">£${l.total.toFixed(2)}</span>
+            <button onclick="removeLine(${l.id})" class="text-red-400 hover:text-red-600 flex-shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function updateTotals() {
+    const subtotal = lines.reduce((s, l) => s + l.total, 0);
+    const tax = subtotal * taxRate / 100;
+    const total = subtotal + tax;
+    document.getElementById('subtotal-display').textContent = '£' + subtotal.toFixed(2);
+    const taxEl = document.getElementById('tax-display');
+    if (taxEl) taxEl.textContent = '£' + tax.toFixed(2);
+    document.getElementById('total-display').textContent = '£' + total.toFixed(2);
+}
+
+function customerChanged(customerId) {
+    const select = document.getElementById('customer-select');
+    const opt = select.options[select.selectedIndex];
+    const terms = opt.dataset.terms || '30';
+    document.getElementById('payment-terms').value = terms;
+    termsChanged(terms);
+}
+
+function termsChanged(days) {
+    const issue = new Date(document.getElementById('issue-date').value + 'T00:00:00');
+    const due = new Date(issue);
+    due.setDate(due.getDate() + parseInt(days));
+    document.getElementById('due-date').value = due.toISOString().split('T')[0];
+}
+
+function recalcDueDate() {
+    termsChanged(document.getElementById('payment-terms').value);
+}
+
+async function saveDoc(action) {
+    if (!lines.length) { alert('Please add at least one line item'); return; }
+    const customerId = document.getElementById('customer-select').value;
+    if (!customerId) { alert('Please select a customer'); return; }
+
+    const subtotal = lines.reduce((s, l) => s + l.total, 0);
+    const tax = subtotal * taxRate / 100;
+    const total = subtotal + tax;
+
+    const payload = {
+        customer_id: parseInt(customerId),
+        lines: lines.map((l, i) => ({description: l.desc, quantity: l.qty, unit_price: l.price, line_total: l.total, sort_order: i})),
+        issue_date: document.getElementById('issue-date').value,
+        due_date: document.getElementById('due-date').value,
+        payment_terms: document.getElementById('payment-terms').value,
+        notes: document.getElementById('doc-notes').value,
+        subtotal, tax_amount: tax, total, tax_rate: taxRate,
+    };
+
+    const url = docType === 'invoice' ? '/customer-invoices/create-manual' : '/customer-quotes/create-manual';
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify(payload)
+    });
+    const d = await res.json();
+    if (d.success) window.location = d.redirect;
+    else alert(d.error || 'Failed to save');
+}
+
+// Init
+renderLines();
+</script>
+{% endblock %}

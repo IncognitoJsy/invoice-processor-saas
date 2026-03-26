@@ -299,11 +299,18 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Customer Invoices</h1>
             <p class="text-gray-500 dark:text-gray-400 mt-1">Manage invoices sent to your customers</p>
         </div>
-        <button onclick="document.getElementById('bulk-payment-modal').classList.remove('hidden')"
-                class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition text-sm flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            Record Payment
-        </button>
+        <div class="flex gap-2">
+            <a href="{{ url_for('customer_invoices.new') }}"
+               class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition text-sm flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                New Invoice
+            </a>
+            <button onclick="document.getElementById('bulk-payment-modal').classList.remove('hidden')"
+                    class="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition text-sm flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Record Payment
+            </button>
+        </div>
     </div>
 
     <!-- Tabs -->
