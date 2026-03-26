@@ -72,11 +72,20 @@ def view(customer_id):
     invoices = CustomerInvoice.query.filter_by(
         customer_id=customer_id, user_id=current_user.id
     ).order_by(CustomerInvoice.created_at.desc()).all()
-    from datetime import date as date_type
+    from datetime import date as date_type, datetime
     today = date_type.today()
+    # Pre-sort unpaid by due_date safely
+    def safe_due(inv):
+        d = inv.due_date
+        if d is None: return date_type.max
+        return d.date() if hasattr(d, 'date') and callable(d.date) else d
 
     # Categorise invoices
-    unpaid = [i for i in invoices if i.status in ['open', 'sent', 'overdue']]
+    def _safe_due(inv):
+        d = inv.due_date
+        if d is None: return date_type.max
+        return d.date() if hasattr(d, 'date') and callable(d.date) else d
+    unpaid = sorted([i for i in invoices if i.status in ['open', 'sent', 'overdue']], key=_safe_due)
     sent_invoices = [i for i in invoices if i.status in ['sent', 'overdue']]
     overdue_invoices = [i for i in invoices if i.status == 'overdue' or i.is_overdue]
     paid_invoices = [i for i in invoices if i.status == 'paid']

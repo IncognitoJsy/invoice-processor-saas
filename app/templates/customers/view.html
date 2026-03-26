@@ -118,7 +118,7 @@
                     <span class="text-xs font-bold text-amber-600 dark:text-amber-400">{{ unpaid|length }}</span>
                 </div>
                 <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                    {% for inv in unpaid|sort(attribute='due_date') %}
+                    {% for inv in unpaid %}
                     <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <div>
                             <div class="flex items-center gap-2">
@@ -208,7 +208,7 @@
                                         {% if q_expired %}Expired{% else %}{{ q.display_status }}{% endif %}
                                     </span>
                                     {% if q_expired %}
-                                    <span class="text-xs text-orange-500">({{ (today - q.expiry_date).days }}d ago)</span>
+                                    <span class="text-xs text-orange-500">({{ (today - q_exp_date).days }}d ago)</span>
                                     {% endif %}
                                 </div>
                                 <p class="text-xs text-gray-400 mt-0.5">{{ q.issue_date.strftime('%d %b %Y') if q.issue_date else '—' }}</p>

@@ -173,10 +173,12 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
                     </td>
                     <td class="px-6 py-4 text-sm hidden md:table-cell cursor-pointer" onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
                         {% if inv.due_date %}
-                            {% if inv.is_overdue %}
+                            {% if inv.status == 'paid' %}
+                            <span class="text-gray-500 dark:text-gray-400">{{ inv.due_date.strftime('%d %b %Y') }}</span>
+                            {% elif inv.is_overdue %}
                             <span class="text-red-600 dark:text-red-400 font-semibold">
                                 {{ inv.due_date.strftime('%d %b %Y') }}
-                                <span class="block text-xs">{{ inv.days_overdue }}d overdue</span>
+                                <span class="block text-xs font-semibold">⚠ Overdue {{ inv.days_overdue }} day{{ 's' if inv.days_overdue != 1 }}</span>
                             </span>
                             {% else %}
                             <span class="text-gray-500 dark:text-gray-400">
