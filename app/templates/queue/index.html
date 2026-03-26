@@ -799,19 +799,28 @@ function queueManager() {
         },
         async uploadFiles(files) {
             this.uploading = true;
-            this.uploadStatus = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`;
-            const formData = new FormData();
-            for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
-            try {
-                const res = await fetch('/queue/api/upload', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
-                const data = await res.json();
-                if (data.success) {
-                    if (data.items) this.items = [...data.items, ...this.items];
-                    this.showToast('success', `${data.queued} file${data.queued > 1 ? 's' : ''} added to queue`);
-                    if (data.errors && data.errors.length > 0) data.errors.forEach(err => this.showToast('error', err));
-                } else { this.showToast('error', data.error || 'Upload failed'); }
-            } catch (e) { this.showToast('error', 'Upload failed'); }
-            finally { this.uploading = false; this.uploadStatus = ''; }
+            let queued = 0;
+            for (let i = 0; i < files.length; i++) {
+                this.uploadStatus = `Uploading file ${i + 1} of ${files.length}...`;
+                const formData = new FormData();
+                formData.append('files', files[i]);
+                try {
+                    const res = await fetch('/queue/api/upload', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (data.items) this.items = [...data.items, ...this.items];
+                        queued += data.queued || 1;
+                        if (data.errors && data.errors.length > 0) data.errors.forEach(err => this.showToast('error', err));
+                    } else {
+                        this.showToast('error', `File ${i+1}: ` + (data.error || 'Upload failed'));
+                    }
+                } catch (e) {
+                    this.showToast('error', `File ${i+1} upload failed`);
+                }
+            }
+            this.uploading = false;
+            this.uploadStatus = '';
+            if (queued > 0) this.showToast('success', `${queued} file${queued > 1 ? 's' : ''} added to queue`);
         },
         startDrag(event, item) {
             this.draggedItemId = item.id;
