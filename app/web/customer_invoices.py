@@ -82,10 +82,10 @@ def index():
 
     # Split into tabs
     # Open = open or sent but not yet overdue
-    open_invoices = [i for i in all_invoices if i.status in ['open', 'sent'] and not i.is_overdue]
+    open_invoices = [i for i in all_invoices if i.status in ['open', 'sent', 'viewed'] and not i.is_overdue]
     # Overdue = overdue status OR past due date
     outstanding = sorted(
-        [i for i in all_invoices if i.status == 'overdue' or i.is_overdue],
+        [i for i in all_invoices if i.status in ['overdue'] or (i.status not in ['paid', 'void'] and i.is_overdue)],
         key=lambda x: x.due_date or datetime.max
     )
     paid_invoices = sorted(
@@ -651,6 +651,11 @@ def send_email(invoice_id):
         flash(f'Please add an email address for {invoice.customer.display_name} first.', 'error')
         return redirect(url_for('customers.edit', customer_id=invoice.customer_id))
 
+    # Generate view token if not already set
+    if not invoice.view_token:
+        invoice.generate_view_token(expires_days=90)
+        db.session.commit()
+
     from app.services.email_sender import send_invoice_email
     from app.services.pdf_generator import generate_invoice_pdf
     try:
@@ -664,7 +669,6 @@ def send_email(invoice_id):
     if success:
         invoice.status = 'sent'
         invoice.sent_at = datetime.utcnow()
-        from app.extensions import db
         db.session.commit()
 
     if request.is_json:
@@ -787,3 +791,54 @@ def create_manual():
         db.session.add(inv_line)
     db.session.commit()
     return jsonify({'success': True, 'redirect': url_for('customer_invoices.view', invoice_id=invoice.id)})
+
+
+@bp.route('/view/<token>')
+def public_view(token):
+    """Public invoice view page for customers - no login required"""
+    from datetime import datetime
+    invoice = CustomerInvoice.query.filter_by(view_token=token).first_or_404()
+
+    # Check token hasn't expired
+    if invoice.token_expires_at and datetime.utcnow() > invoice.token_expires_at:
+        return render_template('customer_invoices/expired.html'), 410
+
+    # Track the view
+    if not invoice.viewed_at:
+        invoice.viewed_at = datetime.utcnow()
+        # Update status to viewed if still sent
+        if invoice.status == 'sent':
+            invoice.status = 'viewed'
+    invoice.view_count = (invoice.view_count or 0) + 1
+    db.session.commit()
+
+    # Get the contractor (user) details
+    from app.models.user import User
+    contractor = User.query.get(invoice.user_id)
+
+    return render_template('customer_invoices/public_view.html',
+        invoice=invoice,
+        contractor=contractor,
+        token=token,
+    )
+
+
+@bp.route('/view/<token>/pdf')
+def public_pdf(token):
+    """Serve PDF for public invoice view"""
+    from datetime import datetime
+    invoice = CustomerInvoice.query.filter_by(view_token=token).first_or_404()
+
+    if invoice.token_expires_at and datetime.utcnow() > invoice.token_expires_at:
+        return "Link expired", 410
+
+    from app.models.user import User
+    contractor = User.query.get(invoice.user_id)
+    from app.services.pdf_generator import generate_invoice_pdf
+    pdf_bytes = generate_invoice_pdf(invoice, contractor)
+
+    from flask import Response
+    return Response(pdf_bytes,
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="{invoice.invoice_number}.pdf"'}
+    )

@@ -48,114 +48,85 @@ def send_invoice_email(user, invoice, pdf_bytes=None):
 
 
 def _build_invoice_email_html(user, invoice):
-    """Build HTML email body"""
-    company = user.company_name or 'Your Contractor'
-    due_date = invoice.due_date.strftime('%d %b %Y') if invoice.due_date else 'Upon receipt'
-    
-    bank_section = ''
-    if user.bank_account_number or user.bank_iban:
-        bank_rows = ''
-        if user.bank_name:
-            bank_rows += f'<tr><td style="color:#6b7280;padding:4px 0;">Bank:</td><td style="font-weight:600;padding:4px 0 4px 16px;">{user.bank_name}</td></tr>'
-        if user.bank_account_name:
-            bank_rows += f'<tr><td style="color:#6b7280;padding:4px 0;">Account Name:</td><td style="font-weight:600;padding:4px 0 4px 16px;">{user.bank_account_name}</td></tr>'
-        if user.bank_account_number:
-            bank_rows += f'<tr><td style="color:#6b7280;padding:4px 0;">Account No:</td><td style="font-weight:600;font-family:monospace;padding:4px 0 4px 16px;">{user.bank_account_number}</td></tr>'
-        if user.bank_sort_code:
-            bank_rows += f'<tr><td style="color:#6b7280;padding:4px 0;">Sort Code:</td><td style="font-weight:600;font-family:monospace;padding:4px 0 4px 16px;">{user.bank_sort_code}</td></tr>'
-        if user.bank_iban:
-            bank_rows += f'<tr><td style="color:#6b7280;padding:4px 0;">IBAN:</td><td style="font-weight:600;font-family:monospace;padding:4px 0 4px 16px;">{user.bank_iban}</td></tr>'
-        
-        bank_section = f'''
-        <div style="background:#f9fafb;border-radius:8px;padding:20px;margin:24px 0;text-align:center;">
-            <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;margin:0 0 12px 0;">Payment Details</p>
-            <table style="margin:0 auto;border-collapse:collapse;">
-                {bank_rows}
-            </table>
-            <p style="font-size:12px;color:#9ca3af;margin:12px 0 0 0;">
-                Please use <strong style="color:#374151;">{invoice.invoice_number}</strong> as your payment reference
-            </p>
-        </div>'''
+    """Build clean customer-facing email with view link"""
+    company = user.company_name or 'GoZappify'
+    due_date = invoice.due_date.strftime('%d %b %Y') if invoice.due_date else 'On receipt'
+    total = f"£{invoice.total:.2f}" if invoice.total else '£0.00'
+    view_url = invoice.view_url or ''
+    brand_colour = user.invoice_colour or '#2563eb'
+    bank_details = ''
+    if user.bank_name or user.account_number or user.sort_code:
+        bank_details = f"""
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-top:20px;">
+            <p style="font-size:13px;color:#64748b;margin:0 0 8px;font-weight:600;">PAYMENT DETAILS</p>
+            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Bank: ' + user.bank_name + '</p>' if user.bank_name else ''}
+            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Account: ' + user.account_number + '</p>' if user.account_number else ''}
+            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Sort Code: ' + user.sort_code + '</p>' if user.sort_code else ''}
+        </div>"""
 
-    lines_html = ''
-    for line in invoice.lines:
-        lines_html += f'''
-        <tr>
-            <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#374151;">{line.description}</td>
-            <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;text-align:right;">{line.quantity}</td>
-            <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;text-align:right;">£{line.unit_price:.2f}</td>
-            <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#111827;text-align:right;">£{line.line_total:.2f}</td>
-        </tr>'''
-
-    notes = invoice.notes or user.invoice_notes or ''
-    notes_section = f'<p style="font-size:13px;color:#9ca3af;margin-top:24px;">{notes}</p>' if notes else ''
-
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;margin:0;padding:32px 16px;">
-    <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
-        
-        <!-- Header -->
-        <div style="background:#2563eb;padding:32px;color:white;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                <div>
-                    <h1 style="margin:0;font-size:22px;font-weight:800;">{company}</h1>
-                    {f'<p style="margin:4px 0 0;font-size:13px;opacity:0.8;">{user.trade_type.title()}</p>' if user.trade_type else ''}
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 20px;">
+    <tr><td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+
+            <!-- Header -->
+            <tr><td style="background:{brand_colour};border-radius:12px 12px 0 0;padding:28px 32px;">
+                <h1 style="color:white;margin:0;font-size:22px;font-weight:700;">{company}</h1>
+                <p style="color:rgba(255,255,255,0.85);margin:4px 0 0;font-size:14px;">Invoice {invoice.invoice_number}</p>
+            </td></tr>
+
+            <!-- Body -->
+            <tr><td style="background:white;padding:32px;">
+                <p style="color:#374151;font-size:15px;margin:0 0 8px;">Hi {invoice.customer.display_name},</p>
+                <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;">
+                    Please find your invoice from {company} for <strong style="color:#111827;">£{invoice.total:.2f}</strong>,
+                    due on <strong style="color:#111827;">{due_date}</strong>.
+                </p>
+
+                <!-- Invoice summary box -->
+                <div style="background:#f8fafc;border-radius:8px;padding:20px;margin-bottom:24px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="font-size:13px;color:#6b7280;">Invoice Number</td>
+                            <td style="font-size:13px;color:#111827;text-align:right;font-weight:600;">{invoice.invoice_number}</td>
+                        </tr>
+                        <tr><td colspan="2" style="padding:4px 0;"></td></tr>
+                        <tr>
+                            <td style="font-size:13px;color:#6b7280;">Due Date</td>
+                            <td style="font-size:13px;color:#111827;text-align:right;font-weight:600;">{due_date}</td>
+                        </tr>
+                        <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding:8px 0;"></td></tr>
+                        <tr>
+                            <td style="font-size:15px;color:#111827;font-weight:700;">Total Due</td>
+                            <td style="font-size:18px;color:{brand_colour};text-align:right;font-weight:800;">{total}</td>
+                        </tr>
+                    </table>
                 </div>
-                <div style="text-align:right;">
-                    <p style="margin:0;font-size:28px;font-weight:900;font-family:monospace;">{invoice.invoice_number}</p>
-                    <p style="margin:4px 0 0;font-size:12px;opacity:0.7;">INVOICE</p>
-                </div>
-            </div>
-        </div>
 
-        <div style="padding:32px;">
-            <!-- Invoice details -->
-            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-                <tr>
-                    <td style="vertical-align:top;width:50%;">
-                        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;margin:0 0 6px;">Bill To</p>
-                        <p style="margin:0;font-size:16px;font-weight:700;color:#111827;">{invoice.customer.display_name}</p>
-                        {f'<p style="margin:2px 0 0;font-size:13px;color:#6b7280;">{invoice.customer.email}</p>' if invoice.customer.email else ''}
-                    </td>
-                    <td style="vertical-align:top;text-align:right;">
-                        <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Issue Date: <strong style="color:#374151;">{invoice.issue_date.strftime("%d %b %Y") if invoice.issue_date else "—"}</strong></p>
-                        <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Due Date: <strong style="color:#374151;">{due_date}</strong></p>
-                        <p style="margin:0;font-size:13px;color:#6b7280;">Terms: <strong style="color:#374151;">{invoice.payment_terms_label}</strong></p>
-                    </td>
-                </tr>
-            </table>
+                <!-- View button -->
+                {'<div style="text-align:center;margin-bottom:24px;"><a href="' + view_url + '" style="display:inline-block;background:' + brand_colour + ';color:white;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;">View Invoice</a></div>' if view_url else ''}
 
-            <!-- Line items -->
-            <table style="width:100%;border-collapse:collapse;">
-                <thead>
-                    <tr style="border-bottom:2px solid #111827;">
-                        <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;padding:0 0 8px;">Description</th>
-                        <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;padding:0 0 8px;">Qty</th>
-                        <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;padding:0 0 8px;">Price</th>
-                        <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;padding:0 0 8px;">Total</th>
-                    </tr>
-                </thead>
-                <tbody>{lines_html}</tbody>
-            </table>
+                {bank_details}
 
-            <!-- Total -->
-            <div style="text-align:right;margin-top:16px;padding-top:16px;border-top:2px solid #111827;">
-                {f'<p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Subtotal: £{invoice.subtotal:.2f}</p>' if invoice.tax_rate else ''}
-                {f'<p style="margin:0 0 8px;font-size:13px;color:#6b7280;">{user.tax_type or "Tax"} ({invoice.tax_rate}%): £{invoice.tax_amount:.2f}</p>' if invoice.tax_rate else ''}
-                <p style="margin:0;font-size:22px;font-weight:900;color:#111827;">Total Due: £{invoice.total:.2f}</p>
-            </div>
+                <p style="color:#9ca3af;font-size:12px;margin:24px 0 0;line-height:1.6;">
+                    A PDF copy of your invoice is attached to this email for your records.
+                    {'If you have any questions, please reply to this email.' if user.email else ''}
+                </p>
+            </td></tr>
 
-            {bank_section}
-            {notes_section}
-        </div>
-    </div>
-    <p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:24px;">
-        Sent via GoZappify
-    </p>
+            <!-- Footer -->
+            <tr><td style="background:#f8fafc;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
+                <p style="color:#9ca3af;font-size:11px;margin:0;">Powered by GoZappify &middot; gozappify.com</p>
+            </td></tr>
+
+        </table>
+    </td></tr>
+</table>
 </body>
-</html>'''
+</html>"""
 
 
 def _build_invoice_email_text(user, invoice):

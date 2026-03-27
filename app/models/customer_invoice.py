@@ -59,6 +59,29 @@ class CustomerInvoice(db.Model):
         self.tax_amount = round(self.subtotal * (self.tax_rate or 0) / 100, 2)
         self.total = round(self.subtotal + self.tax_amount, 2)
 
+    def generate_view_token(self, expires_days=90):
+        """Generate a unique secure token for customer invoice viewing"""
+        import secrets
+        from datetime import datetime, timedelta
+        self.view_token = secrets.token_urlsafe(32)
+        self.token_expires_at = datetime.utcnow() + timedelta(days=expires_days)
+        return self.view_token
+
+    @property
+    def view_url(self):
+        """Public URL for customer to view this invoice"""
+        if not self.view_token:
+            return None
+        from flask import url_for
+        try:
+            return url_for('customer_invoices.public_view', token=self.view_token, _external=True)
+        except:
+            return None
+
+    @property
+    def is_viewed(self):
+        return self.viewed_at is not None
+
     @property
     def payment_terms_label(self):
         if self.payment_terms in self.PAYMENT_TERMS:
@@ -73,7 +96,7 @@ class CustomerInvoice(db.Model):
 
     @property
     def is_overdue(self):
-        if self.status in ['open', 'sent', 'overdue'] and self.due_date:
+        if self.status in ['open', 'sent', 'overdue', 'viewed'] and self.due_date:
             from datetime import date, datetime
             due = self.due_date.date() if isinstance(self.due_date, datetime) else self.due_date
             return date.today() > due
