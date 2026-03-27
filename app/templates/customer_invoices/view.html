@@ -59,6 +59,9 @@
                     {% if current_user.tax_registered and current_user.tax_number %}
                     <p class="text-gray-400 text-xs mt-1">{{ current_user.tax_type or 'Tax' }} No: {{ current_user.tax_number }}</p>
                     {% endif %}
+                    {% if invoice.viewed_at %}
+                    <p class="text-xs text-purple-500 mt-1">👁 Viewed by customer {{ invoice.viewed_at.strftime('%d %b %Y at %H:%M') }}</p>
+                    {% endif %}
                 </div>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-3 gap-6 mt-6">
