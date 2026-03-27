@@ -41,7 +41,7 @@
             </div>
             
             <div class="flex flex-col sm:flex-row gap-4">
-                <a href="{{ url_for('upload.upload_page') }}" 
+                <a href="{{ '/invoices' if current_user.platform_mode == 'full' else url_for('upload.upload_page') }}" 
                    class="flex-1 py-3 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-xl text-center transition-all">
                     <span class="flex items-center justify-center space-x-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

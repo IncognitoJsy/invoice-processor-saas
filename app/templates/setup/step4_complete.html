@@ -116,7 +116,7 @@
                     <button type="submit" class="w-full px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-lg transition shadow-lg shadow-primary-600/25">
                         Go to Dashboard
                     </button>
-                    <a href="{{ url_for('upload.upload_page') }}" class="w-full px-8 py-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold text-lg transition text-center">
+                    <a href="{{ '/invoices' if current_user.platform_mode == 'full' else url_for('upload.upload_page') }}" class="w-full px-8 py-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold text-lg transition text-center">
                         Upload First Invoice →
                     </a>
                 </div>
