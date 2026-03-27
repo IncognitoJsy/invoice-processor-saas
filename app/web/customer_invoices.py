@@ -657,14 +657,9 @@ def send_email(invoice_id):
         db.session.commit()
 
     from app.services.email_sender import send_invoice_email
-    from app.services.pdf_generator import generate_invoice_pdf
-    try:
-        pdf_bytes = generate_invoice_pdf(invoice, current_user)
-    except Exception as e:
-        current_app.logger.warning(f"PDF generation failed, sending without attachment: {e}")
-        pdf_bytes = None
 
-    success, message = send_invoice_email(current_user, invoice, pdf_bytes=pdf_bytes)
+    # No PDF attachment - customer views invoice via secure link
+    success, message = send_invoice_email(current_user, invoice, pdf_bytes=None)
 
     if success:
         invoice.status = 'sent'
