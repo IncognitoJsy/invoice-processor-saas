@@ -502,6 +502,45 @@ document.getElementById('payment-modal').addEventListener('click', (e) => {
         </table>
     </div>
 
+    <!-- Mobile cards (shown only on small screens) -->
+    <div class="md:hidden space-y-3">
+        {% for inv in invoices %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm"
+             onclick="window.location='{{ url_for('customer_invoices.view', invoice_id=inv.id) }}'">
+            <div class="flex items-start justify-between mb-2">
+                <div>
+                    <p class="font-mono font-bold text-gray-900 dark:text-white">{{ inv.invoice_number }}</p>
+                    {% if inv.customer %}
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ inv.customer.display_name }}</p>
+                    {% endif %}
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</p>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold mt-1
+                        {% if inv.status == 'paid' %}bg-green-100 text-green-700
+                        {% elif inv.status == 'viewed' %}bg-purple-100 text-purple-700
+                        {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700
+                        {% elif inv.status == 'overdue' or inv.is_overdue %}bg-red-100 text-red-700
+                        {% elif inv.status == 'void' %}bg-gray-100 text-gray-500
+                        {% else %}bg-amber-100 text-amber-700{% endif %}">
+                        {% if inv.is_overdue and inv.status != 'paid' %}Overdue{% else %}{{ inv.status|title }}{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <span>{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</span>
+                {% if inv.status != 'paid' and inv.due_date %}
+                    {% if inv.is_overdue %}
+                    <span class="text-red-500 font-semibold">⚠ Overdue {{ inv.days_overdue }} day{{ 's' if inv.days_overdue != 1 }}</span>
+                    {% else %}
+                    <span class="text-gray-400">Due {{ inv.due_date.strftime('%d %b %Y') }}</span>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
     {% else %}
     <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-16 text-center">
         <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
