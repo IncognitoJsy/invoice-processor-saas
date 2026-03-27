@@ -21,7 +21,7 @@
                         Upload Documents
                     </h1>
                     <p class="text-gray-600 dark:text-gray-400 text-lg">
-                        Intelligent extraction from YESSS, CEF, and Wholesale Electrics
+                        AI-powered extraction from any supplier — every line item captured
                     </p>
                 </div>
                 <div class="hidden md:flex items-center space-x-3">
@@ -73,11 +73,11 @@
             <!-- Document Type Selector -->
             <div class="mb-8">
                 <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Document Type</label>
-                <div class="flex gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <!-- Invoice Option -->
                     <label class="flex-1 cursor-pointer">
                         <input type="radio" name="documentType" value="invoice" x-model="documentType" class="sr-only peer">
-                        <div class="p-6 rounded-xl border-2 transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700">
+                        <div class="p-4 sm:p-6 rounded-xl border-2 transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700">
                             <div class="flex items-center space-x-4">
                                 <div class="w-12 h-12 rounded-xl flex items-center justify-center transition-colors"
                                      :class="documentType === 'invoice' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'">
