@@ -55,13 +55,13 @@ def _build_invoice_email_html(user, invoice):
     view_url = invoice.view_url or ''
     brand_colour = user.invoice_colour or '#2563eb'
     bank_details = ''
-    if user.bank_name or user.account_number or user.sort_code:
+    if user.bank_name or user.bank_account_number or user.bank_sort_code:
         bank_details = f"""
         <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-top:20px;">
             <p style="font-size:13px;color:#64748b;margin:0 0 8px;font-weight:600;">PAYMENT DETAILS</p>
             {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Bank: ' + user.bank_name + '</p>' if user.bank_name else ''}
-            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Account: ' + user.account_number + '</p>' if user.account_number else ''}
-            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Sort Code: ' + user.sort_code + '</p>' if user.sort_code else ''}
+            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Account: ' + (user.bank_account_number or '') + '</p>' if user.bank_account_number else ''}
+            {'<p style="font-size:14px;color:#1e293b;margin:4px 0;">Sort Code: ' + (user.bank_sort_code or '') + '</p>' if user.bank_sort_code else ''}
         </div>"""
 
     return f"""<!DOCTYPE html>
