@@ -100,6 +100,12 @@
             animation: fadeIn 0.3s ease-out;
         }
     </style>
+<style>
+.safe-area-pb { padding-bottom: env(safe-area-inset-bottom, 0px); }
+@media (max-width: 768px) {
+    .page-content { padding-bottom: 80px; }
+}
+</style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
     
@@ -386,7 +392,7 @@
     {% endwith %}
     
     <!-- Main Content -->
-    <main class="page-content">
+    <main class="page-content pb-20 md:pb-0">
         {% block content %}{% endblock %}
     </main>
     
@@ -544,6 +550,67 @@
     </script>
     
     {% block scripts %}{% endblock %}
+
+    <!-- Mobile Bottom Navigation -->
+    {% if current_user.is_authenticated %}
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 safe-area-pb">
+        <div class="flex items-center justify-around px-2 py-2">
+
+            <!-- Dashboard -->
+            <a href="{{ url_for('dashboard.index') }}"
+               class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition
+               {% if request.endpoint and 'dashboard' in request.endpoint %}text-primary-600 dark:text-primary-400{% else %}text-gray-400 dark:text-gray-500{% endif %}">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                <span class="text-[10px] font-medium">Home</span>
+            </a>
+
+            <!-- Customers -->
+            <a href="{{ url_for('customers.index') }}"
+               class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition
+               {% if request.endpoint and 'customers' in request.endpoint %}text-primary-600 dark:text-primary-400{% else %}text-gray-400 dark:text-gray-500{% endif %}">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span class="text-[10px] font-medium">Customers</span>
+            </a>
+
+            <!-- Centre + button (New Invoice) -->
+            {% if mode == 'full' %}
+            <a href="{{ url_for('customer_invoices.new') }}"
+               class="flex flex-col items-center gap-0.5 -mt-4">
+                <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center shadow-lg shadow-primary-600/30">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                </div>
+                <span class="text-[10px] font-medium text-primary-600 mt-0.5">New</span>
+            </a>
+            {% else %}
+            <a href="/invoices"
+               class="flex flex-col items-center gap-0.5 -mt-4">
+                <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center shadow-lg shadow-primary-600/30">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                </div>
+                <span class="text-[10px] font-medium text-primary-600 mt-0.5">Upload</span>
+            </a>
+            {% endif %}
+
+            <!-- My Invoices -->
+            <a href="{{ url_for('customer_invoices.index') if mode == 'full' else '/invoices' }}"
+               class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition
+               {% if request.endpoint and 'customer_invoices' in request.endpoint %}text-primary-600 dark:text-primary-400{% else %}text-gray-400 dark:text-gray-500{% endif %}">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span class="text-[10px] font-medium">Invoices</span>
+            </a>
+
+            <!-- Queue / More -->
+            <a href="/queue"
+               class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition
+               {% if request.endpoint and 'queue' in request.endpoint %}text-primary-600 dark:text-primary-400{% else %}text-gray-400 dark:text-gray-500{% endif %}">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span class="text-[10px] font-medium">Queue</span>
+            </a>
+
+        </div>
+    </nav>
+    {% endif %}
+
 </body>
 </html>
            
