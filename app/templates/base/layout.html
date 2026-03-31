@@ -173,28 +173,59 @@
                     </a>
 
                     {% if mode in ['full', 'both'] %}
-                    <!-- Full platform nav items -->
-                    {% if mode in ['full', 'both'] %}
-                    <a href="/customers" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'customers' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                    <!-- Full platform nav - condensed with dropdowns (desktop only) -->
+
+                    <a href="/customers" class="px-3 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'customers' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Customers
                     </a>
-                    {% endif %}
-                    <a href="/quotes" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'quote' in request.endpoint and 'voice_to_quote' not in request.endpoint and 'quotebuilder' not in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
-                        Process Quote
-                    </a>
-                    <a href="/invoices" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'invoice' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
-                        Process Invoice
-                    </a>
-                    <a href="/products" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'products' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+
+                    <!-- Process dropdown -->
+                    <div class="relative" x-data="{open: false}">
+                        <button @click="open = !open" @click.away="open = false"
+                                class="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition
+                                {% if request.endpoint and ('invoices' in request.endpoint or ('quote' in request.endpoint and 'customer_quote' not in request.endpoint)) %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+                            Process
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div x-show="open" x-transition
+                             class="absolute top-full left-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                            <a href="/invoices" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                Process Invoice
+                            </a>
+                            <a href="/quotes" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                                Process Quote
+                            </a>
+                        </div>
+                    </div>
+
+                    <a href="/products" class="px-3 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'products' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Products
                     </a>
-                    <a href="/customer-invoices" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'customer_invoices' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
-                        My Invoices
-                    </a>
-                    <a href="/customer-quotes" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'customer_quotes' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
-                        My Quotes
-                    </a>
-                    <a href="/queue" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+
+                    <!-- My Work dropdown -->
+                    <div class="relative" x-data="{open: false}">
+                        <button @click="open = !open" @click.away="open = false"
+                                class="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition
+                                {% if request.endpoint and ('customer_invoices' in request.endpoint or 'customer_quotes' in request.endpoint) %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+                            My Work
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div x-show="open" x-transition
+                             class="absolute top-full left-0 mt-1 w-40 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                            <a href="/customer-invoices" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                My Invoices
+                            </a>
+                            <a href="/customer-quotes" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                                My Quotes
+                            </a>
+                        </div>
+                    </div>
+
+                    <a href="/queue" class="px-3 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'queue' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
                         Queue
                     </a>
 
