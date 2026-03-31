@@ -52,13 +52,17 @@ def index():
         from app.models.customer import Customer
         from sqlalchemy import func
 
-        open_invoices = CustomerInvoice.query.filter_by(
-            user_id=current_user.id, status='open').all()
-        outstanding_invoices = CustomerInvoice.query.filter(
+        from datetime import date as date_type
+        today = date_type.today()
+
+        all_unpaid = CustomerInvoice.query.filter(
             CustomerInvoice.user_id == current_user.id,
-            CustomerInvoice.status == 'open',
-            CustomerInvoice.due_date < datetime.utcnow().date()
+            CustomerInvoice.status.in_(['open', 'sent', 'viewed', 'overdue'])
         ).all()
+
+        overdue_invoices = [i for i in all_unpaid if i.is_overdue]
+        open_invoices = [i for i in all_unpaid if not i.is_overdue]
+
         paid_this_month = CustomerInvoice.query.filter(
             CustomerInvoice.user_id == current_user.id,
             CustomerInvoice.status == 'paid',
@@ -66,17 +70,34 @@ def index():
         ).all()
         customer_count = Customer.query.filter_by(user_id=current_user.id).count()
 
+        # Recent activity - last 5 paid
+        recently_paid = CustomerInvoice.query.filter(
+            CustomerInvoice.user_id == current_user.id,
+            CustomerInvoice.status == 'paid',
+        ).order_by(CustomerInvoice.paid_at.desc()).limit(3).all()
+
+        # Quotes awaiting acceptance
+        from app.models.customer_quote import CustomerQuote
+        pending_quotes = CustomerQuote.query.filter(
+            CustomerQuote.user_id == current_user.id,
+            CustomerQuote.status.in_(['sent'])
+        ).count()
+
         full_stats = {
             'open_count': len(open_invoices),
             'open_total': sum(i.total or 0 for i in open_invoices),
-            'outstanding_count': len(outstanding_invoices),
-            'outstanding_total': sum(i.total or 0 for i in outstanding_invoices),
+            'overdue_count': len(overdue_invoices),
+            'overdue_total': sum(i.total or 0 for i in overdue_invoices),
             'paid_this_month_total': sum(i.total or 0 for i in paid_this_month),
             'paid_this_month_count': len(paid_this_month),
             'customer_count': customer_count,
+            'pending_quotes': pending_quotes,
+            'recently_paid': recently_paid,
+            'overdue_invoices': overdue_invoices[:3],
         }
         recent_customer_invoices = CustomerInvoice.query.filter_by(
-            user_id=current_user.id)            .order_by(CustomerInvoice.created_at.desc())            .limit(5).all()
+            user_id=current_user.id).order_by(
+            CustomerInvoice.created_at.desc()).limit(5).all()
 
     return render_template('dashboard/index.html',
         total_invoices=total_invoices,
