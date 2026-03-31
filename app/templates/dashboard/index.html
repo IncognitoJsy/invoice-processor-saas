@@ -1,510 +1,288 @@
 {% extends "base/layout.html" %}
 {% block title %}Dashboard - GoZappify{% endblock %}
 {% block content %}
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        <!-- Welcome Header -->
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+
+        <!-- Greeting -->
         <div class="mb-8">
-            <div class="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-                        Welcome back{% if current_user.first_name %}, {{ current_user.first_name }}{% endif %}!
-                    </h1>
-                    <p class="mt-1 text-gray-600 dark:text-gray-400">
-                        {% if current_user.company_name %}{{ current_user.company_name }} • {% endif %}
-                        {% if current_user.trade_type %}
-                            {% set trade_labels = {'electrician': 'Electrician', 'plumber': 'Plumber', 'hvac': 'HVAC', 'builder': 'Builder', 'decorator': 'Decorator', 'other': 'Trades'} %}
-                            {{ trade_labels.get(current_user.trade_type, 'Trades') }} •
-                        {% endif %}
-                        {% if platform_mode == 'full' %}Full Platform
-                        {% elif platform_mode == 'both' %}Full Platform + Accounting Sync
-                        {% else %}Accounting Sync Mode
-                        {% endif %}
-                    </p>
-                </div>
-                {% if platform_mode == 'full' %}
-                <a href="#" class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold transition shadow-lg shadow-primary-600/25 text-sm">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                    </svg>
-                    New Invoice
-                </a>
-                {% endif %}
-            </div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white" id="greeting">
+                Good morning{% if current_user.first_name %}, {{ current_user.first_name }}{% endif %}
+            </h1>
+            <p class="text-gray-400 text-sm mt-1">
+                {% if current_user.company_name %}{{ current_user.company_name }}{% endif %}
+                {% if current_user.trade_type %} &middot; {{ current_user.trade_type|title }}{% endif %}
+            </p>
         </div>
 
-        <!-- Subscription Status Card -->
-        <div class="mb-8">
-            {% if current_user.is_admin %}
-            <div class="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-white/20 rounded-lg mr-4">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">Admin Account</h2>
-                            <p class="text-purple-100">Unlimited access to all features</p>
-                        </div>
-                    </div>
-                    <span class="inline-flex items-center px-4 py-2 rounded-full bg-white/20 text-sm font-medium">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        Full Access
-                    </span>
-                </div>
-            </div>
+        {% if platform_mode in ['full', 'both'] %}
 
-            {% elif current_user.subscription_plan == 'trial' %}
-            <div class="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg p-6 text-white">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-white/20 rounded-lg mr-4">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">Free Trial</h2>
-                            <p class="text-amber-100">
-                                {% if current_user.is_trial_active %}
-                                    {{ current_user.trial_days_remaining }} days remaining • {{ current_user.invoices_remaining }} invoices left
-                                {% else %}Trial expired{% endif %}
-                            </p>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('billing.index') }}" class="inline-flex items-center px-6 py-3 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                        </svg>
-                        Upgrade Now
-                    </a>
-                </div>
-                {% if current_user.is_trial_active %}
-                <div class="mt-4">
-                    <div class="flex justify-between text-sm text-amber-100 mb-1">
-                        <span>Trial Progress</span>
-                        <span>{{ 7 - current_user.trial_days_remaining }}/7 days used</span>
-                    </div>
-                    <div class="w-full bg-white/20 rounded-full h-2">
-                        <div class="bg-white h-2 rounded-full" style="width: {{ ((7 - current_user.trial_days_remaining) / 7 * 100)|int }}%"></div>
-                    </div>
-                </div>
-                {% endif %}
+        <!-- Today's briefing -->
+        {% set has_alerts = full_stats.overdue_count > 0 or full_stats.pending_quotes > 0 or full_stats.open_count > 0 %}
+        {% if has_alerts %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Needs Attention</h2>
             </div>
+            <div class="divide-y divide-gray-100 dark:divide-gray-700">
 
-            {% elif current_user.subscription_plan in ['basic', 'pro'] %}
-            <div class="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-white/20 rounded-lg mr-4">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">{{ current_user.plan_display_name }} Plan</h2>
-                            <p class="text-green-100">
-                                {% if current_user.subscription_plan == 'pro' %}Unlimited invoices
-                                {% else %}{{ current_user.invoices_remaining }} invoices remaining this period
-                                    {% if current_user.bonus_invoices and current_user.bonus_invoices > 0 %}
-                                        (includes {{ current_user.bonus_invoices }} top-ups)
-                                    {% endif %}
-                                {% endif %}
-                            </p>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('billing.manage') }}" class="inline-flex items-center px-4 py-2 bg-white/20 rounded-lg font-medium hover:bg-white/30 transition">
-                        Manage Subscription
-                    </a>
-                </div>
-            </div>
-
-            {% else %}
-            <div class="bg-gradient-to-r from-gray-600 to-gray-700 rounded-xl shadow-lg p-6 text-white">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-white/20 rounded-lg mr-4">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">No Active Subscription</h2>
-                            <p class="text-gray-300">Subscribe to continue using GoZappify</p>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('billing.index') }}" class="inline-flex items-center px-6 py-3 bg-white text-gray-700 rounded-lg font-semibold hover:bg-gray-100 transition">View Plans</a>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Stats Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-
-            <!-- Stat card 1 — mode dependent -->
-            {% if platform_mode == 'full' %}
-            <a href="{{ url_for('customer_invoices.index') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-blue-500 transition">
-                <div class="flex items-center">
-                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Open Invoices</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">£{{ "%.2f"|format(full_stats.get('open_total', 0)) }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.get('open_count', 0) }} invoice{{ 's' if full_stats.get('open_count', 0) != 1 }}</p>
-                    </div>
-                </div>
-            </a>
-            {% else %}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Processed This Month</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ invoices_this_month }}</p>
-                    </div>
-                </div>
-                {% if current_user.subscription_plan == 'basic' %}
-                <div class="mt-4">
-                    <div class="text-xs text-gray-500 dark:text-gray-400 flex justify-between mb-1">
-                        <span>Usage</span>
-                        <span>{{ invoices_this_month }}/{{ current_user.monthly_invoice_limit|int }}</span>
-                    </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ usage_percent }}%"></div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <!-- Stat card 2 — mode dependent -->
-            {% if platform_mode == 'full' %}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 {% if full_stats.get('outstanding_count', 0) > 0 %}border-red-200 dark:border-red-800{% endif %}">
-                <div class="flex items-center">
-                    <div class="p-3 {% if full_stats.get('outstanding_count', 0) > 0 %}bg-red-100 dark:bg-red-900/30{% else %}bg-green-100 dark:bg-green-900/30{% endif %} rounded-lg">
-                        <svg class="w-6 h-6 {% if full_stats.get('outstanding_count', 0) > 0 %}text-red-600 dark:text-red-400{% else %}text-green-600 dark:text-green-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Overdue</p>
-                        <p class="text-2xl font-bold {% if full_stats.get('outstanding_count', 0) > 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-white{% endif %}">
-                            £{{ "%.2f"|format(full_stats.get('outstanding_total', 0)) }}
-                        </p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.get('outstanding_count', 0) }} overdue</p>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Processed</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_invoices }}</p>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Accounting status — sync/both only -->
-            {% if platform_mode in ['sync', 'both'] %}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    {% if xero_connected %}
-                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Xero</p>
-                        <p class="text-lg font-semibold text-blue-600 dark:text-blue-400">Connected</p>
-                    </div>
-                    {% elif qb_connected %}
-                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">QuickBooks</p>
-                        <p class="text-lg font-semibold text-green-600 dark:text-green-400">Connected</p>
-                    </div>
-                    {% else %}
-                    <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Accounting</p>
-                        <p class="text-lg font-semibold text-gray-500">Not Connected</p>
-                    </div>
-                    {% endif %}
-                </div>
-                {% if not qb_connected and not xero_connected %}
-                <a href="{{ url_for('integrations.quickbooks_settings') }}" class="mt-4 block text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400">Connect Now →</a>
-                {% endif %}
-            </div>
-
-            <!-- Tax status — full/both only, and only if tax registered -->
-            {% elif platform_mode == 'full' and current_user.tax_registered %}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                            {% if current_user.tax_type %}{{ current_user.tax_type }}{% else %}Tax{% endif %} Rate
-                        </p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.tax_rate or 0 }}%</p>
-                    </div>
-                </div>
-                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                    Registered • {{ current_user.tax_number or 'No number set' }}
-                </p>
-            </div>
-            {% else %}
-            <!-- Placeholder stat for full mode non-registered -->
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Default Markup</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.default_markup or 50 }}%</p>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Plan — always shown -->
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Your Plan</p>
-                        <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ current_user.plan_display_name }}</p>
-                    </div>
-                </div>
-                {% if current_user.subscription_plan in ['trial', 'basic'] %}
-                <a href="{{ url_for('billing.index') }}" class="mt-4 block text-center text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400">
-                    {% if current_user.subscription_plan == 'trial' %}Upgrade{% else %}Go Pro{% endif %} →
-                </a>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Quick Actions — mode aware -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-
-            <!-- Upload supplier invoice — always shown -->
-            <a href="{{ '/invoices' if current_user.platform_mode == 'full' else '/invoices' if current_user.platform_mode == 'full' else url_for('upload.upload_page') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition group">
-                <div class="flex items-center">
-                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">Upload Supplier Invoice</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Process a new supplier invoice</p>
-                    </div>
-                </div>
-            </a>
-
-            <!-- Middle action — mode dependent -->
-            {% if platform_mode == 'full' %}
-            <a href="{{ url_for('customer_quotes.index') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition group">
-                <div class="flex items-center">
-                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">Quotes</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Create & send customer quotes</p>
-                    </div>
-                </div>
-            </a>
-            {% else %}
-            <a href="{{ url_for('invoices.invoices_page') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition group">
-                <div class="flex items-center">
-                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">View Invoices</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Manage and sync invoices</p>
-                    </div>
-                </div>
-            </a>
-            {% endif %}
-
-            <!-- Right action — mode dependent -->
-            {% if platform_mode == 'full' %}
-            <a href="{{ url_for('customers.index') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 transition group">
-                <div class="flex items-center">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">Customers</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Manage your customer list</p>
-                    </div>
-                </div>
-            </a>
-            {% else %}
-            <a href="{{ url_for('integrations.quickbooks_settings') }}" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 transition group">
-                <div class="flex items-center">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">Integrations</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Connect QuickBooks & Xero</p>
-                    </div>
-                </div>
-            </a>
-            {% endif %}
-        </div>
-
-        {% if platform_mode == 'full' %}
-        <!-- Full platform: paid this month + recent customer invoices -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Paid This Month</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">£{{ "%.2f"|format(full_stats.get('paid_this_month_total', 0)) }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.get('paid_this_month_count', 0) }} invoice{{ 's' if full_stats.get('paid_this_month_count', 0) != 1 }}</p>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Customers</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ full_stats.get('customer_count', 0) }}</p>
-                        <a href="{{ url_for('customers.index') }}" class="text-xs text-primary-600 hover:underline mt-0.5 block">View all →</a>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Supplier Invoices Processed</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_invoices }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ invoices_this_month }} this month</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent customer invoices -->
-        {% if recent_customer_invoices %}
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Customer Invoices</h2>
-                <a href="{{ url_for('customer_invoices.index') }}" class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400">View All →</a>
-            </div>
-            <div class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for inv in recent_customer_invoices %}
-                <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
-                   class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition flex items-center justify-between">
-                    <div>
-                        <p class="font-medium text-gray-900 dark:text-white">{{ inv.customer.display_name if inv.customer else '—' }}</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">{{ inv.invoice_number }}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="font-semibold text-gray-900 dark:text-white">£{{ "%.2f"|format(inv.total or 0) }}</p>
-                        <span class="text-xs px-2 py-0.5 rounded-full
-                            {% if inv.status == 'paid' %}bg-green-100 text-green-700
-                            {% elif inv.status == 'open' %}bg-blue-100 text-blue-700
-                            {% else %}bg-gray-100 text-gray-600{% endif %}">
-                            {{ inv.status|title }}
+                {% if full_stats.overdue_count > 0 %}
+                <a href="{{ url_for('customer_invoices.index', tab='outstanding') }}"
+                   class="flex items-center justify-between px-5 py-4 hover:bg-red-50 dark:hover:bg-red-900/10 transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ full_stats.overdue_count }} overdue invoice{{ 's' if full_stats.overdue_count != 1 }}
                         </span>
                     </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-bold text-red-600 dark:text-red-400 font-mono">
+                            £{{ "%.2f"|format(full_stats.overdue_total) }}
+                        </span>
+                        <svg class="w-4 h-4 text-gray-300 group-hover:text-red-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
                 </a>
-                {% endfor %}
+                {% endif %}
+
+                {% if full_stats.pending_quotes > 0 %}
+                <a href="{{ url_for('customer_quotes.index', tab='sent') }}"
+                   class="flex items-center justify-between px-5 py-4 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ full_stats.pending_quotes }} quote{{ 's' if full_stats.pending_quotes != 1 }} awaiting response
+                        </span>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-300 group-hover:text-amber-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+                {% endif %}
+
+                {% if full_stats.open_count > 0 %}
+                <a href="{{ url_for('customer_invoices.index', tab='open') }}"
+                   class="flex items-center justify-between px-5 py-4 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ full_stats.open_count }} open invoice{{ 's' if full_stats.open_count != 1 }} outstanding
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-bold text-blue-600 dark:text-blue-400 font-mono">
+                            £{{ "%.2f"|format(full_stats.open_total) }}
+                        </span>
+                        <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </a>
+                {% endif %}
+
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6 px-5 py-6">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300">All clear — no outstanding items today</p>
             </div>
         </div>
         {% endif %}
 
-        {% else %}
-        <!-- Sync mode: recent supplier invoices -->
-        {% if recent_invoices %}
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Supplier Invoices</h2>
-                    <a href="{{ url_for('invoices.invoices_page') }}" class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400">View All →</a>
-                </div>
+        <!-- Stats row -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Paid This Month</p>
+                <p class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white font-mono">£{{ "%.0f"|format(full_stats.paid_this_month_total) }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.paid_this_month_count }} invoice{{ 's' if full_stats.paid_this_month_count != 1 }}</p>
             </div>
-            <div class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for invoice in recent_invoices %}
-                <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                    <div class="flex items-center justify-between">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Outstanding</p>
+                <p class="text-xl sm:text-2xl font-black {% if full_stats.open_total > 0 %}text-amber-600 dark:text-amber-400{% else %}text-gray-900 dark:text-white{% endif %} font-mono">£{{ "%.0f"|format(full_stats.open_total + full_stats.overdue_total) }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.open_count + full_stats.overdue_count }} unpaid</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Overdue</p>
+                <p class="text-xl sm:text-2xl font-black {% if full_stats.overdue_total > 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-white{% endif %} font-mono">£{{ "%.0f"|format(full_stats.overdue_total) }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">{{ full_stats.overdue_count }} invoice{{ 's' if full_stats.overdue_count != 1 }}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Customers</p>
+                <p class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white font-mono">{{ full_stats.customer_count }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">total</p>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Quick Actions</h2>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100 dark:divide-gray-700">
+                <a href="{{ url_for('customer_invoices.new') }}"
+                   class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 text-center">New Invoice</span>
+                </a>
+                <a href="{{ url_for('customer_quotes.new') }}"
+                   class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 text-center">New Quote</span>
+                </a>
+                <a href="/invoices"
+                   class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 text-center">Process Invoice</span>
+                </a>
+                <a href="{{ url_for('customer_payments.index') }}"
+                   class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 text-center">Record Payment</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Recent activity -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            <!-- Recent invoices -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Recent Invoices</h2>
+                    <a href="{{ url_for('customer_invoices.index') }}" class="text-xs text-primary-600 hover:underline">View all</a>
+                </div>
+                {% if recent_customer_invoices %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in recent_customer_invoices %}
+                    <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                       class="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <div>
-                            <p class="font-medium text-gray-900 dark:text-white">{{ invoice.job_reference or 'No reference' }}</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ invoice.supplier_name }} • {{ invoice.invoice_number or 'No invoice #' }}</p>
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white font-mono">{{ inv.invoice_number }}</p>
+                            <p class="text-xs text-gray-400">{{ inv.customer.display_name if inv.customer else '—' }}</p>
                         </div>
                         <div class="text-right">
-                            <p class="font-semibold text-gray-900 dark:text-white">£{{ "%.2f"|format(invoice.total_selling or 0) }}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ invoice.created_at.strftime('%d %b %Y') }}</p>
+                            <p class="text-sm font-bold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total or 0) }}</p>
+                            <span class="text-xs px-1.5 py-0.5 rounded font-medium
+                                {% if inv.status == 'paid' %}text-green-700 bg-green-100
+                                {% elif inv.status == 'viewed' %}text-purple-700 bg-purple-100
+                                {% elif inv.status == 'sent' %}text-blue-700 bg-blue-100
+                                {% elif inv.is_overdue %}text-red-700 bg-red-100
+                                {% else %}text-amber-700 bg-amber-100{% endif %}">
+                                {% if inv.is_overdue and inv.status != 'paid' %}Overdue{% else %}{{ inv.status|title }}{% endif %}
+                            </span>
                         </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="px-5 py-8 text-center">
+                    <p class="text-sm text-gray-400">No invoices yet</p>
+                    <a href="{{ url_for('customer_invoices.new') }}" class="text-xs text-primary-600 hover:underline mt-1 block">Create your first invoice</a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Recently paid -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Recently Paid</h2>
+                    <a href="{{ url_for('customer_invoices.index', tab='paid') }}" class="text-xs text-primary-600 hover:underline">View all</a>
+                </div>
+                {% if full_stats.recently_paid %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in full_stats.recently_paid %}
+                    <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                       class="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white font-mono">{{ inv.invoice_number }}</p>
+                            <p class="text-xs text-gray-400">
+                                {{ inv.customer.display_name if inv.customer else '—' }}
+                                {% if inv.paid_at %} &middot; {{ inv.paid_at.strftime('%d %b') }}{% endif %}
+                            </p>
+                        </div>
+                        <p class="text-sm font-bold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(inv.total or 0) }}</p>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="px-5 py-8 text-center">
+                    <p class="text-sm text-gray-400">No payments received yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% else %}
+        <!-- Sync mode dashboard -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Total Processed</p>
+                <p class="text-3xl font-black text-gray-900 dark:text-white">{{ total_invoices }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">invoices</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">This Month</p>
+                <p class="text-3xl font-black text-gray-900 dark:text-white">{{ invoices_this_month }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">of {{ invoice_limit }}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
+                <p class="text-xs text-gray-400 uppercase tracking-wider mb-2">Usage</p>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-primary-600 h-2 rounded-full" style="width: {{ usage_percent }}%"></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">{{ usage_percent }}% used</p>
+            </div>
+        </div>
+
+        <!-- Quick actions sync mode -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Quick Actions</h2>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y sm:divide-y-0 divide-gray-100 dark:divide-gray-700">
+                <a href="/invoices" class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                     </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Process Invoice</span>
+                </a>
+                <a href="/queue" class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Queue</span>
+                </a>
+                <a href="/billing" class="flex flex-col items-center gap-2 p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Billing</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Recent supplier invoices -->
+        {% if recent_invoices %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Recent Supplier Invoices</h2>
+            </div>
+            <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for inv in recent_invoices %}
+                <div class="flex items-center justify-between px-5 py-3.5">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ inv.supplier_name or 'Unknown' }}</p>
+                        <p class="text-xs text-gray-400">{{ inv.invoice_number or '—' }} &middot; {{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '' }}</p>
+                    </div>
+                    <p class="text-sm font-bold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(inv.total_selling or 0) }}</p>
                 </div>
                 {% endfor %}
             </div>
@@ -514,4 +292,20 @@
 
     </div>
 </div>
+
+<script>
+// Time-based greeting
+(function() {
+    const hour = new Date().getHours();
+    let greeting = 'Good morning';
+    if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
+    else if (hour >= 17) greeting = 'Good evening';
+    const el = document.getElementById('greeting');
+    if (el) {
+        const name = el.textContent.replace(/Good (morning|afternoon|evening)/, greeting);
+        el.textContent = name;
+    }
+})();
+</script>
+
 {% endblock %}
