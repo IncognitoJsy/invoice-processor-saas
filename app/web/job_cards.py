@@ -171,7 +171,24 @@ def api_customer_jobs(customer_id):
         customer_id=customer_id
     ).filter(JobCard.status.in_(['new', 'in_progress'])).order_by(
         JobCard.created_at.desc()).all()
-    return jsonify({'jobs': [{'id': j.id, 'name': j.name, 'status': j.status_label} for j in jobs]})
+    from app.models.customer_invoice import CustomerInvoice
+    result = []
+    for j in jobs:
+        # Check for existing draft/open invoice on this job
+        draft_inv = CustomerInvoice.query.filter_by(
+            user_id=current_user.id,
+            job_card_id=j.id,
+        ).filter(CustomerInvoice.status.in_(['draft', 'open'])).first()
+        result.append({
+            'id': j.id,
+            'name': j.name,
+            'status': j.status_label,
+            'draft_invoice_id': draft_inv.id if draft_inv else None,
+            'draft_invoice_number': draft_inv.invoice_number if draft_inv else None,
+            'draft_invoice_mode': draft_inv.invoice_mode if draft_inv else None,
+            'draft_invoice_status': draft_inv.status if draft_inv else None,
+        })
+    return jsonify({'jobs': result})
 
 
 @bp.route('/api/attach-supplier-invoice', methods=['POST'])

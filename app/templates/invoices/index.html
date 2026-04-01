@@ -949,6 +949,23 @@ async function loadJobsForCustomer(customerId, invoiceId) {
     const data = await res.json();
     const jobList = document.getElementById('job-list');
 
+    // Check if any job has an existing draft invoice and auto-select its mode
+    if (data.jobs && data.jobs.length > 0) {
+        for (const job of data.jobs) {
+            if (job.draft_invoice_mode) {
+                setInvoiceMode(job.draft_invoice_mode);
+                const modeDesc = document.getElementById('mode-desc');
+                if (modeDesc) {
+                    modeDesc.textContent = (job.draft_invoice_mode === 'itemised'
+                        ? 'Each line item added separately — quantities merged if same part number'
+                        : 'All materials combined into one "Materials" line — totals added if invoice already exists')
+                        + ' (matched existing invoice)';
+                }
+                break;
+            }
+        }
+    }
+
     if (!data.jobs || data.jobs.length === 0) {
         jobList.innerHTML = `
             <p class="text-xs text-gray-500 mb-2">No open jobs for this customer.</p>
@@ -965,13 +982,15 @@ async function loadJobsForCustomer(customerId, invoiceId) {
 
     jobList.innerHTML = data.jobs.map(j => `
         <div class="flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg mb-1" id="job-row-${j.id}">
-            <div>
+            <div class="min-w-0 flex-1">
                 <p class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(j.name)}</p>
-                <p class="text-xs text-gray-400">${escapeHtml(j.status)}</p>
+                <p class="text-xs text-gray-400">${escapeHtml(j.status)}${j.draft_invoice_number
+                    ? ' · <span class="text-amber-600 dark:text-amber-400">' + escapeHtml(j.draft_invoice_status === 'draft' ? 'Draft' : 'Open') + ' invoice: ' + escapeHtml(j.draft_invoice_number) + ' (' + escapeHtml(j.draft_invoice_mode || 'itemised') + ')</span>'
+                    : ' · No invoice yet'}</p>
             </div>
             <button onclick="attachToJob(${invoiceId}, ${j.id})"
                     class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition flex-shrink-0 ml-2">
-                Attach
+                ${j.draft_invoice_number ? 'Add to Invoice' : 'Attach'}
             </button>
         </div>
     `).join('') + `
