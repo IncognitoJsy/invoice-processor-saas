@@ -115,6 +115,16 @@
                 <a href="{{ url_for('customers.index') }}" class="block text-xs text-primary-600 hover:underline mt-2">+ Add new customer</a>
             </div>
 
+            <!-- Job Card -->
+            <div id="job-card-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3 text-sm">Link to Job</h3>
+                <select id="job-card-select"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500">
+                    <option value="">— No job (standalone quote) —</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Attach this quote to a job card</p>
+            </div>
+
             <!-- Dates -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
                 <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Details</h3>
@@ -263,12 +273,30 @@ function updateTotals() {
     document.getElementById('total-display').textContent = '£' + total.toFixed(2);
 }
 
-function customerChanged(customerId) {
+async function customerChanged(customerId) {
     const select = document.getElementById('customer-select');
     const opt = select.options[select.selectedIndex];
     const terms = opt.dataset.terms || '30';
     document.getElementById('payment-terms').value = terms;
     termsChanged(terms);
+
+    const jobSection = document.getElementById('job-card-section');
+    if (!customerId || !jobSection) return;
+    const res = await fetch('/jobs/api/customer/' + customerId + '/open');
+    const data = await res.json();
+    const jobSelect = document.getElementById('job-card-select');
+    jobSelect.innerHTML = '<option value="">— No job (standalone quote) —</option>';
+    if (data.jobs && data.jobs.length > 0) {
+        data.jobs.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j.id;
+            opt.textContent = j.name + ' (' + j.status + ')';
+            jobSelect.appendChild(opt);
+        });
+        jobSection.classList.remove('hidden');
+    } else {
+        jobSection.classList.add('hidden');
+    }
 }
 
 function termsChanged(days) {
@@ -299,6 +327,7 @@ async function saveDoc(action) {
         payment_terms: document.getElementById('payment-terms').value,
         notes: document.getElementById('doc-notes').value,
         subtotal, tax_amount: tax, total, tax_rate: taxRate,
+        job_card_id: document.getElementById('job-card-select')?.value ? parseInt(document.getElementById('job-card-select').value) : null,
     };
 
     const url = docType === 'invoice' ? '/customer-invoices/create-manual' : '/customer-quotes/create-manual';
