@@ -414,6 +414,7 @@ let allInvoices = [], filteredInvoices = [], currentPage = 1, perPage = 20;
 let qbConnected = false, xeroConnected = false;
 let qbCustomers = [], xeroCustomers = [];
 let currentInvoice = null, suggestedCustomers = [];
+let currentInvoiceModeForJob = 'itemised';
 let selectedCustomerId = null, selectedXeroCustomerId = null;
 let dropdownOpen = false, xeroDropdownOpen = false;
 let editingItemId = null;
@@ -923,8 +924,6 @@ async function quickAssignCustomer(invoiceId, customerId) {
     }
     loadInvoices();
 }
-
-let currentInvoiceModeForJob = 'itemised';
 
 function setInvoiceMode(mode) {
     currentInvoiceModeForJob = mode;
