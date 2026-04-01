@@ -11,6 +11,7 @@ class Invoice(db.Model):
     
     # User relationship
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    job_card_id = db.Column(db.Integer, db.ForeignKey('job_card.id'), nullable=True)
     user = db.relationship('User', backref=db.backref('invoices', lazy='dynamic'))
     
     # Document type: 'invoice' or 'quote'
