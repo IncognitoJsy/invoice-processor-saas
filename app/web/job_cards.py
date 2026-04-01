@@ -305,16 +305,20 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
     """Merge supplier invoice items into customer invoice - itemised mode"""
     from app.models.customer_invoice import CustomerInvoiceLine
 
+    # Load existing lines as list
+    existing_line_list = CustomerInvoiceLine.query.filter_by(
+        customer_invoice_id=customer_inv.id).all()
+
     # Build lookup of existing lines by part number
     existing_lines = {
         line.description.split('|')[0].strip(): line
-        for line in customer_inv.lines
+        for line in existing_line_list
         if line.line_type == 'itemised'
     }
 
     # Also build by part number stored in description prefix
     part_lookup = {}
-    for line in customer_inv.lines:
+    for line in existing_line_list:
         if line.line_type == 'itemised' and '|' in line.description:
             pn = line.description.split('|')[0].strip()
             part_lookup[pn] = line
@@ -332,7 +336,7 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
             existing = part_lookup.get(part_num)
             if not existing:
                 # Search existing lines
-                for line in customer_inv.lines:
+                for line in existing_line_list:
                     if line.line_type == 'itemised':
                         stored_pn = ''
                         if hasattr(line, 'part_number_ref'):
@@ -353,7 +357,7 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
         else:
             # Create new line - store part number in description as prefix
             line_desc = f"{part_num}|{desc}" if part_num else desc
-            sort_order = len(customer_inv.lines)
+            sort_order = CustomerInvoiceLine.query.filter_by(customer_invoice_id=customer_inv.id).count()
             new_line = CustomerInvoiceLine(
                 customer_invoice_id=customer_inv.id,
                 description=line_desc,
@@ -376,7 +380,7 @@ def _merge_summary(customer_inv, supplier_items, is_new):
 
     # Find existing Materials line
     materials_line = None
-    for line in customer_inv.lines:
+    for line in CustomerInvoiceLine.query.filter_by(customer_invoice_id=customer_inv.id).all():
         if line.line_type == 'summary' or 'materials' in line.description.lower():
             materials_line = line
             break
