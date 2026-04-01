@@ -94,6 +94,12 @@ def view(customer_id):
         user_id=current_user.id, customer_id=customer_id
     ).order_by(CustomerPayment.payment_date.desc()).all()
 
+    from app.models.job_card import JobCard
+    jobs = JobCard.query.filter_by(
+        user_id=current_user.id, customer_id=customer_id
+    ).order_by(JobCard.created_at.desc()).all()
+    active_jobs = [j for j in jobs if j.status in ['new', 'in_progress']]
+
     from app.models.customer_quote import CustomerQuote
     quotes = CustomerQuote.query.filter_by(
         user_id=current_user.id, customer_id=customer_id
@@ -125,6 +131,8 @@ def view(customer_id):
 
     return render_template('customers/view.html',
         today=today,
+        jobs=jobs,
+        active_jobs=active_jobs,
         customer=customer,
         invoices=invoices,
         unpaid=unpaid,

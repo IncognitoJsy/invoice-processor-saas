@@ -209,3 +209,21 @@ def api_attach_supplier_invoice():
     
     db.session.commit()
     return jsonify({'success': True, 'job_id': invoice.job_card_id})
+
+
+@bp.route('/<int:job_id>/delete', methods=['POST'])
+@login_required
+@require_full_mode
+def delete(job_id):
+    job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
+    # Detach any linked invoices first
+    from app.models.invoice import Invoice
+    from app.models.customer_invoice import CustomerInvoice
+    Invoice.query.filter_by(job_card_id=job_id).update({'job_card_id': None})
+    CustomerInvoice.query.filter_by(job_card_id=job_id).update({'job_card_id': None})
+    db.session.delete(job)
+    db.session.commit()
+    if request.is_json:
+        return jsonify({'success': True})
+    flash(f'Job "{job.name}" deleted', 'success')
+    return redirect(url_for('job_cards.index'))
