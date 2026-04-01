@@ -1116,8 +1116,8 @@ function showInvoiceModePanel(customerId, checkData) {
 
 function selectMode(mode) {
     window._selectedInvoiceMode = mode;
-    document.getElementById('mode-itemised').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'itemised' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
-    document.getElementById('mode-summary').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'summary' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
+    document.getElementById('qb-mode-itemised').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'itemised' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
+    document.getElementById('qb-mode-summary').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'summary' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
 }
 
 async function confirmAddToInvoice(customerId, useExisting) {
