@@ -77,7 +77,7 @@
                         <span class="font-medium text-gray-900 dark:text-white" id="issue-date-text">
                             {{ invoice.issue_date.strftime('%d %b %Y') if invoice.issue_date else '—' }}
                         </span>
-                        {% if invoice.status == 'open' %}
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
                         <button onclick="editIssueDate()" class="text-gray-400 hover:text-primary-600 transition" title="Edit issue date">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                         </button>
@@ -99,7 +99,7 @@
                         <span class="font-medium {% if invoice.is_overdue %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-white{% endif %}">
                             {{ invoice.due_date.strftime('%d %b %Y') if invoice.due_date else '—' }}
                         </span>
-                        {% if invoice.status == 'open' %}
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
                         <button onclick="editDueDate()" class="text-gray-400 hover:text-primary-600 transition" title="Edit due date">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                         </button>
@@ -114,7 +114,28 @@
                             <button onclick="cancelDueDate()" class="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                         </div>
                     </div>
-                    <p class="text-xs text-gray-400 mt-0.5" id="payment-terms-label">{{ invoice.payment_terms_label }}</p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <p class="text-xs text-gray-400" id="payment-terms-label">{{ invoice.payment_terms_label }}</p>
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
+                        <button onclick="editPaymentTerms()" class="text-gray-400 hover:text-primary-600 transition" title="Edit payment terms">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div id="payment-terms-edit" class="hidden mt-1">
+                        <select id="payment-terms-input"
+                                class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500">
+                            <option value="0" {% if invoice.payment_terms == '0' %}selected{% endif %}>Due on Receipt</option>
+                            <option value="7" {% if invoice.payment_terms == '7' %}selected{% endif %}>Net 7 Days</option>
+                            <option value="14" {% if invoice.payment_terms == '14' %}selected{% endif %}>Net 14 Days</option>
+                            <option value="30" {% if invoice.payment_terms == '30' %}selected{% endif %}>Net 30 Days</option>
+                            <option value="60" {% if invoice.payment_terms == '60' %}selected{% endif %}>Net 60 Days</option>
+                        </select>
+                        <div class="flex gap-2 mt-1">
+                            <button onclick="savePaymentTerms({{ invoice.id }})" class="text-xs text-primary-600 font-semibold hover:underline">Save</button>
+                            <button onclick="cancelPaymentTerms()" class="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -135,17 +156,26 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700" id="sortable-lines">
                     {% for line in invoice.lines %}
-                    <tr id="line-{{ line.id }}" data-line-id="{{ line.id }}" class="{% if invoice.status == 'open' %}cursor-grab active:cursor-grabbing{% endif %}">
-                        {% if invoice.status == 'open' %}
+                    <tr id="line-{{ line.id }}" data-line-id="{{ line.id }}" class="{% if invoice.status in ['open', 'sent', 'viewed'] %}cursor-grab active:cursor-grabbing{% endif %}">
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
                         <td class="pl-3 pr-1 py-4 w-6">
                             <div class="drag-handle text-gray-300 hover:text-gray-500 cursor-grab" title="Drag to reorder">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
                             </div>
                         </td>
                         {% endif %}
-                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ line.description }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {% if invoice.status in ['open', 'sent', 'viewed'] %}
+                            <input type="text" value="{{ line.description }}"
+                                   class="w-full px-2 py-1 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-transparent dark:text-white transition bg-transparent"
+                                   onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'description', this.value)"
+                                   onclick="this.select()">
+                            {% else %}
+                            {{ line.description }}
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-sm text-right">
-                            {% if invoice.status == 'open' %}
+                            {% if invoice.status in ['open', 'sent', 'viewed'] %}
                             <input type="number" value="{{ line.quantity }}" min="0.01" step="0.01"
                                    class="w-20 px-2 py-1 text-right border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-gray-700 dark:text-white transition"
                                    onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'quantity', this.value)"
@@ -155,7 +185,7 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm text-right font-mono">
-                            {% if invoice.status == 'open' %}
+                            {% if invoice.status in ['open', 'sent', 'viewed'] %}
                             <div class="flex items-center justify-end gap-1">
                                 <span class="text-gray-400">£</span>
                                 <input type="number" value="{{ "%.2f"|format(line.unit_price or 0) }}" min="0" step="0.01"
@@ -170,7 +200,7 @@
                         <td class="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-right font-mono" id="line-total-{{ line.id }}">
                             £{{ "%.2f"|format(line.line_total or 0) }}
                         </td>
-                        {% if invoice.status == 'open' %}
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
                         <td class="px-3 py-3 text-right">
                             <button onclick="deleteLine({{ line.id }}, {{ invoice.id }})" class="text-gray-300 hover:text-red-500 transition">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -184,7 +214,7 @@
         </div>
 
         <!-- Add line (open invoices only) -->
-        {% if invoice.status == 'open' %}
+        {% if invoice.status in ['open', 'sent', 'viewed'] %}
         <div class="px-6 py-4 border-t border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/20">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Add Line Item</p>
             <div class="grid grid-cols-12 gap-3 items-end">
@@ -370,6 +400,30 @@ async function saveDueDate(invoiceId) {
     }
 }
 
+function editPaymentTerms() {
+    document.getElementById('payment-terms-edit').classList.remove('hidden');
+}
+function cancelPaymentTerms() {
+    document.getElementById('payment-terms-edit').classList.add('hidden');
+}
+async function savePaymentTerms(invoiceId) {
+    const terms = document.getElementById('payment-terms-input').value;
+    const r = await fetch(`/customer-invoices/api/${invoiceId}/update-terms`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({payment_terms: terms})
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('payment-terms-label').textContent = d.label;
+        document.getElementById('payment-terms-edit').classList.add('hidden');
+        // Update due date display if changed
+        if (d.due_date) {
+            document.getElementById('due-date-text') && (document.getElementById('due-date-text').textContent = d.due_date_display);
+        }
+    }
+}
+
 function editIssueDate() {
     document.getElementById("issue-date-display").classList.add("hidden");
     document.getElementById("issue-date-edit").classList.remove("hidden");
@@ -446,8 +500,14 @@ document.getElementById("payment-modal").addEventListener("click", (e) => {
 });
 
 async function updateLine(lineId, invoiceId, field, value) {
-    const body = {};
-    body[field] = parseFloat(value) || 0;
+    const body = {field: field};
+    if (field === 'description') {
+        body[field] = value;
+        body.value = value;
+    } else {
+        body[field] = parseFloat(value) || 0;
+        body.value = parseFloat(value) || 0;
+    }
     const res = await fetch("/customer-invoices/" + invoiceId + "/update-line/" + lineId, {
         method: "POST",
         headers: {"Content-Type": "application/json"},

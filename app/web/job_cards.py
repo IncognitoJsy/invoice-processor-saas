@@ -178,7 +178,7 @@ def api_customer_jobs(customer_id):
         draft_inv = CustomerInvoice.query.filter_by(
             user_id=current_user.id,
             job_card_id=j.id,
-        ).filter(CustomerInvoice.status.in_(['draft', 'open'])).first()
+        ).filter(CustomerInvoice.status.in_(['open', 'draft'])).first()
         result.append({
             'id': j.id,
             'name': j.name,
@@ -243,8 +243,7 @@ def api_attach_supplier_invoice():
     existing_inv = CustomerInvoice.query.filter_by(
         user_id=current_user.id,
         job_card_id=job.id,
-        status='draft'
-    ).first()
+    ).filter(CustomerInvoice.status.in_(['open', 'draft'])).first()
 
     user = current_user
     today = date.today()
@@ -265,7 +264,7 @@ def api_attach_supplier_invoice():
             user_id=current_user.id,
             customer_id=job.customer_id,
             invoice_number=inv_number,
-            status='draft',
+            status='open',
             invoice_mode=invoice_mode,
             job_card_id=job.id,
             issue_date=today,
