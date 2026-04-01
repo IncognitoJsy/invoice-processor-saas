@@ -217,27 +217,33 @@
                 <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 Assign to Customer
             </h3>
-            <!-- Auto suggestions -->
-            <div id="modal-customer-suggestions" class="mb-3"></div>
-            <!-- Manual select -->
-            <div class="flex gap-3 items-end">
-                <div class="flex-1">
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Customer</label>
-                    <select id="modal-customer-select"
-                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
-                        <option value="">— Select customer —</option>
-                    </select>
+            <!-- Hidden suggestion div kept for JS compatibility -->
+            <div id="modal-customer-suggestions" class="hidden"></div>
+            <!-- Searchable customer input -->
+            <div class="relative mb-2">
+                <input type="text" id="modal-customer-search"
+                       placeholder="Type customer name..."
+                       autocomplete="off"
+                       oninput="filterModalCustomers(this.value)"
+                       onfocus="showModalDropdown()"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition">
+                <input type="hidden" id="modal-customer-select">
+                <!-- Dropdown -->
+                <div id="modal-customer-dropdown"
+                     class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
                 </div>
-                <button onclick="saveModalAssignment()" 
-                        class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition flex-shrink-0">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button onclick="saveModalAssignment()"
+                        class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition">
                     Assign
                 </button>
                 <button onclick="saveModalAssignment(null)"
-                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition flex-shrink-0">
+                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                     Clear
                 </button>
+                <a href="/customers/new" class="ml-auto text-xs text-primary-600 hover:underline self-center">+ Add new customer</a>
             </div>
-            <a href="/customers/new" class="inline-block mt-2 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400">+ Add new customer</a>
         </div>
 
         <!-- Attach to Job Section - full platform only, shown after customer assigned -->
@@ -814,37 +820,79 @@ document.getElementById('assign-modal').addEventListener('click', (e) => {
     if (e.target.id === 'assign-modal') closeAssignModal();
 });
 
+function showModalDropdown() {
+    const val = document.getElementById('modal-customer-search').value;
+    filterModalCustomers(val);
+}
+
+function filterModalCustomers(val) {
+    const dropdown = document.getElementById('modal-customer-dropdown');
+    const lower = val.toLowerCase();
+    // Sort: exact/starts-with matches first, then contains
+    let matches = ALL_CUSTOMERS.filter(c => c.name.toLowerCase().includes(lower));
+    matches.sort((a, b) => {
+        const aStart = a.name.toLowerCase().startsWith(lower) ? 0 : 1;
+        const bStart = b.name.toLowerCase().startsWith(lower) ? 0 : 1;
+        return aStart - bStart || a.name.localeCompare(b.name);
+    });
+    matches = matches.slice(0, 10);
+    if (!matches.length) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+    dropdown.innerHTML = matches.map(c => `
+        <button onclick="selectModalCustomer(${c.id}, '${c.name.replace(/'/g, "\'")}')"
+                class="w-full text-left px-3 py-2.5 text-sm text-gray-900 dark:text-white hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+            ${escapeHtml(c.name)}
+        </button>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectModalCustomer(id, name) {
+    document.getElementById('modal-customer-search').value = name;
+    document.getElementById('modal-customer-select').value = id;
+    document.getElementById('modal-customer-dropdown').classList.add('hidden');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+    if (!e.target.closest('#modal-customer-search') && !e.target.closest('#modal-customer-dropdown')) {
+        const dd = document.getElementById('modal-customer-dropdown');
+        if (dd) dd.classList.add('hidden');
+    }
+});
+
 async function loadModalCustomerSuggest(inv) {
     // Populate customer dropdown
     const select = document.getElementById('modal-customer-select');
     select.innerHTML = '<option value="">— Select customer —</option>' +
         ALL_CUSTOMERS.map(c => '<option value="' + c.id + '"' + (inv.platform_customer_id == c.id ? ' selected' : '') + '>' + escapeHtml(c.name) + (c.email ? ' (' + escapeHtml(c.email) + ')' : '') + '</option>').join('');
 
-    // Auto-suggest based on job_reference
-    const suggestEl = document.getElementById('modal-customer-suggestions');
-    suggestEl.innerHTML = '';
+    // Pre-fill search if already assigned
+    const searchEl = document.getElementById('modal-customer-search');
+    const hiddenEl = document.getElementById('modal-customer-select');
+    if (inv.platform_customer_id && inv.customer_name) {
+        searchEl.value = inv.customer_name;
+        hiddenEl.value = inv.platform_customer_id;
+    } else {
+        searchEl.value = '';
+        hiddenEl.value = '';
+    }
 
-    if (!inv.job_reference || ALL_CUSTOMERS.length === 0) return;
-
-    try {
-        const res = await fetch('/api/invoices/' + inv.id + '/suggest-customer');
-        const data = await res.json();
-        const suggestions = (data.suggestions || []).filter(s => s.type === 'customer').slice(0, 3);
-
-        if (suggestions.length > 0) {
-            suggestEl.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Suggested matches for <strong>' + escapeHtml(inv.job_reference) + '</strong>:</p>' +
-                suggestions.map(s => '<button onclick="quickAssignCustomer(' + inv.id + ',' + s.id + ')" class="w-full flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:border-primary-500 dark:hover:border-primary-500 rounded-lg mb-1.5 transition text-left">' +
-                    '<div><p class="text-sm font-medium text-gray-900 dark:text-white">' + escapeHtml(s.name) + '</p>' +
-                    '<p class="text-xs text-gray-400">' + escapeHtml(s.email || '') + '</p></div>' +
-                    '<span class="text-xs font-semibold px-2 py-0.5 rounded-full ml-2 flex-shrink-0 ' + (s.score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400') + '">' + s.score + '%</span>' +
-                    '</button>').join('');
-
-            // Auto-select highest match in dropdown if score >= 80
-            if (suggestions[0].score >= 80) {
-                select.value = suggestions[0].id;
+    // Auto-suggest best match based on job reference
+    if (!inv.platform_customer_id && inv.job_reference && ALL_CUSTOMERS.length > 0) {
+        try {
+            const res = await fetch('/api/invoices/' + inv.id + '/suggest-customer');
+            const data = await res.json();
+            const suggestions = (data.suggestions || []).filter(s => s.type === 'customer').slice(0, 5);
+            if (suggestions.length > 0 && suggestions[0].score >= 80) {
+                // Auto-fill the top match if high confidence
+                searchEl.value = suggestions[0].name;
+                hiddenEl.value = suggestions[0].id;
             }
-        }
-    } catch(e) { console.error(e); }
+        } catch(e) { console.error(e); }
+    }
 }
 
 async function quickAssignCustomer(invoiceId, customerId) {
@@ -953,6 +1001,11 @@ async function createAndAttachJob(customerId, invoiceId) {
 async function saveModalAssignment(customerId) {
     if (!currentInvoice) return;
     const cid = customerId !== undefined ? customerId : (parseInt(document.getElementById('modal-customer-select').value) || null);
+    // Also check search input value if hidden input empty
+    if (!cid && document.getElementById('modal-customer-search')?.value) {
+        const match = ALL_CUSTOMERS.find(c => c.name.toLowerCase() === document.getElementById('modal-customer-search').value.toLowerCase());
+        if (match) { document.getElementById('modal-customer-select').value = match.id; }
+    }
 
     if (!cid) {
         // Clear assignment
