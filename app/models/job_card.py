@@ -46,15 +46,15 @@ class JobCard(db.Model):
 
     @property
     def total_materials(self):
-        return sum(i.total_cost or 0 for i in self.supplier_invoices)
+        return sum(float(i.total_cost or 0) for i in self.supplier_invoices)
 
     @property
     def total_invoiced(self):
-        return sum(i.total or 0 for i in self.customer_invoices if i.status != 'void')
+        return sum(float(i.total or 0) for i in self.customer_invoices if i.status != 'void')
 
     @property
     def total_paid(self):
-        return sum(i.total or 0 for i in self.customer_invoices if i.status == 'paid')
+        return sum(float(i.total or 0) for i in self.customer_invoices if i.status == 'paid')
 
     @property
     def profit(self):
@@ -62,4 +62,4 @@ class JobCard(db.Model):
 
     @property
     def quote_total(self):
-        return self.quote.total if self.quote else 0
+        return float(self.quote.total) if self.quote and self.quote.total else 0
