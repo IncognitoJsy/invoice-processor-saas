@@ -771,6 +771,7 @@ def create_manual():
         total=data.get('total', 0),
         notes=data.get('notes', ''),
         payment_terms=data.get('payment_terms', '30'),
+        job_card_id=data.get('job_card_id') or None,
     )
     db.session.add(invoice)
     db.session.flush()

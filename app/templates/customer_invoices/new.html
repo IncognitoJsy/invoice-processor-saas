@@ -115,6 +115,15 @@
                 <a href="{{ url_for('customers.index') }}" class="block text-xs text-primary-600 hover:underline mt-2">+ Add new customer</a>
             </div>
 
+            <!-- Linked job -->
+            {% if selected_job %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-primary-200 dark:border-primary-800 p-4">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Linked Job</p>
+                <p class="font-semibold text-gray-900 dark:text-white text-sm">{{ selected_job.name }}</p>
+                <a href="{{ url_for('job_cards.view', job_id=selected_job.id) }}" class="text-xs text-primary-600 hover:underline">View job card</a>
+            </div>
+            {% endif %}
+
             <!-- Dates -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
                 <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Details</h3>
@@ -161,6 +170,8 @@
 
 <script>
 const docType = '{{ doc_type }}';
+const selectedJobId = {{ selected_job.id if selected_job else 'null' }};
+const selectedJobName = {{ selected_job.name|tojson if selected_job else 'null' }};
 const csrf = '{{ csrf_token() }}';
 const taxRate = {{ current_user.tax_rate or 0 }};
 let lines = [];
@@ -299,6 +310,7 @@ async function saveDoc(action) {
         payment_terms: document.getElementById('payment-terms').value,
         notes: document.getElementById('doc-notes').value,
         subtotal, tax_amount: tax, total, tax_rate: taxRate,
+        job_card_id: selectedJobId,
     };
 
     const url = docType === 'invoice' ? '/customer-invoices/create-manual' : '/customer-quotes/create-manual';

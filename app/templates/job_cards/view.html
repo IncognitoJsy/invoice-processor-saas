@@ -1,0 +1,204 @@
+{% extends "base/layout.html" %}
+{% block title %}{{ job.name }} - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('job_cards.index') }}" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ job.name }}</h1>
+                <p class="text-sm text-gray-400">
+                    <a href="{{ url_for('customers.view', customer_id=job.customer_id) }}" class="text-primary-600 hover:underline">{{ job.customer.display_name }}</a>
+                    {% if job.start_date %} · Started {{ job.start_date.strftime('%d %b %Y') }}{% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <!-- Status selector -->
+            <select onchange="updateStatus(this.value)"
+                    class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white font-semibold">
+                {% for key, label in job.STATUSES.items() %}
+                <option value="{{ key }}" {% if job.status == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <!-- New Invoice for this job -->
+            <a href="{{ url_for('customer_invoices.new', customer_id=job.customer_id, job_id=job.id) }}"
+               class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+                + Invoice
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Left: Summary -->
+        <div class="space-y-4">
+
+            <!-- Financial summary -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h2 class="font-semibold text-gray-900 dark:text-white mb-4">Summary</h2>
+                <div class="space-y-3">
+                    {% if job.quote %}
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Quoted</span>
+                        <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(job.quote_total) }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Materials Cost</span>
+                        <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(job.total_materials) }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Total Invoiced</span>
+                        <span class="font-semibold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(job.total_invoiced) }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Total Paid</span>
+                        <span class="font-semibold text-green-600 dark:text-green-400 font-mono">£{{ "%.2f"|format(job.total_paid) }}</span>
+                    </div>
+                    <div class="border-t border-gray-200 dark:border-gray-700 pt-3 flex justify-between">
+                        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Profit</span>
+                        <span class="font-bold {% if job.profit >= 0 %}text-green-600 dark:text-green-400{% else %}text-red-600{% endif %} font-mono">
+                            £{{ "%.2f"|format(job.profit) }}
+                        </span>
+                    </div>
+                </div>
+                {% if job.quote and job.quote_total > 0 %}
+                <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                    {% set pct = ((job.total_invoiced / job.quote_total) * 100)|int %}
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Quote progress</span>
+                        <span>{{ pct }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div class="{% if pct >= 90 %}bg-amber-500{% else %}bg-primary-500{% endif %} h-2 rounded-full transition-all"
+                             style="width: {{ [pct, 100]|min }}%"></div>
+                    </div>
+                    {% if pct >= 90 %}
+                    <p class="text-xs text-amber-600 mt-1">Approaching quoted amount</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Notes -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <h2 class="font-semibold text-gray-900 dark:text-white mb-3">Notes</h2>
+                <textarea id="job-notes" rows="4" placeholder="Access codes, parking, customer preferences..."
+                          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white resize-none"
+                          onblur="saveNotes()">{{ job.notes or '' }}</textarea>
+                <p class="text-xs text-gray-400 mt-1">Auto-saves when you click away</p>
+            </div>
+        </div>
+
+        <!-- Right: Activity -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Customer Invoices -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Customer Invoices</h2>
+                    <a href="{{ url_for('customer_invoices.new', customer_id=job.customer_id, job_id=job.id) }}"
+                       class="text-sm text-primary-600 hover:underline font-medium">+ New Invoice</a>
+                </div>
+                {% if job.customer_invoices %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in job.customer_invoices %}
+                    <a href="{{ url_for('customer_invoices.view', invoice_id=inv.id) }}"
+                       class="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div>
+                            <p class="font-mono font-semibold text-sm text-primary-600">{{ inv.invoice_number }}</p>
+                            <p class="text-xs text-gray-400">{{ inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—' }}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs px-2 py-0.5 rounded font-medium
+                                {% if inv.status == 'paid' %}bg-green-100 text-green-700
+                                {% elif inv.status == 'sent' %}bg-blue-100 text-blue-700
+                                {% else %}bg-amber-100 text-amber-700{% endif %}">
+                                {{ inv.status|title }}
+                            </span>
+                            <span class="font-bold text-sm font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(inv.total or 0) }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-gray-400 text-sm">
+                    No invoices yet —
+                    <a href="{{ url_for('customer_invoices.new', customer_id=job.customer_id, job_id=job.id) }}" class="text-primary-600 hover:underline">create one</a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Supplier Invoices -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Materials / Supplier Invoices</h2>
+                    <a href="/invoices" class="text-sm text-primary-600 hover:underline font-medium">Process Invoice</a>
+                </div>
+                {% if job.supplier_invoices %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for inv in job.supplier_invoices %}
+                    <div class="flex items-center justify-between px-5 py-3.5">
+                        <div>
+                            <p class="font-semibold text-sm text-gray-900 dark:text-white">{{ inv.supplier_name or 'Unknown Supplier' }}</p>
+                            <p class="text-xs text-gray-400">{{ inv.invoice_number or '—' }} · {{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '' }}</p>
+                        </div>
+                        <span class="font-bold text-sm font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(inv.total_cost or 0) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center text-gray-400 text-sm">
+                    No supplier invoices attached yet — process an invoice and attach it to this job
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Linked Quote -->
+            {% if job.quote %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Linked Quote</h2>
+                    <a href="{{ url_for('customer_quotes.view', quote_id=job.quote.id) }}" class="text-sm text-primary-600 hover:underline">View</a>
+                </div>
+                <div class="flex items-center justify-between mt-3">
+                    <div>
+                        <p class="font-mono font-semibold text-purple-600">{{ job.quote.quote_number }}</p>
+                        <p class="text-xs text-gray-400">{{ job.quote.status|title }}</p>
+                    </div>
+                    <span class="font-bold font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(job.quote.total or 0) }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+const csrf = '{{ csrf_token() }}';
+
+async function updateStatus(status) {
+    const r = await fetch('/jobs/{{ job.id }}/update-status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({status})
+    });
+    const d = await r.json();
+    if (!d.success) alert('Failed to update status');
+}
+
+async function saveNotes() {
+    const notes = document.getElementById('job-notes').value;
+    await fetch('/jobs/{{ job.id }}/update-notes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({notes})
+    });
+}
+</script>
+{% endblock %}

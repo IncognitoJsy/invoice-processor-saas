@@ -13,6 +13,7 @@ class CustomerInvoice(db.Model):
     status = db.Column(db.String(20), default='open')  # open, sent, paid, overdue
     invoice_mode = db.Column(db.String(20), default='itemised')  # itemised, summary
     payment_terms = db.Column(db.String(20), default='30')
+    job_card_id = db.Column(db.Integer, db.ForeignKey('job_card.id'), nullable=True)
     view_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
     viewed_at = db.Column(db.DateTime, nullable=True)
     view_count = db.Column(db.Integer, default=0)
