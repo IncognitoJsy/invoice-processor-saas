@@ -252,10 +252,22 @@
                 <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                 Attach to Job
             </h3>
+            <!-- Invoice mode selector -->
+            <div class="flex gap-2 mb-3">
+                <button id="mode-itemised" onclick="setInvoiceMode('itemised')"
+                        class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-green-500 bg-green-500 text-white transition">
+                    Itemised
+                </button>
+                <button id="mode-summary" onclick="setInvoiceMode('summary')"
+                        class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition">
+                    Summary
+                </button>
+            </div>
+            <p id="mode-desc" class="text-xs text-gray-500 mb-3">Each line item added separately — quantities merged if same part number</p>
             <div id="job-list" class="space-y-2 mb-3">
                 <p class="text-xs text-gray-400">Loading jobs...</p>
             </div>
-            <p class="text-xs text-gray-400 mt-1">Optional — attach this invoice to a job card to track materials cost</p>
+            <p class="text-xs text-gray-400 mt-1">Optional — attach this invoice to a job card to track materials and auto-update draft customer invoice</p>
         </div>
 
         <!-- QuickBooks Sync Section -->
@@ -912,6 +924,22 @@ async function quickAssignCustomer(invoiceId, customerId) {
     loadInvoices();
 }
 
+let currentInvoiceModeForJob = 'itemised';
+
+function setInvoiceMode(mode) {
+    currentInvoiceModeForJob = mode;
+    const desc = document.getElementById('mode-desc');
+    if (mode === 'itemised') {
+        document.getElementById('mode-itemised').className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-green-500 bg-green-500 text-white transition';
+        document.getElementById('mode-summary').className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition';
+        if (desc) desc.textContent = 'Each line item added separately — quantities merged if same part number';
+    } else {
+        document.getElementById('mode-summary').className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-green-500 bg-green-500 text-white transition';
+        document.getElementById('mode-itemised').className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition';
+        if (desc) desc.textContent = 'All materials combined into one "Materials" line — totals added if invoice already exists';
+    }
+}
+
 async function loadJobsForCustomer(customerId, invoiceId) {
     if (typeof PLATFORM_MODE === 'undefined' || PLATFORM_MODE !== 'full') return;
     const section = document.getElementById('job-attach-section');
@@ -962,11 +990,11 @@ async function attachToJob(invoiceId, jobId) {
     const res = await fetch('/jobs/api/attach-supplier-invoice', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({invoice_id: invoiceId, job_id: jobId})
+        body: JSON.stringify({invoice_id: invoiceId, job_id: jobId, invoice_mode: currentInvoiceModeForJob})
     });
     const d = await res.json();
     if (d.success) {
-        // Disable all attach buttons and show success on the attached one
+        // Disable all attach buttons
         document.getElementById('job-list').querySelectorAll('button').forEach(b => {
             b.disabled = true;
             b.classList.add('opacity-50', 'cursor-not-allowed');
@@ -981,6 +1009,15 @@ async function attachToJob(invoiceId, jobId) {
                 btn.classList.add('bg-green-100', 'text-green-700', 'cursor-default');
             }
         }
+        // Show invoice result
+        const msg = d.is_new
+            ? '✓ Draft invoice ' + escapeHtml(d.customer_invoice_number || '') + ' created'
+            : '✓ Materials added to draft invoice ' + escapeHtml(d.customer_invoice_number || '');
+        const resultEl = document.createElement('div');
+        resultEl.className = 'mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg';
+        resultEl.innerHTML = '<p class="text-xs text-green-700 dark:text-green-400 font-semibold">' + msg + '</p>' +
+            (d.customer_invoice_id ? '<a href="/customer-invoices/' + d.customer_invoice_id + '" class="text-xs text-primary-600 hover:underline">View draft invoice →</a>' : '');
+        document.getElementById('job-attach-section').appendChild(resultEl);
     }
 }
 
@@ -990,11 +1027,15 @@ async function createAndAttachJob(customerId, invoiceId) {
     const res = await fetch('/jobs/api/attach-supplier-invoice', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({invoice_id: invoiceId, job_id: 'new', customer_id: customerId, job_name: name})
+        body: JSON.stringify({invoice_id: invoiceId, job_id: 'new', customer_id: customerId, job_name: name, invoice_mode: currentInvoiceModeForJob})
     });
     const d = await res.json();
     if (d.success) {
-        document.getElementById('job-list').innerHTML = '<p class="text-sm text-green-600 font-semibold">✓ Attached to new job: ' + escapeHtml(name) + '</p>';
+        const msg = d.is_new
+            ? '✓ New job created and draft invoice ' + escapeHtml(d.customer_invoice_number) + ' started'
+            : '✓ Materials added to draft invoice ' + escapeHtml(d.customer_invoice_number);
+        document.getElementById('job-list').innerHTML = '<p class="text-sm text-green-600 font-semibold">' + msg + '</p>' +
+            '<a href="/customer-invoices/' + d.customer_invoice_id + '" class="text-xs text-primary-600 hover:underline mt-1 block">View draft invoice →</a>';
     }
 }
 
