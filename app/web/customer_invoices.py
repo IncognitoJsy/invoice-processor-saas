@@ -433,15 +433,24 @@ def update_line(invoice_id, line_id):
     """Update quantity and/or unit price on an existing line"""
     invoice = CustomerInvoice.query.filter_by(
         id=invoice_id, user_id=current_user.id).first_or_404()
-    if invoice.status != 'open':
-        return jsonify({'success': False, 'error': 'Can only edit open invoices'}), 400
+    if invoice.status not in ('open', 'sent', 'viewed'):
+        return jsonify({'success': False, 'error': 'Cannot edit this invoice'}), 400
     line = CustomerInvoiceLine.query.filter_by(
         id=line_id, customer_invoice_id=invoice_id).first_or_404()
     data = request.get_json()
+    field = data.get('field')
+    if field == 'description':
+        line.description = data.get('value', line.description)
+        db.session.commit()
+        return jsonify({'success': True})
     if 'quantity' in data:
         line.quantity = float(data['quantity'] or 0)
     if 'unit_price' in data:
         line.unit_price = float(data['unit_price'] or 0)
+    if field == 'quantity':
+        line.quantity = float(data.get('value', line.quantity) or 0)
+    if field == 'unit_price':
+        line.unit_price = float(data.get('value', line.unit_price) or 0)
     line.line_total = round(line.quantity * line.unit_price, 2)
     invoice.recalculate_totals()
     db.session.commit()
@@ -521,8 +530,8 @@ def update_issue_date(invoice_id):
 def add_line(invoice_id):
     invoice = CustomerInvoice.query.filter_by(
         id=invoice_id, user_id=current_user.id).first_or_404()
-    if invoice.status != 'open':
-        return jsonify({'success': False, 'error': 'Can only add lines to open invoices'}), 400
+    if invoice.status not in ('open', 'sent', 'viewed'):
+        return jsonify({'success': False, 'error': 'Cannot edit this invoice'}), 400
     data = request.get_json()
     description = data.get('description', '').strip()
     quantity = float(data.get('quantity', 1) or 1)
@@ -838,3 +847,32 @@ def public_pdf(token):
         mimetype='application/pdf',
         headers={'Content-Disposition': f'attachment; filename="{invoice.invoice_number}.pdf"'}
     )
+
+
+@bp.route('/api/<int:invoice_id>/update-terms', methods=['POST'])
+@login_required
+def update_terms(invoice_id):
+    invoice = CustomerInvoice.query.filter_by(id=invoice_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    terms = str(data.get('payment_terms', '30'))
+    invoice.payment_terms = terms
+    # Recalculate due date from issue date
+    from datetime import timedelta
+    try:
+        days = int(terms)
+        if invoice.issue_date:
+            issue = invoice.issue_date if hasattr(invoice.issue_date, 'date') else invoice.issue_date
+            if hasattr(issue, 'date'):
+                issue = issue.date()
+            from datetime import date as date_type
+            invoice.due_date = date_type(issue.year, issue.month, issue.day) + timedelta(days=days)
+    except:
+        pass
+    db.session.commit()
+    label_map = {'0':'Due on Receipt','7':'Net 7 Days','14':'Net 14 Days','30':'Net 30 Days','60':'Net 60 Days'}
+    label = label_map.get(terms, f'Net {terms} Days')
+    return jsonify({
+        'success': True,
+        'label': label,
+        'due_date_display': invoice.due_date.strftime('%d %b %Y') if invoice.due_date else ''
+    })
