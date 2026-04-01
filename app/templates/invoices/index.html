@@ -889,11 +889,16 @@ async function loadJobsForCustomer(customerId, invoiceId) {
     }
 
     jobList.innerHTML = data.jobs.map(j => `
-        <button onclick="attachToJob(${invoiceId}, ${j.id}, this)"
-                class="w-full flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:border-green-500 rounded-lg text-left transition text-sm mb-1">
-            <span class="font-medium text-gray-900 dark:text-white">${escapeHtml(j.name)}</span>
-            <span class="text-xs text-gray-400 ml-2">${escapeHtml(j.status)}</span>
-        </button>
+        <div class="flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg mb-1" id="job-row-${j.id}">
+            <div>
+                <p class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(j.name)}</p>
+                <p class="text-xs text-gray-400">${escapeHtml(j.status)}</p>
+            </div>
+            <button onclick="attachToJob(${invoiceId}, ${j.id})"
+                    class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition flex-shrink-0 ml-2">
+                Attach
+            </button>
+        </div>
     `).join('') + `
         <div class="flex gap-2 items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
             <input type="text" id="new-job-name-inline" placeholder="Or create new job..."
@@ -905,7 +910,7 @@ async function loadJobsForCustomer(customerId, invoiceId) {
         </div>`;
 }
 
-async function attachToJob(invoiceId, jobId, btn) {
+async function attachToJob(invoiceId, jobId) {
     const res = await fetch('/jobs/api/attach-supplier-invoice', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -913,14 +918,21 @@ async function attachToJob(invoiceId, jobId, btn) {
     });
     const d = await res.json();
     if (d.success) {
-        if (btn) {
-            btn.classList.remove('border-gray-200', 'hover:border-green-500');
-            btn.classList.add('border-green-500', 'bg-green-50', 'dark:bg-green-900/20');
-            btn.innerHTML = btn.innerHTML + ' <span class="text-green-600 font-bold">✓</span>';
-        }
-        document.getElementById('job-list').querySelectorAll('button:not([onclick*="createAndAttach"])').forEach(b => {
-            if (b !== btn) b.disabled = true;
+        // Disable all attach buttons and show success on the attached one
+        document.getElementById('job-list').querySelectorAll('button').forEach(b => {
+            b.disabled = true;
+            b.classList.add('opacity-50', 'cursor-not-allowed');
         });
+        const row = document.getElementById('job-row-' + jobId);
+        if (row) {
+            row.classList.add('border-green-500', 'bg-green-50', 'dark:bg-green-900/20');
+            const btn = row.querySelector('button');
+            if (btn) {
+                btn.textContent = '✓ Attached';
+                btn.classList.remove('bg-green-600', 'hover:bg-green-700', 'opacity-50');
+                btn.classList.add('bg-green-100', 'text-green-700', 'cursor-default');
+            }
+        }
     }
 }
 
