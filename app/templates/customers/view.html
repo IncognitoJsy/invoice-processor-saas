@@ -270,6 +270,59 @@
                 </div>
                 {% endif %}
             </div>
+
+            <!-- Jobs Section - always visible -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        Jobs
+                    </h2>
+                    <div class="flex items-center gap-3">
+                        {% if jobs %}<span class="text-xs text-gray-400">{{ jobs|length }} total</span>{% endif %}
+                        <button onclick="document.getElementById('new-job-modal').classList.remove('hidden')"
+                                class="text-sm font-semibold text-primary-600 hover:text-primary-700">+ New Job</button>
+                    </div>
+                </div>
+                {% if jobs %}
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for job in jobs %}
+                    <a href="{{ url_for('job_cards.view', job_id=job.id) }}"
+                       class="flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full flex-shrink-0
+                                {% if job.status == 'new' %}bg-blue-400
+                                {% elif job.status == 'in_progress' %}bg-amber-400
+                                {% elif job.status == 'complete' %}bg-green-400
+                                {% else %}bg-gray-300{% endif %}"></div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ job.name }}</p>
+                                <p class="text-xs text-gray-400">{{ job.status_label }}{% if job.start_date %} · Started {{ job.start_date.strftime('%d %b') }}{% endif %}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            {% if job.total_invoiced > 0 %}
+                            <div class="text-right">
+                                <p class="text-sm font-bold font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(job.total_invoiced) }}</p>
+                                {% if job.profit > 0 %}<p class="text-xs text-green-600">£{{ "%.2f"|format(job.profit) }} profit</p>{% endif %}
+                            </div>
+                            {% endif %}
+                            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="px-5 py-8 text-center">
+                    <p class="text-sm text-gray-400 mb-3">No jobs yet for this customer</p>
+                    <button onclick="document.getElementById('new-job-modal').classList.remove('hidden')"
+                            class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+                        Create First Job
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
         </div>
     </div>
 </div>
