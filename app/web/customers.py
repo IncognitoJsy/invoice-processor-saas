@@ -180,3 +180,32 @@ def delete(customer_id):
     db.session.commit()
     flash(f'Customer {name} deleted.', 'success')
     return redirect(url_for('customers.index'))
+
+
+@bp.route('/create-quick', methods=['POST'])
+@login_required
+def create_quick():
+    """Quick customer creation from invoice/quote form"""
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name required'}), 400
+    from app.models.customer import Customer
+    customer = Customer(
+        user_id=current_user.id,
+        name=name,
+        email=data.get('email', '').strip() or None,
+        phone=data.get('phone', '').strip() or None,
+        payment_terms='30',
+    )
+    # Parse address if provided
+    addr = (data.get('address') or '').strip()
+    if addr:
+        lines = addr.split('\n')
+        if lines: customer.address_line1 = lines[0]
+        if len(lines) > 1: customer.address_line2 = lines[1]
+        if len(lines) > 2: customer.city = lines[2]
+        if len(lines) > 3: customer.postcode = lines[3]
+    db.session.add(customer)
+    db.session.commit()
+    return jsonify({'success': True, 'customer_id': customer.id, 'name': customer.display_name})
