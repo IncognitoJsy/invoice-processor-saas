@@ -1110,12 +1110,12 @@ function showInvoiceModePanel(customerId, checkData) {
         <div class="mb-3">
             <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Invoice Mode</p>
             <div class="grid grid-cols-2 gap-2">
-                <button id="mode-itemised" onclick="selectMode('itemised')"
+                <button id="inv-mode-itemised" onclick="selectMode('itemised')"
                     class="p-3 rounded-xl border-2 text-left transition ${currentMode === 'itemised' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}">
                     <p class="text-sm font-semibold text-gray-900 dark:text-white">Itemised</p>
                     <p class="text-xs text-gray-500">Each item listed separately</p>
                 </button>
-                <button id="mode-summary" onclick="selectMode('summary')"
+                <button id="inv-mode-summary" onclick="selectMode('summary')"
                     class="p-3 rounded-xl border-2 text-left transition ${currentMode === 'summary' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}">
                     <p class="text-sm font-semibold text-gray-900 dark:text-white">Summary</p>
                     <p class="text-xs text-gray-500">Materials Used total only</p>
@@ -1134,8 +1134,8 @@ function showInvoiceModePanel(customerId, checkData) {
 
 function selectMode(mode) {
     window._selectedInvoiceMode = mode;
-    document.getElementById('qb-mode-itemised').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'itemised' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
-    document.getElementById('qb-mode-summary').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'summary' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
+    document.getElementById('inv-mode-itemised').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'itemised' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
+    document.getElementById('inv-mode-summary').className = `p-3 rounded-xl border-2 text-left transition ${mode === 'summary' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-primary-400'}`;
 }
 
 async function confirmAddToInvoice(customerId, useExisting) {

@@ -166,12 +166,22 @@
                         {% endif %}
                         <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
                             {% if invoice.status in ['open', 'sent', 'viewed'] %}
-                            <input type="text" value="{{ line.description }}"
-                                   class="w-full px-2 py-1 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-transparent dark:text-white transition bg-transparent"
-                                   onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'description', this.value)"
-                                   onclick="this.select()">
+                            {% set display_desc = line.description.split('|', 1)[1] if '|' in line.description else line.description %}
+                            {% set part_num = line.description.split('|', 1)[0] if '|' in line.description else '' %}
+                            <div class="flex flex-col gap-0.5">
+                                {% if part_num %}
+                                <span class="text-xs font-mono text-gray-400">{{ part_num }}</span>
+                                {% endif %}
+                                <input type="text" value="{{ display_desc }}"
+                                       class="w-full px-2 py-1 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-transparent dark:text-white transition bg-transparent"
+                                       onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'description', this.value)"
+                                       onclick="this.select()">
+                            </div>
                             {% else %}
-                            {{ line.description }}
+                            {% set display_desc = line.description.split('|', 1)[1] if '|' in line.description else line.description %}
+                            {% set part_num = line.description.split('|', 1)[0] if '|' in line.description else '' %}
+                            {% if part_num %}<span class="text-xs font-mono text-gray-400 block">{{ part_num }}</span>{% endif %}
+                            {{ display_desc }}
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm text-right">
