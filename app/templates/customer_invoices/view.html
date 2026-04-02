@@ -145,42 +145,44 @@
             <table class="w-full">
                 <thead>
                     <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                        <th class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/2">Description</th>
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
+                        <th class="px-2 py-3 w-4"></th>
+                        {% endif %}
+                        <th class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Part #</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
                         <th class="text-right px-2 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
                         <th class="text-right px-2 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
                         <th class="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
-                        {% if invoice.status == 'open' %}
-                        <th class="px-4 py-3"></th>
+                        {% if invoice.status in ['open', 'sent', 'viewed'] %}
+                        <th class="px-3 py-3"></th>
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700" id="sortable-lines">
                     {% for line in invoice.lines %}
+                    {% set raw_desc = line.description %}
+                    {% set part_num = raw_desc.split('|', 1)[0].strip() if '|' in raw_desc else '' %}
+                    {% set display_desc = raw_desc.split('|', 1)[1].strip() if '|' in raw_desc else raw_desc %}
                     <tr id="line-{{ line.id }}" data-line-id="{{ line.id }}" class="{% if invoice.status in ['open', 'sent', 'viewed'] %}cursor-grab active:cursor-grabbing{% endif %}">
                         {% if invoice.status in ['open', 'sent', 'viewed'] %}
-                        <td class="pl-3 pr-1 py-4 w-6">
+                        <td class="pl-2 pr-1 py-3 w-6">
                             <div class="drag-handle text-gray-300 hover:text-gray-500 cursor-grab" title="Drag to reorder">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
                             </div>
                         </td>
                         {% endif %}
-                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                        <!-- Part number column -->
+                        <td class="px-3 py-3 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                            {{ part_num or '—' }}
+                        </td>
+                        <!-- Description column -->
+                        <td class="px-3 py-3 text-sm text-gray-900 dark:text-white">
                             {% if invoice.status in ['open', 'sent', 'viewed'] %}
-                            {% set display_desc = line.description.split('|', 1)[1] if '|' in line.description else line.description %}
-                            {% set part_num = line.description.split('|', 1)[0] if '|' in line.description else '' %}
-                            <div class="flex flex-col gap-0.5">
-                                {% if part_num %}
-                                <span class="text-xs font-mono text-gray-400">{{ part_num }}</span>
-                                {% endif %}
-                                <input type="text" value="{{ display_desc }}"
-                                       class="w-full px-2 py-1 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-transparent dark:text-white transition bg-transparent"
-                                       onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'description', this.value)"
-                                       onclick="this.select()">
-                            </div>
+                            <input type="text" value="{{ display_desc }}"
+                                   class="w-full px-2 py-1 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-primary-500 rounded-lg text-sm dark:bg-transparent dark:text-white transition bg-transparent"
+                                   onchange="updateLine({{ line.id }}, {{ invoice.id }}, 'description', this.value)"
+                                   onclick="this.select()">
                             {% else %}
-                            {% set display_desc = line.description.split('|', 1)[1] if '|' in line.description else line.description %}
-                            {% set part_num = line.description.split('|', 1)[0] if '|' in line.description else '' %}
-                            {% if part_num %}<span class="text-xs font-mono text-gray-400 block">{{ part_num }}</span>{% endif %}
                             {{ display_desc }}
                             {% endif %}
                         </td>
