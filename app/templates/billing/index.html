@@ -3,6 +3,20 @@
 {% block title %}Billing - GoZappify{% endblock %}
 
 {% block content %}
+{% if request.args.get('reason') in ['trial_expired', 'subscription_ended'] %}
+<div class="bg-red-600 text-white px-4 py-4 text-center">
+    <div class="max-w-4xl mx-auto flex items-center justify-center gap-3">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <p class="font-semibold">
+            {% if request.args.get('reason') == 'trial_expired' %}
+                Your 7-day free trial has expired. Subscribe below to continue using GoZappify.
+            {% else %}
+                Your subscription has ended. Resubscribe below to restore access.
+            {% endif %}
+        </p>
+    </div>
+</div>
+{% endif %}
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         

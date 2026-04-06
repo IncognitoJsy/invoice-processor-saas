@@ -108,6 +108,74 @@ def create_app(config_name='default'):
     # Security headers
     register_security_headers(app)
 
+    # Subscription wall - redirect expired/cancelled users to billing
+    @app.before_request
+    def subscription_wall():
+        from flask_login import current_user
+        from flask import request, redirect, url_for
+
+        # Only check authenticated users
+        if not current_user.is_authenticated:
+            return None
+
+        # Skip for admin, static files, auth routes, billing, health
+        allowed_endpoints = {
+            'auth.logout', 'auth.login', 'auth.register',
+            'billing.index', 'billing.subscribe', 'billing.success',
+            'billing.topup', 'billing.topup_success', 'billing.cancel',
+            'billing.paypal_webhook', 'billing.check_subscription',
+            'dashboard.index', 'health', 'static', 'favicon',
+            'settings.index', 'settings.save',
+        }
+        if request.endpoint in allowed_endpoints:
+            return None
+        if request.endpoint and request.endpoint.startswith('static'):
+            return None
+        if request.path.startswith('/static'):
+            return None
+        if request.path.startswith('/health'):
+            return None
+        if request.path.startswith('/auth/'):
+            return None
+        if request.path.startswith('/billing'):
+            return None
+
+        # Skip admin
+        if current_user.is_admin:
+            return None
+
+        # Check if trial expired or subscription ended
+        reason = current_user.upload_blocked_reason
+        is_trial_expired = (
+            current_user.subscription_plan == 'trial' and
+            not current_user.is_trial_active
+        )
+        is_sub_ended = current_user.subscription_status in ['expired', 'cancelled']
+        is_cancelled = current_user.subscription_plan == 'cancelled'
+
+        if is_trial_expired or is_sub_ended or is_cancelled:
+            # Allow read-only pages
+            read_only_endpoints = {
+                'customer_invoices.index', 'customer_invoices.view',
+                'customers.index', 'customers.view',
+                'customer_quotes.index', 'customer_quotes.view',
+            }
+            if request.endpoint in read_only_endpoints:
+                return None
+
+            # Allow API calls that are read-only (GET)
+            if request.method == 'GET' and request.path.startswith('/api/'):
+                return None
+
+            # Redirect to billing with reason
+            if request.is_json or request.path.startswith('/api/'):
+                from flask import jsonify
+                return jsonify({'error': 'subscription_required', 'message': 'Your trial has expired. Please upgrade to continue.'}), 403
+
+            return redirect(url_for('billing.index', reason='trial_expired' if is_trial_expired else 'subscription_ended'))
+
+        return None
+
     # Health check endpoint
     @app.route('/health')
     def health():
@@ -156,6 +224,7 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
+    from app.models.supplier_account import SupplierAccount
     from app.web import dashboard, invoices, queue, settings, upload, auth, integrations, billing, setup, part_number_routes, gmail_auth, imap_auth, voice_to_quote, customers, products, customer_invoices, tax_reports, customer_quotes, customer_payments, job_cards
     from app.web import quotes
     from app.web import user_api

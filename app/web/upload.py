@@ -56,16 +56,8 @@ def check_supplier_account_fraud(supplier_name: str, account_number: str, user_i
     
     user = User.query.get(user_id)
     
-    # Only apply fraud check to trial users
-    # Full platform users need full-starter or full-pro subscription
-    if user.platform_mode in ('full', 'both') and user.subscription_plan not in ('trial', 'full-starter', 'full-pro'):
-        return jsonify({
-            'success': False,
-            'error': 'Your trial has expired. Please subscribe to continue processing invoices.',
-            'requires_subscription': True
-        }), 402
-
-    if user.subscription_plan != 'trial':
+    # Paid users bypass fraud check
+    if user.subscription_plan not in ('trial',):
         return {'allowed': True, 'reason': 'paid_user'}
     
     # Check if account exists for another user
