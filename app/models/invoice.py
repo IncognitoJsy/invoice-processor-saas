@@ -50,6 +50,14 @@ class Invoice(db.Model):
     
     # Processing status
     status = db.Column(db.String(50), default='completed', index=True)
+    bill_status = db.Column(db.String(20), default='unpaid', index=True)  # unpaid, paid, queried
+    bill_paid_at = db.Column(db.Date, nullable=True)
+    bill_notes = db.Column(db.Text, nullable=True)
+    is_receipt = db.Column(db.Boolean, default=False)  # True if manually uploaded receipt
+    bill_status = db.Column(db.String(20), default='unpaid', index=True)  # unpaid, paid, queried
+    bill_paid_at = db.Column(db.Date, nullable=True)
+    bill_notes = db.Column(db.Text, nullable=True)
+    is_receipt = db.Column(db.Boolean, default=False)  # True if manually uploaded receipt
     processed_at = db.Column(db.DateTime, default=datetime.utcnow)
     error_message = db.Column(db.Text)
     
