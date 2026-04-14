@@ -74,6 +74,7 @@ class User(db.Model, UserMixin):
     
     # Email notifications
     trial_reminder_sent = db.Column(db.Boolean, default=False)
+    employer_contribution_rate = db.Column(db.Numeric(5, 2), default=6.5)
     payment_failed_email_sent = db.Column(db.Boolean, default=False)
     
     # MFA (Multi-Factor Authentication)
