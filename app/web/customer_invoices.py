@@ -889,3 +889,17 @@ def api_job_open_invoice(job_card_id):
     if inv:
         return jsonify({'invoice_id': inv.id, 'invoice_number': inv.invoice_number})
     return jsonify({'invoice_id': None})
+
+
+@bp.route('/api/customer/<int:customer_id>/open-invoice')
+@login_required
+def api_customer_open_invoice(customer_id):
+    """Get the most recent open invoice for a customer"""
+    inv = CustomerInvoice.query.filter(
+        CustomerInvoice.user_id == current_user.id,
+        CustomerInvoice.customer_id == customer_id,
+        CustomerInvoice.status.in_(['open', 'draft'])
+    ).order_by(CustomerInvoice.created_at.desc()).first()
+    if inv:
+        return jsonify({'invoice_id': inv.id, 'invoice_number': inv.invoice_number})
+    return jsonify({'invoice_id': None})

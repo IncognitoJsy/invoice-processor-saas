@@ -413,6 +413,26 @@ async function convertQuote(id) {
 
 </script>
 
+<!-- Labour Section -->
+<div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm" id="customer-labour-section">
+    <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Logged Hours
+        </h2>
+        <span class="text-xs text-gray-400">Hours logged against this customer</span>
+    </div>
+    <div id="customer-labour-list">
+        <div class="p-6 text-center text-gray-400 text-sm">Loading...</div>
+    </div>
+    <div id="customer-labour-add-btn" class="hidden p-4 border-t border-gray-200 dark:border-gray-700">
+        <button onclick="addCustomerLabourToInvoice()"
+                class="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+            Add Selected Hours to Invoice
+        </button>
+    </div>
+</div>
+
 <!-- New Job Modal -->
 <div id="new-job-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -439,6 +459,65 @@ async function convertQuote(id) {
 </div>
 
 <script>
+async function loadCustomerLabour() {
+    const r = await fetch('/employees/api/customer/{{ customer.id }}/labour');
+    const d = await r.json();
+    const list = document.getElementById('customer-labour-list');
+    const addBtn = document.getElementById('customer-labour-add-btn');
+
+    if (!d.entries || d.entries.length === 0) {
+        list.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">No hours logged yet</div>';
+        addBtn.classList.add('hidden');
+        return;
+    }
+
+    const uninvoiced = d.entries.filter(e => e.status === 'logged');
+    if (uninvoiced.length > 0) addBtn.classList.remove('hidden');
+    else addBtn.classList.add('hidden');
+
+    list.innerHTML = `<div class="divide-y divide-gray-100 dark:divide-gray-700">
+        ${d.entries.map(e => `
+        <div class="flex items-center gap-3 px-5 py-3.5">
+            ${e.status === 'logged' ? `<input type="checkbox" class="cust-labour-check w-4 h-4 text-primary-600 rounded" value="${e.id}">` : '<span class="w-4 h-4 flex-shrink-0"></span>'}
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">${e.display_name || e.employee_name}</p>
+                <p class="text-xs text-gray-400">${e.date_worked || '—'} · ${e.description || ''} ${e.job_card_id ? '· <span class="text-primary-600">Job #' + e.job_card_id + '</span>' : ''}</p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm font-bold font-mono">£${e.charge_total.toFixed(2)}</p>
+                <p class="text-xs text-gray-400">${e.hours}hrs @ £${e.charge_out_rate.toFixed(2)}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${e.status === 'invoiced' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+                ${e.status === 'invoiced' ? 'Invoiced' : 'Pending'}
+            </span>
+        </div>
+        `).join('')}
+    </div>`;
+}
+
+async function addCustomerLabourToInvoice() {
+    const checked = [...document.querySelectorAll('.cust-labour-check:checked')].map(c => parseInt(c.value));
+    if (!checked.length) { alert('Select at least one entry'); return; }
+
+    // Find open invoice for this customer
+    const invR = await fetch('/customer-invoices/api/customer/{{ customer.id }}/open-invoice');
+    const invD = await invR.json();
+    if (!invD.invoice_id) {
+        alert('No open invoice found for this customer. Create one first from My Invoices.');
+        return;
+    }
+    const r = await fetch('/employees/api/add-to-invoice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({invoice_id: invD.invoice_id, entry_ids: checked})
+    });
+    const d = await r.json();
+    if (d.success) { alert(`${d.added} entry added to invoice`); loadCustomerLabour(); }
+    else alert(d.error || 'Failed');
+}
+
+document.addEventListener('DOMContentLoaded', loadCustomerLabour);
+
 async function createJobFromCustomer() {
     const name = document.getElementById('new-job-name').value.trim();
     if (!name) { alert('Please enter a job name'); return; }

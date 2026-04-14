@@ -378,8 +378,9 @@ async function saveHours() {
             employee_id: document.getElementById('log-emp-id').value,
             hours,
             job_card_id: document.getElementById('log-job-card').value || null,
+            customer_id: document.getElementById('log-customer').value || null,
             date_worked: document.getElementById('log-date').value,
-            description: document.getElementById('log-description').value,
+            description: desc,
         })
     });
     const d = await r.json();
