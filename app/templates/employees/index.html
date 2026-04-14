@@ -1,0 +1,361 @@
+{% extends "base/layout.html" %}
+{% block title %}Labour & Employees - GoZappify{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Labour & Employees</h1>
+            <p class="text-gray-400 text-sm mt-0.5">Manage your team and track labour profitability</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="text-xs text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl">
+                Employer contribution: <span class="font-bold text-gray-700 dark:text-gray-300">{{ contribution_rate }}%</span>
+                <a href="{{ url_for('settings.index') }}" class="ml-2 text-primary-600 hover:underline">Change</a>
+            </div>
+            <button onclick="openNewEmployeeModal()"
+                    class="px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold text-sm transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Add Employee
+            </button>
+        </div>
+    </div>
+
+    {% if employees %}
+    <div class="grid gap-4">
+        {% for emp in employees %}
+        {% set true_cost = emp.pay_rate * (1 + contribution_rate / 100) %}
+        {% set profit = emp.charge_out_rate - true_cost %}
+        {% set margin = ((profit / emp.charge_out_rate) * 100) if emp.charge_out_rate > 0 else 0 %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm {% if not emp.is_active %}opacity-60{% endif %}">
+            <div class="p-5">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <div class="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-700 dark:text-primary-400 font-bold text-lg">
+                                {{ emp.name[0].upper() }}
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-900 dark:text-white">{{ emp.name }}</h3>
+                                {% if emp.role %}<p class="text-sm text-gray-400">{{ emp.role }}</p>{% endif %}
+                            </div>
+                            {% if not emp.is_active %}
+                            <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">Inactive</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
+                            {% if emp.mobile %}<span>📱 {{ emp.mobile }}</span>{% endif %}
+                            {% if emp.email %}<span>✉ {{ emp.email }}</span>{% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Rate breakdown -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                        <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+                            <p class="text-xs text-gray-400 mb-1">Pay Rate</p>
+                            <p class="font-bold text-gray-900 dark:text-white font-mono">£{{ "%.2f"|format(emp.pay_rate) }}</p>
+                            <p class="text-xs text-gray-400">/hr</p>
+                        </div>
+                        <div class="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
+                            <p class="text-xs text-gray-400 mb-1">True Cost</p>
+                            <p class="font-bold text-amber-700 dark:text-amber-400 font-mono">£{{ "%.2f"|format(true_cost) }}</p>
+                            <p class="text-xs text-gray-400">/hr incl. {{ contribution_rate }}%</p>
+                        </div>
+                        <div class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3">
+                            <p class="text-xs text-gray-400 mb-1">Charge Out</p>
+                            <p class="font-bold text-blue-700 dark:text-blue-400 font-mono">£{{ "%.2f"|format(emp.charge_out_rate) }}</p>
+                            <p class="text-xs text-gray-400">/hr</p>
+                        </div>
+                        <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-3">
+                            <p class="text-xs text-gray-400 mb-1">Hourly Profit</p>
+                            <p class="font-bold text-green-700 dark:text-green-400 font-mono">£{{ "%.2f"|format(profit) }}</p>
+                            <p class="text-xs text-gray-400">{{ "%.0f"|format(margin) }}% margin</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                    <button onclick="openEditModal({{ emp.id }}, {{ emp|tojson|replace("'", "&#39;") }})"
+                            class="px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                        Edit
+                    </button>
+                    <button onclick="logHours({{ emp.id }}, '{{ emp.name }}', '{{ emp.role or '' }}')"
+                            class="px-3 py-1.5 text-xs font-semibold text-primary-600 border border-primary-300 dark:border-primary-700 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+                        Log Hours
+                    </button>
+                    {% if emp.is_active %}
+                    <button onclick="deactivate({{ emp.id }}, '{{ emp.name }}')"
+                            class="px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-red-600 transition ml-auto">
+                        Deactivate
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-16 text-center">
+        <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No employees yet</h3>
+        <p class="text-gray-400 text-sm mb-4">Add your team to track labour costs and profitability</p>
+        <button onclick="openNewEmployeeModal()"
+                class="px-5 py-2.5 bg-primary-600 text-white rounded-xl font-semibold text-sm">
+            Add First Employee
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add/Edit Employee Modal -->
+<div id="employee-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <h3 id="modal-title" class="text-lg font-semibold text-gray-900 dark:text-white mb-5">Add Employee</h3>
+        <input type="hidden" id="edit-emp-id">
+        <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name <span class="text-red-500">*</span></label>
+                    <input type="text" id="emp-name" placeholder="e.g. Simon Clarke"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role / Trade</label>
+                    <input type="text" id="emp-role" placeholder="e.g. Electrician, Apprentice"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile</label>
+                    <input type="text" id="emp-mobile" placeholder="Optional"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                    <input type="email" id="emp-email" placeholder="Optional"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pay Rate (£/hr) <span class="text-red-500">*</span></label>
+                    <input type="number" id="emp-pay-rate" placeholder="20.00" min="0" step="0.50"
+                           oninput="calcPreview()"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Charge Out Rate (£/hr) <span class="text-red-500">*</span></label>
+                    <input type="number" id="emp-charge-rate" placeholder="50.00" min="0" step="0.50"
+                           oninput="calcPreview()"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+            <!-- Live profit preview -->
+            <div id="profit-preview" class="hidden bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Profitability Preview</p>
+                <div class="grid grid-cols-3 gap-3 text-center text-sm">
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">True Cost/hr</p>
+                        <p class="font-bold text-amber-600 font-mono" id="prev-true-cost">—</p>
+                        <p class="text-xs text-gray-400">incl. {{ contribution_rate }}% SS</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">Charge Out/hr</p>
+                        <p class="font-bold text-blue-600 font-mono" id="prev-charge">—</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">Profit/hr</p>
+                        <p class="font-bold text-green-600 font-mono" id="prev-profit">—</p>
+                        <p class="text-xs text-gray-400" id="prev-margin">—</p>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                <textarea id="emp-notes" rows="2" placeholder="Any additional notes..."
+                          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white resize-none"></textarea>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-5">
+            <button onclick="closeEmployeeModal()"
+                    class="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="saveEmployee()"
+                    class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold">Save Employee</button>
+        </div>
+    </div>
+</div>
+
+<!-- Log Hours Modal -->
+<div id="log-hours-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Log Hours</h3>
+        <p class="text-sm text-gray-400 mb-5" id="log-hours-emp-name"></p>
+        <input type="hidden" id="log-emp-id">
+        <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hours <span class="text-red-500">*</span></label>
+                    <input type="number" id="log-hours" placeholder="8" min="0.25" step="0.25"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Worked</label>
+                    <input type="date" id="log-date"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Job Card <span class="text-gray-400 font-normal">(optional)</span></label>
+                <select id="log-job-card"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                    <option value="">— No specific job —</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="text" id="log-description" placeholder="e.g. First fix wiring"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+        </div>
+        <div class="flex gap-3 mt-5">
+            <button onclick="document.getElementById('log-hours-modal').classList.add('hidden')"
+                    class="flex-1 py-2.5 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="saveHours()"
+                    class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold">Log Hours</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const csrf = '{{ csrf_token() }}';
+const contributionRate = {{ contribution_rate }};
+
+function openNewEmployeeModal() {
+    document.getElementById('modal-title').textContent = 'Add Employee';
+    document.getElementById('edit-emp-id').value = '';
+    ['emp-name','emp-role','emp-mobile','emp-email','emp-pay-rate','emp-charge-rate','emp-notes'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('profit-preview').classList.add('hidden');
+    document.getElementById('employee-modal').classList.remove('hidden');
+}
+
+function openEditModal(empId, emp) {
+    document.getElementById('modal-title').textContent = 'Edit Employee';
+    document.getElementById('edit-emp-id').value = empId;
+    document.getElementById('emp-name').value = emp.name || '';
+    document.getElementById('emp-role').value = emp.role || '';
+    document.getElementById('emp-mobile').value = emp.mobile || '';
+    document.getElementById('emp-email').value = emp.email || '';
+    document.getElementById('emp-pay-rate').value = emp.pay_rate || '';
+    document.getElementById('emp-charge-rate').value = emp.charge_out_rate || '';
+    document.getElementById('emp-notes').value = emp.notes || '';
+    calcPreview();
+    document.getElementById('employee-modal').classList.remove('hidden');
+}
+
+function closeEmployeeModal() {
+    document.getElementById('employee-modal').classList.add('hidden');
+}
+
+function calcPreview() {
+    const pay = parseFloat(document.getElementById('emp-pay-rate').value) || 0;
+    const charge = parseFloat(document.getElementById('emp-charge-rate').value) || 0;
+    if (!pay && !charge) { document.getElementById('profit-preview').classList.add('hidden'); return; }
+    const trueCost = pay * (1 + contributionRate / 100);
+    const profit = charge - trueCost;
+    const margin = charge > 0 ? (profit / charge * 100) : 0;
+    document.getElementById('prev-true-cost').textContent = '£' + trueCost.toFixed(2);
+    document.getElementById('prev-charge').textContent = '£' + charge.toFixed(2);
+    document.getElementById('prev-profit').textContent = '£' + profit.toFixed(2);
+    document.getElementById('prev-margin').textContent = margin.toFixed(1) + '% margin';
+    document.getElementById('prev-profit').className = 'font-bold font-mono ' + (profit >= 0 ? 'text-green-600' : 'text-red-600');
+    document.getElementById('profit-preview').classList.remove('hidden');
+}
+
+async function saveEmployee() {
+    const empId = document.getElementById('edit-emp-id').value;
+    const name = document.getElementById('emp-name').value.trim();
+    if (!name) { alert('Please enter a name'); return; }
+    const payload = {
+        name,
+        role: document.getElementById('emp-role').value.trim(),
+        mobile: document.getElementById('emp-mobile').value.trim(),
+        email: document.getElementById('emp-email').value.trim(),
+        pay_rate: parseFloat(document.getElementById('emp-pay-rate').value) || 0,
+        charge_out_rate: parseFloat(document.getElementById('emp-charge-rate').value) || 0,
+        notes: document.getElementById('emp-notes').value.trim(),
+    };
+    const url = empId ? `/employees/${empId}/update` : '/employees/create';
+    const r = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.success) { closeEmployeeModal(); location.reload(); }
+    else alert(d.error || 'Failed to save');
+}
+
+async function deactivate(empId, name) {
+    if (!confirm(`Deactivate ${name}? They won't appear in new entries but history is preserved.`)) return;
+    const r = await fetch(`/employees/${empId}/deactivate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (d.success) location.reload();
+}
+
+async function logHours(empId, name, role) {
+    document.getElementById('log-emp-id').value = empId;
+    document.getElementById('log-hours-emp-name').textContent = role ? `${name} (${role})` : name;
+    document.getElementById('log-hours').value = '';
+    document.getElementById('log-description').value = '';
+    document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+
+    // Load open job cards
+    const r = await fetch('/jobs/?status=active', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+    const select = document.getElementById('log-job-card');
+    select.innerHTML = '<option value="">— No specific job —</option>';
+    try {
+        const jobs = await fetch('/jobs/api/all-open').then(r => r.json());
+        if (jobs.jobs) {
+            jobs.jobs.forEach(j => {
+                const opt = document.createElement('option');
+                opt.value = j.id;
+                opt.textContent = `${j.name} — ${j.customer_name || ''}`;
+                select.appendChild(opt);
+            });
+        }
+    } catch(e) {}
+
+    document.getElementById('log-hours-modal').classList.remove('hidden');
+}
+
+async function saveHours() {
+    const hours = parseFloat(document.getElementById('log-hours').value);
+    if (!hours || hours <= 0) { alert('Please enter hours'); return; }
+    const r = await fetch('/employees/labour/log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+            employee_id: document.getElementById('log-emp-id').value,
+            hours,
+            job_card_id: document.getElementById('log-job-card').value || null,
+            date_worked: document.getElementById('log-date').value,
+            description: document.getElementById('log-description').value,
+        })
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('log-hours-modal').classList.add('hidden');
+        alert(`Hours logged successfully`);
+    } else alert(d.error || 'Failed');
+}
+</script>
+{% endblock %}

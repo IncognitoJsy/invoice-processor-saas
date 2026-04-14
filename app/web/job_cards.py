@@ -161,6 +161,25 @@ def update_notes(job_id):
     return jsonify({'success': True})
 
 
+@bp.route('/api/all-open')
+@login_required
+@require_full_mode
+def api_all_open():
+    from app.models.customer import Customer
+    jobs = JobCard.query.filter_by(user_id=current_user.id).filter(
+        JobCard.status.in_(['new', 'in_progress'])
+    ).order_by(JobCard.created_at.desc()).all()
+    result = []
+    for j in jobs:
+        result.append({
+            'id': j.id,
+            'name': j.name,
+            'status': j.status_label,
+            'customer_name': j.customer.display_name if j.customer else '',
+        })
+    return jsonify({'jobs': result})
+
+
 @bp.route('/api/customer/<int:customer_id>/open')
 @login_required
 @require_full_mode

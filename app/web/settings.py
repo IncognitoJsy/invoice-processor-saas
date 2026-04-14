@@ -212,6 +212,7 @@ def get_profile():
         'last_name': current_user.last_name,
         'company_name': current_user.company_name,
         'default_markup': current_user.default_markup or 50.0,
+            'employer_contribution_rate': float(current_user.employer_contribution_rate or 6.5),
         'plan': current_user.subscription_plan,
         'plan_display': current_user.plan_display_name
     })
