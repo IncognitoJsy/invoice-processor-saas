@@ -74,6 +74,7 @@ class LabourEntry(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False, index=True)
     job_card_id = db.Column(db.Integer, db.ForeignKey('job_card.id'), nullable=True, index=True)
     customer_invoice_id = db.Column(db.Integer, db.ForeignKey('customer_invoice.id'), nullable=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True, index=True)
     hours = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     charge_out_rate = db.Column(db.Numeric(10, 2), nullable=False)
     pay_rate = db.Column(db.Numeric(10, 2), nullable=False)
@@ -119,4 +120,5 @@ class LabourEntry(db.Model):
             'description': self.description,
             'status': self.status,
             'job_card_id': self.job_card_id,
+            'customer_id': self.customer_id,
         }

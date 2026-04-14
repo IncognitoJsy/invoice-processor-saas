@@ -108,10 +108,20 @@ def log_labour():
     emp = Employee.query.filter_by(id=emp_id, user_id=current_user.id).first_or_404()
     contribution_rate = float(current_user.employer_contribution_rate or 6.5)
 
+    # If job_card_id provided, get customer from job card
+    job_card_id = data.get('job_card_id') or None
+    customer_id = data.get('customer_id') or None
+    if job_card_id and not customer_id:
+        from app.models.job_card import JobCard
+        job = JobCard.query.get(job_card_id)
+        if job:
+            customer_id = job.customer_id
+
     entry = LabourEntry(
         user_id=current_user.id,
         employee_id=emp_id,
-        job_card_id=data.get('job_card_id') or None,
+        job_card_id=job_card_id,
+        customer_id=customer_id,
         hours=hours,
         charge_out_rate=float(emp.charge_out_rate),
         pay_rate=float(emp.pay_rate),
@@ -229,3 +239,26 @@ def api_list():
     ).order_by(Employee.name).all()
     rate = float(current_user.employer_contribution_rate or 6.5)
     return jsonify({'employees': [e.to_dict(rate) for e in employees]})
+
+
+@bp.route('/api/customer/<int:customer_id>/labour')
+@login_required
+@require_full_mode
+def api_customer_labour(customer_id):
+    """Get all labour entries for a customer"""
+    from app.models.job_card import JobCard
+    from sqlalchemy import or_
+
+    job_ids = [j.id for j in JobCard.query.filter_by(
+        user_id=current_user.id, customer_id=customer_id).all()]
+
+    filters = [LabourEntry.customer_id == customer_id]
+    if job_ids:
+        filters.append(LabourEntry.job_card_id.in_(job_ids))
+
+    entries = LabourEntry.query.filter(
+        LabourEntry.user_id == current_user.id,
+        or_(*filters)
+    ).order_by(LabourEntry.date_worked.desc()).all()
+
+    return jsonify({'entries': [e.to_dict() for e in entries]})
