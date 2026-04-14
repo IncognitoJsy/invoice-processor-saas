@@ -163,6 +163,24 @@
                 {% endif %}
             </div>
 
+            <!-- Labour -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700" id="labour-section">
+                <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-gray-900 dark:text-white">Labour</h2>
+                    <button onclick="showLogHoursModal()"
+                            class="text-sm text-primary-600 hover:underline font-medium">+ Log Hours</button>
+                </div>
+                <div id="labour-list">
+                    <div class="p-8 text-center text-gray-400 text-sm">Loading...</div>
+                </div>
+                <div id="labour-add-to-invoice" class="hidden p-4 border-t border-gray-200 dark:border-gray-700">
+                    <button onclick="addSelectedToInvoice()"
+                            class="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition">
+                        Add Selected Hours to Invoice
+                    </button>
+                </div>
+            </div>
+
             <!-- Linked Quote -->
             {% if job.quote %}
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
@@ -197,6 +215,138 @@ async function deleteJob() {
     else alert('Failed to delete job');
 }
 
+// Labour section
+async function loadLabour() {
+    const r = await fetch('/employees/api/job/{{ job.id }}/labour');
+    const d = await r.json();
+    const list = document.getElementById('labour-list');
+    const addBtn = document.getElementById('labour-add-to-invoice');
+
+    if (!d.entries || d.entries.length === 0) {
+        list.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">No labour logged yet — click Log Hours to add</div>';
+        addBtn.classList.add('hidden');
+        return;
+    }
+
+    const uninvoiced = d.entries.filter(e => e.status === 'logged');
+    if (uninvoiced.length > 0) addBtn.classList.remove('hidden');
+    else addBtn.classList.add('hidden');
+
+    list.innerHTML = `
+        <div class="divide-y divide-gray-100 dark:divide-gray-700">
+            ${d.entries.map(e => `
+            <div class="flex items-center gap-3 px-5 py-3.5">
+                ${e.status === 'logged' ? `<input type="checkbox" class="labour-check w-4 h-4 text-primary-600 rounded" value="${e.id}">` : '<span class="w-4 h-4"></span>'}
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(e.display_name)}</p>
+                    <p class="text-xs text-gray-400">${e.date_worked || '—'} · ${escapeHtml(e.description || '')}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm font-bold font-mono text-gray-900 dark:text-white">${e.hours}hrs @ £${e.charge_out_rate.toFixed(2)}</p>
+                    <p class="text-xs font-bold font-mono text-primary-600">£${e.charge_total.toFixed(2)}</p>
+                </div>
+                <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${e.status === 'invoiced' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+                    ${e.status === 'invoiced' ? 'Invoiced' : 'Pending'}
+                </span>
+                ${e.status === 'logged' ? `<button onclick="deleteLabour(${e.id})" class="text-gray-300 hover:text-red-500 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>` : '<span class="w-4"></span>'}
+            </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function escapeHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function addSelectedToInvoice() {
+    const checked = [...document.querySelectorAll('.labour-check:checked')].map(c => parseInt(c.value));
+    if (!checked.length) { alert('Select at least one entry'); return; }
+
+    // Find open invoice for this job
+    const invR = await fetch('/customer-invoices/api/job/{{ job.id }}/open-invoice');
+    const invD = await invR.json();
+
+    if (!invD.invoice_id) {
+        alert('No open invoice found for this job. Create an invoice first from the Customer Invoices section.');
+        return;
+    }
+
+    const r = await fetch('/employees/api/add-to-invoice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({invoice_id: invD.invoice_id, entry_ids: checked})
+    });
+    const d = await r.json();
+    if (d.success) {
+        alert(`${d.added} labour ${d.added === 1 ? 'entry' : 'entries'} added to invoice`);
+        loadLabour();
+    } else alert(d.error || 'Failed');
+}
+
+async function deleteLabour(entryId) {
+    if (!confirm('Remove this labour entry?')) return;
+    const r = await fetch(`/employees/labour/${entryId}/delete`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (d.success) loadLabour();
+    else alert(d.error || 'Failed');
+}
+
+// Log hours modal on job card
+async function showLogHoursModal() {
+    document.getElementById('jc-log-modal').classList.remove('hidden');
+    document.getElementById('jc-log-hours').value = '';
+    document.getElementById('jc-log-desc').value = '';
+    document.getElementById('jc-log-date').value = new Date().toISOString().split('T')[0];
+
+    // Load employees
+    const r = await fetch('/employees/api/list');
+    const d = await r.json();
+    const sel = document.getElementById('jc-log-employee');
+    sel.innerHTML = '<option value="">— Select employee —</option>';
+    (d.employees || []).forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.id;
+        opt.textContent = e.display_name + ' (£' + e.charge_out_rate.toFixed(2) + '/hr)';
+        sel.appendChild(opt);
+    });
+}
+
+async function saveJobLabour() {
+    const empId = document.getElementById('jc-log-employee').value;
+    const hours = parseFloat(document.getElementById('jc-log-hours').value);
+    const desc = document.getElementById('jc-log-desc').value.trim();
+    if (!empId) { alert('Please select an employee'); return; }
+    if (!hours || hours <= 0) { alert('Please enter hours'); return; }
+    if (!desc) { alert('Please describe the work carried out'); return; }
+
+    const r = await fetch('/employees/labour/log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+            employee_id: empId,
+            job_card_id: {{ job.id }},
+            hours,
+            description: desc,
+            date_worked: document.getElementById('jc-log-date').value,
+        })
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('jc-log-modal').classList.add('hidden');
+        loadLabour();
+    } else alert(d.error || 'Failed');
+}
+
+// Load on page ready
+document.addEventListener('DOMContentLoaded', loadLabour);
+
 async function updateStatus(status) {
     const r = await fetch('/jobs/{{ job.id }}/update-status', {
         method: 'POST',
@@ -216,4 +366,43 @@ async function saveNotes() {
     });
 }
 </script>
+
+<!-- Log Hours Modal (on job card) -->
+<div id="jc-log-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Log Hours — {{ job.name }}</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee <span class="text-red-500">*</span></label>
+                <select id="jc-log-employee"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                    <option value="">— Select employee —</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hours <span class="text-red-500">*</span></label>
+                    <input type="number" id="jc-log-hours" placeholder="8" min="0.25" step="0.25"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
+                    <input type="date" id="jc-log-date"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description <span class="text-red-500">*</span></label>
+                <input type="text" id="jc-log-desc" placeholder="e.g. First fix wiring, bathroom installation..."
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+        </div>
+        <div class="flex gap-3 mt-5">
+            <button onclick="document.getElementById('jc-log-modal').classList.add('hidden')"
+                    class="flex-1 py-2.5 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="saveJobLabour()"
+                    class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold">Log Hours</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
