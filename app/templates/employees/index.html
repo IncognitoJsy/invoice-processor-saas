@@ -24,9 +24,9 @@
     {% if employees %}
     <div class="grid gap-4">
         {% for emp in employees %}
-        {% set true_cost = emp.pay_rate * (1 + contribution_rate / 100) %}
-        {% set profit = emp.charge_out_rate - true_cost %}
-        {% set margin = ((profit / emp.charge_out_rate) * 100) if emp.charge_out_rate > 0 else 0 %}
+        {% set true_cost = (emp.pay_rate | float) * (1 + (contribution_rate | float) / 100) %}
+        {% set profit = (emp.charge_out_rate | float) - true_cost %}
+        {% set margin = ((profit / (emp.charge_out_rate | float)) * 100) if emp.charge_out_rate | float > 0 else 0 %}
         <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm {% if not emp.is_active %}opacity-60{% endif %}">
             <div class="p-5">
                 <div class="flex items-start justify-between gap-4 flex-wrap">
