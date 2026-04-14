@@ -209,3 +209,13 @@ def create_quick():
     db.session.add(customer)
     db.session.commit()
     return jsonify({'success': True, 'customer_id': customer.id, 'name': customer.display_name})
+
+
+@bp.route('/api/list')
+@login_required
+def api_list():
+    from app.models.customer import Customer
+    customers = Customer.query.filter_by(
+        user_id=current_user.id
+    ).order_by(Customer.name).all()
+    return jsonify({'customers': [{'id': c.id, 'name': c.display_name} for c in customers]})
