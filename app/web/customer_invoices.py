@@ -876,3 +876,16 @@ def update_terms(invoice_id):
         'label': label,
         'due_date_display': invoice.due_date.strftime('%d %b %Y') if invoice.due_date else ''
     })
+
+
+@bp.route('/api/job/<int:job_card_id>/open-invoice')
+@login_required
+def api_job_open_invoice(job_card_id):
+    """Get the open/draft invoice for a job card"""
+    inv = CustomerInvoice.query.filter_by(
+        user_id=current_user.id,
+        job_card_id=job_card_id
+    ).filter(CustomerInvoice.status.in_(['open', 'draft'])).first()
+    if inv:
+        return jsonify({'invoice_id': inv.id, 'invoice_number': inv.invoice_number})
+    return jsonify({'invoice_id': None})
