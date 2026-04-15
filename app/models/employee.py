@@ -80,6 +80,7 @@ class LabourEntry(db.Model):
     pay_rate = db.Column(db.Numeric(10, 2), nullable=False)
     employer_contribution_rate = db.Column(db.Numeric(5, 2), nullable=False, default=6.5)
     date_worked = db.Column(db.Date, nullable=True)
+    time_worked = db.Column(db.Time, nullable=True)  # Time of day hours were logged
     description = db.Column(db.Text)
     status = db.Column(db.String(20), default='logged', index=True)  # logged, invoiced, void
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -117,6 +118,8 @@ class LabourEntry(db.Model):
             'cost_total': round(self.cost_total, 2),
             'profit_total': round(self.profit_total, 2),
             'date_worked': self.date_worked.strftime('%Y-%m-%d') if self.date_worked else None,
+            'time_worked': self.time_worked.strftime('%H:%M') if self.time_worked else None,
+            'datetime_worked': (self.date_worked.strftime('%Y-%m-%d') + 'T' + (self.time_worked.strftime('%H:%M') if self.time_worked else '09:00')) if self.date_worked else None,
             'description': self.description,
             'status': self.status,
             'job_card_id': self.job_card_id,
