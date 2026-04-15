@@ -326,7 +326,7 @@ function recalcDueDate() {
 }
 
 async function saveDoc(action) {
-    if (!lines.length) { alert('Please add at least one line item'); return; }
+    // Lines not required - invoice can be created empty and lines added later
     const customerId = document.getElementById('customer-select').value;
     if (!customerId) { alert('Please select a customer'); return; }
 
