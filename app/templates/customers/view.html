@@ -528,21 +528,26 @@ async function addCustomerLabourToInvoice() {
     const checked = [...document.querySelectorAll('.cust-labour-check:checked')].map(c => parseInt(c.value));
     if (!checked.length) { alert('Select at least one entry'); return; }
 
-    // Find open invoice for this customer
+    // Find open invoice - will auto-create if none exists
     const invR = await fetch('/customer-invoices/api/customer/{{ customer.id }}/open-invoice');
     const invD = await invR.json();
-    if (!invD.invoice_id) {
-        alert('No open invoice found for this customer. Create one first from My Invoices.');
-        return;
+    custCurrentInvoiceId = invD.invoice_id || null;
+
+    document.getElementById('cust-labour-invoice-note').textContent = invD.invoice_id
+        ? `Invoice: ${invD.invoice_number}`
+        : 'No open invoice — one will be created automatically';
+
+    const now = new Date();
+    document.getElementById('cust-cutoff-date').value = now.toISOString().split('T')[0];
+    document.getElementById('cust-cutoff-time').value = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+    if (custCurrentInvoiceId) {
+        await previewCustLabour();
+    } else {
+        document.getElementById('cust-preview-list').innerHTML = '<p class="text-xs text-gray-400 py-2">An invoice will be created and hours added to it</p>';
+        document.getElementById('cust-preview-total').textContent = '—';
     }
-    const r = await fetch('/employees/api/add-to-invoice', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({invoice_id: invD.invoice_id, entry_ids: checked})
-    });
-    const d = await r.json();
-    if (d.success) { alert(`${d.added} entry added to invoice`); loadCustomerLabour(); }
-    else alert(d.error || 'Failed');
+    document.getElementById('cust-labour-modal').classList.remove('hidden');
 }
 
 document.addEventListener('DOMContentLoaded', loadCustomerLabour);
