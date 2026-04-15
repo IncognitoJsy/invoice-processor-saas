@@ -127,6 +127,7 @@ def log_labour():
         pay_rate=float(emp.pay_rate),
         employer_contribution_rate=contribution_rate,
         date_worked=datetime.strptime(data['date_worked'], '%Y-%m-%d').date() if data.get('date_worked') else date.today(),
+        time_worked=datetime.strptime(data['time_worked'], '%H:%M').time() if data.get('time_worked') else datetime.now().time().replace(second=0, microsecond=0),
         description=data.get('description', '').strip() or None,
         status='logged',
     )
@@ -262,3 +263,70 @@ def api_customer_labour(customer_id):
     ).order_by(LabourEntry.date_worked.desc()).all()
 
     return jsonify({'entries': [e.to_dict() for e in entries]})
+
+
+@bp.route('/api/preview-hours', methods=['POST'])
+@login_required
+@require_full_mode
+def preview_hours():
+    """Preview which hours will be added based on cutoff datetime"""
+    from datetime import datetime as dt_type, time as time_type, date as date_type
+    from app.models.customer_invoice import CustomerInvoice
+    from sqlalchemy import or_
+
+    data = request.get_json()
+    invoice_id = data.get('invoice_id')
+    cutoff_date = data.get('cutoff_date')
+    cutoff_time = data.get('cutoff_time', '23:59')
+
+    if not invoice_id:
+        return jsonify({'error': 'Invoice required'}), 400
+
+    invoice = CustomerInvoice.query.filter_by(
+        id=invoice_id, user_id=current_user.id).first_or_404()
+
+    try:
+        cutoff_d = date_type.fromisoformat(cutoff_date)
+        cutoff_t = dt_type.strptime(cutoff_time, '%H:%M').time()
+        cutoff_dt = dt_type.combine(cutoff_d, cutoff_t)
+    except:
+        cutoff_dt = dt_type.now()
+
+    # Find all pending entries for this invoice's job/customer
+    filters = [LabourEntry.user_id == current_user.id, LabourEntry.status == 'logged']
+
+    if invoice.job_card_id:
+        filters.append(LabourEntry.job_card_id == invoice.job_card_id)
+    elif invoice.customer_id:
+        from app.models.job_card import JobCard
+        job_ids = [j.id for j in JobCard.query.filter_by(
+            user_id=current_user.id, customer_id=invoice.customer_id).all()]
+        filters.append(or_(
+            LabourEntry.customer_id == invoice.customer_id,
+            LabourEntry.job_card_id.in_(job_ids) if job_ids else db.false()
+        ))
+
+    all_entries = LabourEntry.query.filter(*filters).order_by(
+        LabourEntry.date_worked, LabourEntry.time_worked).all()
+
+    qualifying = []
+    pending_future = []
+
+    for e in all_entries:
+        entry_time = e.time_worked if e.time_worked else time_type(9, 0)
+        entry_dt = dt_type.combine(e.date_worked, entry_time) if e.date_worked else dt_type.min
+        entry_data = e.to_dict()
+        entry_data['qualifies'] = entry_dt <= cutoff_dt
+        if entry_dt <= cutoff_dt:
+            qualifying.append(entry_data)
+        else:
+            pending_future.append(entry_data)
+
+    total_qualifying = sum(e['charge_total'] for e in qualifying)
+
+    return jsonify({
+        'qualifying': qualifying,
+        'pending_future': pending_future,
+        'total_qualifying': round(total_qualifying, 2),
+        'cutoff_datetime': cutoff_dt.isoformat(),
+    })

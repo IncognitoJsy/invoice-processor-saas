@@ -304,6 +304,8 @@ async function showLogHoursModal() {
     document.getElementById('jc-log-hours').value = '';
     document.getElementById('jc-log-desc').value = '';
     document.getElementById('jc-log-date').value = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    document.getElementById('jc-log-time').value = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
 
     // Load employees
     const r = await fetch('/employees/api/list');
@@ -335,6 +337,7 @@ async function saveJobLabour() {
             hours,
             description: desc,
             date_worked: document.getElementById('jc-log-date').value,
+            time_worked: document.getElementById('jc-log-time').value,
         })
     });
     const d = await r.json();
@@ -367,6 +370,46 @@ async function saveNotes() {
 }
 </script>
 
+<!-- Labour Cutoff Modal -->
+<div id="labour-cutoff-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Add Hours to Invoice</h3>
+        <p class="text-sm text-gray-400 mb-5">Invoice: <span id="labour-invoice-num" class="font-semibold text-gray-700 dark:text-gray-300"></span></p>
+
+        <!-- Cutoff datetime -->
+        <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Add hours worked up to:</p>
+            <div class="flex gap-3 items-center">
+                <input type="date" id="labour-cutoff-date"
+                       oninput="previewLabourHours()"
+                       class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                <input type="time" id="labour-cutoff-time"
+                       oninput="previewLabourHours()"
+                       class="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+            </div>
+            <p class="text-xs text-gray-400 mt-2">Hours after this time stay pending for your next invoice</p>
+        </div>
+
+        <!-- Preview -->
+        <div class="mb-4 max-h-64 overflow-y-auto">
+            <div id="labour-preview-list"></div>
+        </div>
+
+        <!-- Total -->
+        <div class="flex items-center justify-between p-3 bg-primary-50 dark:bg-primary-900/20 rounded-xl mb-4">
+            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Total to add to invoice</span>
+            <span class="text-lg font-bold font-mono text-primary-600" id="labour-preview-total">£0.00</span>
+        </div>
+
+        <div class="flex gap-3">
+            <button onclick="document.getElementById('labour-cutoff-modal').classList.add('hidden')"
+                    class="flex-1 py-2.5 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="confirmAddLabour()"
+                    class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold">Add to Invoice</button>
+        </div>
+    </div>
+</div>
+
 <!-- Log Hours Modal (on job card) -->
 <div id="jc-log-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -388,6 +431,11 @@ async function saveNotes() {
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
                     <input type="date" id="jc-log-date"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time</label>
+                    <input type="time" id="jc-log-time"
                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
                 </div>
             </div>
