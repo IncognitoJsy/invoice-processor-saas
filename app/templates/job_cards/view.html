@@ -265,25 +265,26 @@ async function addSelectedToInvoice() {
     const checked = [...document.querySelectorAll('.labour-check:checked')].map(c => parseInt(c.value));
     if (!checked.length) { alert('Select at least one entry'); return; }
 
-    // Find open invoice for this job
+    // Find open invoice - will auto-create if none exists
     const invR = await fetch('/customer-invoices/api/job/{{ job.id }}/open-invoice');
     const invD = await invR.json();
+    currentInvoiceId = invD.invoice_id || null;
 
-    if (!invD.invoice_id) {
-        alert('No open invoice found for this job. Create an invoice first from the Customer Invoices section.');
-        return;
+    document.getElementById('labour-invoice-num').textContent = invD.invoice_id
+        ? invD.invoice_number
+        : 'No open invoice — one will be created automatically';
+
+    const now = new Date();
+    document.getElementById('labour-cutoff-date').value = now.toISOString().split('T')[0];
+    document.getElementById('labour-cutoff-time').value = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+    if (currentInvoiceId) {
+        await previewLabourHours();
+    } else {
+        document.getElementById('labour-preview-list').innerHTML = '<p class="text-xs text-gray-400 py-2">An invoice will be created and hours added to it</p>';
+        document.getElementById('labour-preview-total').textContent = '—';
     }
-
-    const r = await fetch('/employees/api/add-to-invoice', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({invoice_id: invD.invoice_id, entry_ids: checked})
-    });
-    const d = await r.json();
-    if (d.success) {
-        alert(`${d.added} labour ${d.added === 1 ? 'entry' : 'entries'} added to invoice`);
-        loadLabour();
-    } else alert(d.error || 'Failed');
+    document.getElementById('labour-cutoff-modal').classList.remove('hidden');
 }
 
 async function deleteLabour(entryId) {
