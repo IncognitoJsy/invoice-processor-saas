@@ -279,11 +279,65 @@ def preview_hours():
     cutoff_date = data.get('cutoff_date')
     cutoff_time = data.get('cutoff_time', '23:59')
 
-    if not invoice_id:
-        return jsonify({'error': 'Invoice required'}), 400
+    from app.models.user import User
+    from datetime import date as dt_date, timedelta
 
-    invoice = CustomerInvoice.query.filter_by(
-        id=invoice_id, user_id=current_user.id).first_or_404()
+    # Auto-create invoice if none provided
+    if not invoice_id:
+        # Need customer_id to create
+        customer_id_for_create = data.get('customer_id')
+        job_card_id_for_create = data.get('job_card_id')
+
+        if not customer_id_for_create and job_card_id_for_create:
+            from app.models.job_card import JobCard
+            job = JobCard.query.filter_by(
+                id=job_card_id_for_create, user_id=current_user.id).first()
+            if job:
+                customer_id_for_create = job.customer_id
+
+        if not customer_id_for_create:
+            return jsonify({'error': 'Customer required to create invoice'}), 400
+
+        # Check for existing open invoice first
+        existing = CustomerInvoice.query.filter(
+            CustomerInvoice.user_id == current_user.id,
+            CustomerInvoice.customer_id == customer_id_for_create,
+            CustomerInvoice.status.in_(['open', 'draft'])
+        ).order_by(CustomerInvoice.created_at.desc()).first()
+
+        if existing:
+            invoice = existing
+            invoice_id = existing.id
+        else:
+            # Create new invoice
+            user = current_user
+            next_num = user.next_invoice_number or 1
+            prefix = user.invoice_prefix or 'INV'
+            inv_number = f"{prefix}-{next_num:03d}"
+            user.next_invoice_number = next_num + 1
+            try:
+                terms_days = int(user.default_payment_terms or 30)
+            except:
+                terms_days = 30
+            today = dt_date.today()
+            new_inv = CustomerInvoice(
+                user_id=current_user.id,
+                customer_id=customer_id_for_create,
+                job_card_id=job_card_id_for_create,
+                invoice_number=inv_number,
+                status='open',
+                issue_date=today,
+                due_date=today + timedelta(days=terms_days),
+                payment_terms=str(terms_days),
+                subtotal=0, tax_rate=0, tax_amount=0, total=0,
+            )
+            db.session.add(new_inv)
+            db.session.flush()
+            invoice = new_inv
+            invoice_id = new_inv.id
+    else:
+        invoice = CustomerInvoice.query.filter_by(
+            id=invoice_id, user_id=current_user.id).first_or_404()
 
     try:
         cutoff_d = date_type.fromisoformat(cutoff_date)
