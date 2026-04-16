@@ -127,6 +127,9 @@ def create_app(config_name='default'):
             'dashboard.index', 'health', 'static', 'favicon',
             'settings.index', 'settings.save',
         }
+        # Allow all API routes through — they return JSON errors not redirects
+        if request.path.startswith('/api/') or request.path.startswith('/employees/api/') or request.path.startswith('/jobs/api/') or request.path.startswith('/customer-invoices/api/') or request.path.startswith('/customers/api/'):
+            return None
         if request.endpoint in allowed_endpoints:
             return None
         if request.endpoint and request.endpoint.startswith('static'):
