@@ -524,6 +524,30 @@ async function loadCustomerLabour() {
     </div>`;
 }
 
+let custCurrentInvoiceId = null;
+
+async function confirmCustLabour() {
+    const r = await fetch('/employees/api/add-to-invoice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+            invoice_id: custCurrentInvoiceId,
+            customer_id: {{ customer.id }},
+            cutoff_date: document.getElementById('cust-cutoff-date').value,
+            cutoff_time: document.getElementById('cust-cutoff-time').value,
+        })
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('cust-labour-modal').classList.add('hidden');
+        const created = !custCurrentInvoiceId && d.invoice_number ? ` Invoice ${d.invoice_number} created automatically.` : '';
+        alert((d.added > 0 ? d.message : 'No hours added for this period') + created);
+        loadCustomerLabour();
+    } else {
+        alert(d.error || 'Failed to add hours');
+    }
+}
+
 async function addCustomerLabourToInvoice() {
     const checked = [...document.querySelectorAll('.cust-labour-check:checked')].map(c => parseInt(c.value));
     if (!checked.length) { alert('Select at least one entry'); return; }
