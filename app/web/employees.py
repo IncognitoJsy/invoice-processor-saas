@@ -383,3 +383,4 @@ def preview_hours():
         'total_qualifying': round(total_qualifying, 2),
         'cutoff_datetime': cutoff_dt.isoformat(),
     })
+# Thu 16 Apr 2026 10:33:00 BST
