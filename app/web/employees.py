@@ -183,8 +183,7 @@ def add_to_invoice():
     invoice_id = data.get('invoice_id')
     entry_ids = data.get('entry_ids', [])
 
-    if not invoice_id or not entry_ids:
-        return jsonify({'error': 'Invoice and entries required'}), 400
+    # entry_ids can be empty - will find all pending hours for the invoice's job/customer
 
     invoice = CustomerInvoice.query.filter_by(
         id=invoice_id, user_id=current_user.id).first_or_404()

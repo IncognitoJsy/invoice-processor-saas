@@ -527,12 +527,14 @@ async function loadCustomerLabour() {
 let custCurrentInvoiceId = null;
 
 async function confirmCustLabour() {
+    const checked = [...document.querySelectorAll('.cust-labour-check:checked')].map(c => parseInt(c.value));
     const r = await fetch('/employees/api/add-to-invoice', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
         body: JSON.stringify({
             invoice_id: custCurrentInvoiceId,
             customer_id: {{ customer.id }},
+            entry_ids: checked,
             cutoff_date: document.getElementById('cust-cutoff-date').value,
             cutoff_time: document.getElementById('cust-cutoff-time').value,
         })
