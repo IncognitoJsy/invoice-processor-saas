@@ -163,6 +163,8 @@
                 {% endif %}
             </div>
 
+            {% include 'supplier_quotes/comparison.html' %}
+
             <!-- Labour -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700" id="labour-section">
                 <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -349,7 +351,269 @@ async function saveJobLabour() {
 }
 
 // Load on page ready
-document.addEventListener('DOMContentLoaded', loadLabour);
+document.addEventListener('DOMContentLoaded', () => {
+    loadLabour();
+    loadSqSessions();
+});
+
+// ─── Supplier Quote Comparison JS ─────────────────────────────
+
+let sqSessionId = null;
+
+async function loadSqSessions() {
+    // For now just show the empty state — sessions load when you open one
+    const list = document.getElementById('sq-sessions-list');
+    if (!list) return;
+    try {
+        const r = await fetch('/supplier-quotes/job/{{ job.id }}/sessions', {credentials: 'include'});
+        if (!r.ok) { list.innerHTML = '<div class="p-5 text-center text-gray-400 text-sm">No comparisons yet — click New Comparison to start</div>'; return; }
+        const d = await r.json();
+        if (!d.sessions || !d.sessions.length) {
+            list.innerHTML = '<div class="p-5 text-center text-gray-400 text-sm">No comparisons yet — click New Comparison to start</div>';
+            return;
+        }
+        list.innerHTML = '<div class="divide-y divide-gray-100 dark:divide-gray-700">' +
+            d.sessions.map(s => `
+            <div class="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer" onclick="openComparison(${s.id})">
+                <div>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-white">${s.name}</p>
+                    <p class="text-xs text-gray-400">${s.quote_count} supplier${s.quote_count !== 1 ? 's' : ''} · ${s.item_count} items · ${s.status}</p>
+                </div>
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </div>`).join('') + '</div>';
+    } catch(e) {
+        list.innerHTML = '<div class="p-5 text-center text-gray-400 text-sm">No comparisons yet — click New Comparison to start</div>';
+    }
+}
+
+function startNewComparison() {
+    document.getElementById('sq-name').value = '';
+    document.getElementById('sq-new-modal').classList.remove('hidden');
+}
+
+async function createComparison() {
+    const name = document.getElementById('sq-name').value.trim() || 'Quote Comparison';
+    const r = await fetch('/supplier-quotes/session/create', {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({job_card_id: {{ job.id }}, name})
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('sq-new-modal').classList.add('hidden');
+        sqSessionId = d.session_id;
+        document.getElementById('sq-detail-title').textContent = name;
+        document.getElementById('sq-quotes-uploaded').innerHTML = '';
+        document.getElementById('sq-results').innerHTML = '<div class="text-center text-gray-400 text-sm py-8">Upload supplier quotes then click Compare</div>';
+        document.getElementById('sq-summary-bar').classList.add('hidden');
+        document.getElementById('sq-picklist-btn').classList.add('hidden');
+        document.getElementById('sq-create-quote-btn').classList.add('hidden');
+        document.getElementById('sq-detail-modal').classList.remove('hidden');
+    }
+}
+
+async function openComparison(sessionId) {
+    sqSessionId = sessionId;
+    const r = await fetch(`/supplier-quotes/session/${sessionId}`, {credentials: 'include'});
+    const d = await r.json();
+    document.getElementById('sq-detail-title').textContent = d.session.name;
+
+    // Show uploaded quotes
+    const uploaded = document.getElementById('sq-quotes-uploaded');
+    uploaded.innerHTML = (d.session.quotes || []).map(q =>
+        `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${q.status === 'parsed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}">
+            ${q.status === 'parsed' ? '✓' : '⏳'} ${q.supplier_name} (${q.item_count} items)
+        </span>`
+    ).join('');
+
+    // Show items if already compared
+    if (d.session.items && d.session.items.length) {
+        renderComparisonResults(d.session.items);
+        document.getElementById('sq-picklist-btn').classList.remove('hidden');
+        document.getElementById('sq-create-quote-btn').classList.remove('hidden');
+    }
+
+    document.getElementById('sq-detail-modal').classList.remove('hidden');
+}
+
+async function uploadSupplierQuote(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const supplierName = document.getElementById('sq-supplier-name').value.trim();
+    if (!supplierName) { alert('Please enter the supplier name first'); input.value = ''; return; }
+    if (!sqSessionId) { alert('Create a comparison first'); return; }
+
+    // Show uploading state
+    const uploaded = document.getElementById('sq-quotes-uploaded');
+    const tempId = 'sq-uploading-' + Date.now();
+    uploaded.innerHTML += `<span id="${tempId}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-700">
+        ⏳ ${supplierName} — processing...
+    </span>`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('supplier_name', supplierName);
+
+    const r = await fetch(`/supplier-quotes/session/${sqSessionId}/upload`, {
+        method: 'POST', credentials: 'include',
+        headers: {'X-CSRFToken': csrf},
+        body: formData
+    });
+    const d = await r.json();
+    const el = document.getElementById(tempId);
+
+    if (d.success) {
+        el.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700';
+        el.innerHTML = `✓ ${supplierName} (${d.items_found} items)`;
+        document.getElementById('sq-supplier-name').value = '';
+        input.value = '';
+    } else {
+        el.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-100 text-red-700';
+        el.innerHTML = `✗ ${supplierName} — failed`;
+        alert(d.error || 'Failed to parse quote');
+    }
+}
+
+async function runComparison() {
+    if (!sqSessionId) return;
+    const btn = document.getElementById('sq-compare-btn');
+    btn.innerHTML = '⏳ Comparing...';
+    btn.disabled = true;
+
+    const r = await fetch(`/supplier-quotes/session/${sqSessionId}/compare`, {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({})
+    });
+    const d = await r.json();
+    btn.innerHTML = '🔄 Re-Compare';
+    btn.disabled = false;
+
+    if (d.success) {
+        renderComparisonResults(d.items);
+        if (d.summary) {
+            document.getElementById('sq-total-best').textContent = '£' + d.summary.total_if_best.toFixed(2);
+            document.getElementById('sq-saving').textContent = '£' + d.summary.saving_vs_highest.toFixed(2);
+            document.getElementById('sq-total-customer').textContent = '£' + d.summary.total_customer_price.toFixed(2);
+            document.getElementById('sq-profit').textContent = '£' + d.summary.profit.toFixed(2);
+            document.getElementById('sq-summary-bar').classList.remove('hidden');
+        }
+        document.getElementById('sq-picklist-btn').classList.remove('hidden');
+        document.getElementById('sq-create-quote-btn').classList.remove('hidden');
+        loadSqSessions();
+    } else {
+        alert(d.error || 'Comparison failed');
+    }
+}
+
+function renderComparisonResults(items) {
+    const suppliers = [...new Set(items.flatMap(i => Object.keys(i.supplier_data || {})))];
+    const results = document.getElementById('sq-results');
+
+    let html = '<div class="overflow-x-auto"><table class="w-full text-sm">';
+    html += '<thead><tr class="bg-gray-50 dark:bg-gray-700/50">';
+    html += '<th class="text-left px-3 py-2 text-xs font-semibold text-gray-500">Item</th>';
+    html += '<th class="text-center px-3 py-2 text-xs font-semibold text-gray-500">Qty</th>';
+    suppliers.forEach(s => {
+        html += `<th class="text-right px-3 py-2 text-xs font-semibold text-gray-500">${s}</th>`;
+    });
+    html += '<th class="text-right px-3 py-2 text-xs font-semibold text-primary-600">Best Price</th>';
+    html += '<th class="text-right px-3 py-2 text-xs font-semibold text-blue-600">Customer Price</th>';
+    html += '<th class="text-center px-3 py-2 text-xs font-semibold text-gray-500">Buy From</th>';
+    html += '</tr></thead><tbody class="divide-y divide-gray-100 dark:divide-gray-700">';
+
+    items.forEach(item => {
+        html += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/20">';
+        html += `<td class="px-3 py-2.5 text-gray-900 dark:text-white font-medium max-w-xs">
+            <p>${item.generic_description}</p>
+            ${item.supplier_data[item.best_price_supplier]?.part_number ?
+                `<p class="text-xs text-gray-400 font-mono">${item.supplier_data[item.best_price_supplier].part_number} (${item.best_price_supplier})</p>` : ''}
+        </td>`;
+        html += `<td class="px-3 py-2.5 text-center text-gray-600">${item.quantity}</td>`;
+
+        suppliers.forEach(s => {
+            const sd = item.supplier_data?.[s];
+            const isCheapest = s === item.best_price_supplier;
+            const isHighest = sd && sd.unit_price === item.highest_price && item.highest_price !== item.best_price;
+            html += `<td class="px-3 py-2.5 text-right font-mono text-sm ${isCheapest ? 'text-green-600 font-bold' : isHighest ? 'text-red-400' : 'text-gray-600'}">
+                ${sd ? '£' + Number(sd.unit_price).toFixed(2) : '<span class="text-gray-300">—</span>'}
+            </td>`;
+        });
+
+        html += `<td class="px-3 py-2.5 text-right font-mono font-bold text-primary-600">£${item.best_price.toFixed(2)}</td>`;
+        html += `<td class="px-3 py-2.5 text-right font-mono font-bold text-blue-600">£${item.customer_price.toFixed(2)}</td>`;
+        html += `<td class="px-3 py-2.5 text-center">
+            <select onchange="updateSupplierSelection(${item.id}, this.value)"
+                    class="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 dark:bg-gray-700 dark:text-white">
+                ${suppliers.filter(s => item.supplier_data?.[s]).map(s =>
+                    `<option value="${s}" ${s === item.selected_supplier ? 'selected' : ''}>${s}</option>`
+                ).join('')}
+            </select>
+        </td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    results.innerHTML = html;
+}
+
+async function updateSupplierSelection(itemId, supplier) {
+    await fetch(`/supplier-quotes/session/${sqSessionId}/item/${itemId}/select-supplier`, {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({supplier})
+    });
+}
+
+async function generatePickLists() {
+    const r = await fetch(`/supplier-quotes/session/${sqSessionId}/pick-lists`, {credentials: 'include'});
+    const d = await r.json();
+
+    let html = '';
+    Object.entries(d.pick_lists).forEach(([supplier, items]) => {
+        html += `<div class="mb-6 print:mb-8">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="font-bold text-gray-900 dark:text-white text-base">${supplier}</h4>
+                <span class="text-xs text-gray-400">${items.length} items</span>
+            </div>
+            <table class="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                <thead><tr class="bg-gray-50 dark:bg-gray-700">
+                    <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Description</th>
+                    <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Part No.</th>
+                    <th class="text-center px-4 py-2 text-xs font-semibold text-gray-500">Qty</th>
+                    <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Unit</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                    ${items.map(i => `<tr>
+                        <td class="px-4 py-2">${i.supplier_description}</td>
+                        <td class="px-4 py-2 font-mono text-xs text-gray-600">${i.part_number}</td>
+                        <td class="px-4 py-2 text-center font-bold">${i.quantity}</td>
+                        <td class="px-4 py-2 text-gray-500">${i.unit}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    });
+
+    document.getElementById('sq-picklist-content').innerHTML = html;
+    document.getElementById('sq-picklist-modal').classList.remove('hidden');
+}
+
+async function createQuoteFromComparison() {
+    const r = await fetch(`/supplier-quotes/session/${sqSessionId}/create-quote`, {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({customer_id: {{ job.customer_id }}})
+    });
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('sq-detail-modal').classList.add('hidden');
+        if (confirm(`Customer quote ${d.quote_number} created! View it now?`)) {
+            window.location = d.redirect;
+        }
+        loadSqSessions();
+    } else alert(d.error || 'Failed to create quote');
+}
 
 async function updateStatus(status) {
     const r = await fetch('/jobs/{{ job.id }}/update-status', {

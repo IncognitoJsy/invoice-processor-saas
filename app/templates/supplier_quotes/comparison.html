@@ -1,0 +1,105 @@
+{# Supplier Quote Comparison — included inside job card view #}
+<div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm" id="sq-section">
+    <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div>
+            <h2 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Supplier Quote Comparison
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5">Upload quotes from multiple suppliers — AI finds the best price on every item</p>
+        </div>
+        <button onclick="startNewComparison()"
+                class="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            New Comparison
+        </button>
+    </div>
+    <div id="sq-sessions-list">
+        <div class="p-6 text-center text-gray-400 text-sm">Loading...</div>
+    </div>
+</div>
+
+<!-- New Comparison Modal -->
+<div id="sq-new-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">New Supplier Quote Comparison</h3>
+        <p class="text-sm text-gray-400 mb-5">Upload quotes from multiple suppliers — AI will match items and find the best prices</p>
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Comparison Name</label>
+            <input type="text" id="sq-name" placeholder="e.g. Kitchen Rewire Materials"
+                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+        </div>
+        <div class="flex gap-3">
+            <button onclick="document.getElementById('sq-new-modal').classList.add('hidden')"
+                    class="flex-1 py-2.5 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">Cancel</button>
+            <button onclick="createComparison()"
+                    class="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Comparison Detail Modal -->
+<div id="sq-detail-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white" id="sq-detail-title">Quote Comparison</h3>
+            <button onclick="document.getElementById('sq-detail-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="sq-upload-area" class="p-5 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Upload Supplier Quotes</p>
+            <div class="flex flex-wrap gap-3 mb-3" id="sq-quotes-uploaded"></div>
+            <div class="flex gap-2">
+                <input type="text" id="sq-supplier-name" placeholder="Supplier name (e.g. YESSS)"
+                       class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                <button onclick="document.getElementById('sq-file-input').click()"
+                        class="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    Upload Quote
+                </button>
+                <input type="file" id="sq-file-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden" onchange="uploadSupplierQuote(this)">
+            </div>
+            <p class="text-xs text-gray-400 mt-2">PDF or image. Upload one file per supplier.</p>
+        </div>
+        <div class="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3 flex-shrink-0">
+            <button onclick="runComparison()" id="sq-compare-btn"
+                    class="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Compare All Quotes
+            </button>
+            <p class="text-xs text-gray-400">AI matches items across all uploaded quotes</p>
+            <div class="ml-auto flex gap-2">
+                <button onclick="generatePickLists()" id="sq-picklist-btn" class="hidden px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold">📋 Pick Lists</button>
+                <button onclick="createQuoteFromComparison()" id="sq-create-quote-btn" class="hidden px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold">✓ Create Customer Quote</button>
+            </div>
+        </div>
+        <div id="sq-summary-bar" class="hidden px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div class="grid grid-cols-4 gap-4 text-center text-sm">
+                <div><p class="text-xs text-gray-400 mb-0.5">Buy at Best Price</p><p class="font-bold font-mono text-gray-900 dark:text-white" id="sq-total-best">—</p></div>
+                <div><p class="text-xs text-gray-400 mb-0.5">Saving vs Highest</p><p class="font-bold font-mono text-green-600" id="sq-saving">—</p></div>
+                <div><p class="text-xs text-gray-400 mb-0.5">Customer Quote</p><p class="font-bold font-mono text-blue-600" id="sq-total-customer">—</p></div>
+                <div><p class="text-xs text-gray-400 mb-0.5">Your Profit</p><p class="font-bold font-mono text-primary-600" id="sq-profit">—</p></div>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5">
+            <div id="sq-results"><div class="text-center text-gray-400 text-sm py-8">Upload supplier quotes then click Compare</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Pick Lists Modal -->
+<div id="sq-picklist-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Material Pick Lists</h3>
+            <div class="flex items-center gap-2">
+                <button onclick="window.print()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-600">🖨 Print</button>
+                <button onclick="document.getElementById('sq-picklist-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5" id="sq-picklist-content"></div>
+    </div>
+</div>
