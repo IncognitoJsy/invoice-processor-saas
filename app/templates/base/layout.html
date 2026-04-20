@@ -256,6 +256,10 @@
                         Queue
                     </a>
 
+                    <a href="/reports" class="px-3 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'reports' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                        Reports
+                    </a>
+
                     {% endif %}
 
                     {% if mode in ['sync', 'both'] %}
