@@ -1,6 +1,11 @@
 {% extends "base/layout.html" %}
 {% block title %}Preview {{ invoice.invoice_number }} - GoZappify{% endblock %}
 {% block content %}
+{% if invoice.status == 'void' %}
+<div class="fixed inset-0 flex items-center justify-center pointer-events-none z-50" style="transform: rotate(-30deg);">
+    <p class="text-9xl font-black text-red-500 opacity-20 tracking-widest">VOID</p>
+</div>
+{% endif %}
 <div class="max-w-3xl mx-auto px-4 py-8">
     <div class="flex items-center justify-between mb-6 no-print">
         <a href="{{ url_for('customer_invoices.view', invoice_id=invoice.id) }}" class="text-primary-600 hover:text-primary-700 text-sm font-medium">← Back to Invoice</a>
@@ -51,8 +56,19 @@
                     {% endif %}
                     <h1 class="text-2xl font-black">{{ current_user.company_name or 'Your Company' }}</h1>
                     {% if current_user.trade_type %}<p class="text-sm" style="color:rgba(255,255,255,0.75)">{{ current_user.trade_type|title }}</p>{% endif %}
-                    {% if current_user.tax_registered and current_user.tax_number %}
+                    {% if current_user.business_address_line1 %}
+                    <p class="text-xs mt-1" style="color:rgba(255,255,255,0.75)">{{ current_user.business_address_line1 }}{% if current_user.business_address_line2 %}, {{ current_user.business_address_line2 }}{% endif %}</p>
+                    <p class="text-xs" style="color:rgba(255,255,255,0.75)">{% if current_user.business_address_city %}{{ current_user.business_address_city }}{% endif %}{% if current_user.business_address_postcode %}, {{ current_user.business_address_postcode }}{% endif %}</p>
+                    {% endif %}
+                    {% if current_user.business_phone %}<p class="text-xs" style="color:rgba(255,255,255,0.75)">{{ current_user.business_phone }}</p>{% endif %}
+                    {% if current_user.business_email %}<p class="text-xs" style="color:rgba(255,255,255,0.75)">{{ current_user.business_email }}</p>{% endif %}
+                    {% if current_user.vat_registered and current_user.vat_number %}
+                    <p class="text-xs mt-1" style="color:rgba(255,255,255,0.75)">VAT No: {{ current_user.vat_number }}</p>
+                    {% elif current_user.tax_registered and current_user.tax_number %}
                     <p class="text-xs mt-1" style="color:rgba(255,255,255,0.75)">{{ current_user.tax_type or 'Tax' }} No: {{ current_user.tax_number }}</p>
+                    {% endif %}
+                    {% if current_user.company_registration_number %}
+                    <p class="text-xs" style="color:rgba(255,255,255,0.75)">Co. Reg: {{ current_user.company_registration_number }}</p>
                     {% endif %}
                 </div>
                 <div class="text-right">
@@ -78,6 +94,12 @@
                             <span class="text-xs font-bold text-gray-400 uppercase">Issue Date</span>
                             <span class="text-sm text-gray-700">{{ invoice.issue_date.strftime('%d %b %Y') if invoice.issue_date else '—' }}</span>
                         </div>
+                        {% if invoice.supply_date %}
+                        <div class="flex justify-between gap-8">
+                            <span class="text-xs font-bold text-gray-400 uppercase">Supply Date</span>
+                            <span class="text-sm text-gray-700">{{ invoice.supply_date.strftime('%d %b %Y') }}</span>
+                        </div>
+                        {% endif %}
                         <div class="flex justify-between gap-8">
                             <span class="text-xs font-bold text-gray-400 uppercase">Due Date</span>
                             <span class="text-sm font-semibold text-gray-700">{{ invoice.due_date.strftime('%d %b %Y') if invoice.due_date else '—' }}</span>

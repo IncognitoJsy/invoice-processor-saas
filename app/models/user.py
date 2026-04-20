@@ -75,6 +75,22 @@ class User(db.Model, UserMixin):
     # Email notifications
     trial_reminder_sent = db.Column(db.Boolean, default=False)
     employer_contribution_rate = db.Column(db.Numeric(5, 2), default=6.5)
+
+    # Business address — required for compliant invoices
+    business_address_line1 = db.Column(db.String(255))
+    business_address_line2 = db.Column(db.String(255))
+    business_address_city = db.Column(db.String(100))
+    business_address_postcode = db.Column(db.String(20))
+    business_address_country = db.Column(db.String(100), default='United Kingdom')
+    business_phone = db.Column(db.String(50))
+    business_email = db.Column(db.String(255))
+    company_registration_number = db.Column(db.String(50))
+
+    # VAT
+    vat_registered = db.Column(db.Boolean, default=False)
+    vat_number = db.Column(db.String(50))
+    vat_rate = db.Column(db.Numeric(5, 2), default=20.0)
+    vat_scheme = db.Column(db.String(50), default='standard')  # standard, flat_rate, cash
     payment_failed_email_sent = db.Column(db.Boolean, default=False)
     
     # MFA (Multi-Factor Authentication)

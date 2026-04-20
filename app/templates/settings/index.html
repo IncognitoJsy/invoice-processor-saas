@@ -150,6 +150,116 @@
                     <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Applied to materials only — never applied to labour</p>
                 </div>
 
+                <!-- Business Address -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                        Business Address
+                        <span class="text-xs text-red-500 font-normal">Required for compliant invoices</span>
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Address Line 1</label>
+                            <input type="text" name="business_address_line1"
+                                   value="{{ current_user.business_address_line1 or '' }}"
+                                   placeholder="e.g. 12 High Street"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Address Line 2</label>
+                            <input type="text" name="business_address_line2"
+                                   value="{{ current_user.business_address_line2 or '' }}"
+                                   placeholder="Optional"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">City / Town</label>
+                                <input type="text" name="business_address_city"
+                                       value="{{ current_user.business_address_city or '' }}"
+                                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Postcode</label>
+                                <input type="text" name="business_address_postcode"
+                                       value="{{ current_user.business_address_postcode or '' }}"
+                                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Business Phone</label>
+                                <input type="text" name="business_phone"
+                                       value="{{ current_user.business_phone or '' }}"
+                                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Business Email</label>
+                                <input type="email" name="business_email"
+                                       value="{{ current_user.business_email or '' }}"
+                                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Company Registration Number <span class="text-gray-400">(Ltd companies only)</span></label>
+                            <input type="text" name="company_registration_number"
+                                   value="{{ current_user.company_registration_number or '' }}"
+                                   placeholder="Optional"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VAT Settings -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>
+                        VAT / Tax Settings
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">VAT Registered</p>
+                                <p class="text-xs text-gray-400">Adds VAT to invoices and unlocks VAT reporting</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" name="vat_registered" id="vat-registered-toggle"
+                                       {% if current_user.vat_registered %}checked{% endif %}
+                                       onchange="toggleVatFields(this.checked)"
+                                       class="sr-only peer">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                            </label>
+                        </div>
+                        <div id="vat-fields" class="{% if not current_user.vat_registered %}hidden{% endif %} space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">VAT Number</label>
+                                    <input type="text" name="vat_number"
+                                           value="{{ current_user.vat_number or '' }}"
+                                           placeholder="e.g. GB123456789"
+                                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">VAT Rate %</label>
+                                    <select name="vat_rate" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                                        <option value="20" {% if current_user.vat_rate == 20 %}selected{% endif %}>20% Standard</option>
+                                        <option value="5" {% if current_user.vat_rate == 5 %}selected{% endif %}>5% Reduced</option>
+                                        <option value="0" {% if current_user.vat_rate == 0 %}selected{% endif %}>0% Zero rated</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">VAT Scheme</label>
+                                <select name="vat_scheme" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                                    <option value="standard" {% if current_user.vat_scheme == 'standard' %}selected{% endif %}>Standard Accounting</option>
+                                    <option value="cash" {% if current_user.vat_scheme == 'cash' %}selected{% endif %}>Cash Accounting</option>
+                                    <option value="flat_rate" {% if current_user.vat_scheme == 'flat_rate' %}selected{% endif %}>Flat Rate Scheme</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Employer Contribution Rate - full platform only -->
                 {% if current_user.platform_mode in ['full', 'both'] %}
                 <div>
