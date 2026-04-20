@@ -1,0 +1,28 @@
+{
+  "name": "invoice-processor-saas",
+  "version": "1.0.0",
+  "description": "Automated invoice processing system with QuickBooks integration.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i app/static/css/input.css -o app/static/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i app/static/css/input.css -o app/static/css/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/IncognitoJsy/invoice-processor-saas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/IncognitoJsy/invoice-processor-saas/issues"
+  },
+  "homepage": "https://github.com/IncognitoJsy/invoice-processor-saas#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

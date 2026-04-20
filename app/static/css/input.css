@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom utilities used across templates */
+@layer utilities {
+  .font-900 { font-weight: 900; }
+  .font-800 { font-weight: 800; }
+}

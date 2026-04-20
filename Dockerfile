@@ -2,17 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install system deps + Node.js for Tailwind CSS build
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
-    curl \   
+    curl \
     poppler-utils \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY package.json package-lock.json* ./
+RUN npm install --include=dev
+
 COPY . .
+
+# Build Tailwind CSS
+RUN npm run build:css
 
 RUN mkdir -p logs uploads temp_uploads integration_data/queue data
 
