@@ -139,6 +139,7 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Customize your GoZappify experience</p>
             </div>
             <form action="{{ url_for('settings.update_profile') }}" method="POST" class="p-6 space-y-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Markup %</label>
                     <div class="flex items-center gap-3">
