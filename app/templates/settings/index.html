@@ -141,13 +141,14 @@
             <form action="{{ url_for('settings.update_profile') }}" method="POST" class="p-6 space-y-6">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Markup %</label>
-                    <select name="default_markup" class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
-                        <option value="20" {% if current_user.default_markup == 20 %}selected{% endif %}>20% - Low margin</option>
-                        <option value="40" {% if current_user.default_markup == 40 %}selected{% endif %}>40% - Standard</option>
-                        <option value="50" {% if current_user.default_markup == 50 or not current_user.default_markup %}selected{% endif %}>50% - Default</option>
-                        <option value="70" {% if current_user.default_markup == 70 %}selected{% endif %}>70% - Premium</option>
-                    </select>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Applied to materials only — never applied to labour</p>
+                    <div class="flex items-center gap-3">
+                        <input type="number" name="default_markup"
+                               value="{{ current_user.default_markup|int if current_user.default_markup else 50 }}"
+                               min="0" max="200" step="1"
+                               class="w-32 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition">
+                        <span class="text-gray-500 font-semibold">%</span>
+                    </div>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Applied to materials only — never applied to labour. Enter any value between 0–200%.</p>
                 </div>
 
                 <!-- Business Address -->
