@@ -20,7 +20,7 @@ def index():
 @login_required
 def update_profile():
     """Update user profile"""
-    data = request.get_json() or request.form
+    data = request.get_json(silent=True) or request.form
     
     # Update allowed fields
     if 'company_name' in data:
@@ -53,7 +53,7 @@ def update_profile():
 @login_required
 def change_password():
     """Change user password"""
-    data = request.get_json() or request.form
+    data = request.get_json(silent=True) or request.form
     
     current_password = data.get('current_password')
     new_password = data.get('new_password')
