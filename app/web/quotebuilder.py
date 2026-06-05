@@ -24,7 +24,13 @@ PAPER_SIZES_MM = {
 }
 
 bp = Blueprint('quotebuilder', __name__, url_prefix='/quotebuilder')
+import os
+from flask import abort
 
+@bp.before_request
+def _qb_feature_gate():
+    if os.environ.get("ENABLE_QUOTE_BUILDER", "false").lower() not in ("1", "true", "yes", "on"):
+        abort(404)
 
 # Simple in-memory rate limiter
 _rate_limit_store = defaultdict(list)
