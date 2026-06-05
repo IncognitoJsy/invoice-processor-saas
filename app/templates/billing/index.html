@@ -150,8 +150,12 @@
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">QuickBooks & Xero integration</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">Automatic markup calculation</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">Buy extra invoices at £0.50/each</span></li>
+                        {% if config.ENABLE_QUOTE_BUILDER %}
                         <li class="flex items-center"><svg class="w-4 h-4 text-gray-300 dark:text-gray-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-gray-400 dark:text-gray-500">Quote Builder</span></li>
+                        {% endif %}
+                        {% if config.ENABLE_VOICE_TO_QUOTE %}
                         <li class="flex items-center"><svg class="w-4 h-4 text-gray-300 dark:text-gray-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-gray-400 dark:text-gray-500">Voice to Quote</span></li>
+                        {% endif %}
                     </ul>
                     <div class="mt-6">
                         {% if current_user.subscription_plan == 'basic' %}
@@ -183,8 +187,12 @@
                         <li class="flex items-center"><svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">QuickBooks & Xero integration</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">Automatic markup calculation</span></li>
                         <li class="flex items-center"><svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span class="text-gray-700 dark:text-gray-300">Priority email support</span></li>
+                        {% if config.ENABLE_QUOTE_BUILDER %}
                         <li class="flex items-center"><svg class="w-4 h-4 text-gray-300 dark:text-gray-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-gray-400 dark:text-gray-500">Quote Builder</span></li>
+                        {% endif %}
+                        {% if config.ENABLE_VOICE_TO_QUOTE %}
                         <li class="flex items-center"><svg class="w-4 h-4 text-gray-300 dark:text-gray-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-gray-400 dark:text-gray-500">Voice to Quote</span></li>
+                        {% endif %}
                     </ul>
                     <div class="mt-6">
                         {% if current_user.subscription_plan == 'pro' %}
@@ -197,6 +205,7 @@
                 </div>
             </div>
             
+            {% if config.ENABLE_QUOTE_BUILDER or config.ENABLE_VOICE_TO_QUOTE %}
             <!-- Ultimate -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border-2 {% if current_user.subscription_plan == 'ultimate' %}border-amber-500{% else %}border-amber-300 dark:border-amber-700{% endif %} overflow-hidden relative">
                 <div class="absolute top-4 right-4"><span class="px-3 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-full">BEST VALUE</span></div>
@@ -232,6 +241,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
         
         <div class="mt-8 text-center">

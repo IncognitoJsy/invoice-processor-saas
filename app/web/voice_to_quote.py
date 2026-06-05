@@ -83,7 +83,14 @@ def apply_product_swaps(parsed_data, user_id):
     return parsed_data
 
 bp = Blueprint('voice_to_quote', __name__, url_prefix='/voice-to-quote')
+import os
+from flask import abort
 
+@bp.before_request
+def _vtq_feature_gate():
+    if os.environ.get("ENABLE_VOICE_TO_QUOTE", "false").lower() not in ("1", "true", "yes", "on"):
+        abort(404)
+        
 PRODUCT_CACHE_TTL_HOURS = 4  # Refresh cache if older than this
 
 

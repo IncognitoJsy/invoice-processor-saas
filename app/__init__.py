@@ -1,4 +1,5 @@
 """Flask application factory"""
+import os
 import logging
 from flask import Flask, redirect, url_for, render_template
 from app.config import config
@@ -11,6 +12,11 @@ def create_app(config_name='default'):
     import os
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     app = Flask(__name__, static_folder=static_folder)
+    # Feature flags (default off; set to "true" in Railway env to re-enable)
+    def _feature_on(name):
+        return os.environ.get(name, "false").lower() in ("1", "true", "yes", "on")
+    app.config["ENABLE_VOICE_TO_QUOTE"] = _feature_on("ENABLE_VOICE_TO_QUOTE")
+    app.config["ENABLE_QUOTE_BUILDER"] = _feature_on("ENABLE_QUOTE_BUILDER")
     app.config.from_object(config[config_name])
     
     # Ensure upload directories exist (important for Railway volumes)
