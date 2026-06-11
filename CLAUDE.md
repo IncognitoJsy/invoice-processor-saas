@@ -13,12 +13,25 @@ treat anything touching extraction, validation, or money maths as critical-path 
 - **Backend:** Python / Flask
 - **Database:** PostgreSQL
 - **Hosting:** Railway (staging + production environments)
-- **Integrations:** QuickBooks Online, Xero, Gmail OAuth, PayPal subscriptions (incl. annual tiers)
-- **AI:** Anthropic API for invoice/quote parsing with schema-enforced structured outputs
+- **Integrations:** QuickBooks Online, Xero, Gmail OAuth, IMAP email ingestion, PayPal
+  subscriptions (incl. annual tiers), Telegram alerts, reCAPTCHA v3
+- **AI:** Anthropic API for invoice/quote parsing. NOTE (2026-06 audit): calls do NOT yet use
+  schema-enforced structured outputs — they parse free-text JSON, and model names are hardcoded
+  at 11+ call sites (AUDIT.md §3.5). One OpenAI call exists: `app/services/description_cleaner.py`
+  (`gpt-4o-mini`). Centralised model config + structured outputs are the target state, not the
+  current state.
 - **Repo:** github.com/IncognitoJsy/invoice-processor-saas
 
-> NOTE: Verify exact commands (run server, run tests, migrations) against the repo on
-> first session and update this file. Do not guess at commands.
+### Verified commands (2026-06-11)
+
+- Tests: `python -m pytest tests/` (root-level `test_basic.py`/`test_pdf.py` are scratch
+  scripts, not part of the suite)
+- Server (production): `gunicorn wsgi:app` — Procfile runs `flask db upgrade` first; Railway
+  builds from the Dockerfile. Procfile `worker:`/`beat:` lines reference `app.celery`, which
+  does not exist — ignore them.
+- Migrations: Alembic via Flask-Migrate (`flask db upgrade`). Beware: `app/__init__.py` also
+  runs `db.create_all()` + inline ALTERs at startup, so schema is managed in two places
+  (AUDIT.md risk #10).
 
 ## How I work — follow these rules
 
@@ -40,6 +53,9 @@ treat anything touching extraction, validation, or money maths as critical-path 
 - `invoice_validator.py` — arithmetic validation + cross-parser verification. Any change
   here needs test cases covering: line-item totals vs invoice total, VAT calculations,
   discounts, multi-page invoices, and the known cross-parser verification gap fix.
+  **AUDIT FINDING (2026-06): the validator is currently NOT called anywhere in the live
+  pipeline** — `save_invoice_to_db()` stores AI output unvalidated (AUDIT.md risk #1).
+  Wiring it in is the top open fix; remove this note once done.
 - **Markup logic** — errors here directly cost users money. Test with edge cases
   (zero-value lines, credits/refunds, mixed VAT rates).
 - **QuickBooks / Xero sync** — two-way customer sync design exists. Watch for duplicate
@@ -57,7 +73,11 @@ treat anything touching extraction, validation, or money maths as critical-path 
 - Planned: employee-facing timesheet PWA with passkey/biometric login.
 - Planned: two-way QuickBooks customer sync (architecture already designed — find the
   design notes before implementing).
-- Known issue: homepage pricing inconsistencies across tiers (audit flagged this).
+- Known issue: homepage pricing inconsistencies across tiers — pinned down by the 2026-06
+  audit (AUDIT.md §8.3): landing page sells a £49/£529 "Full Platform" tier that has no
+  PayPal plan (actual `full-starter` is £39/£429), and mis-scoped `ENABLE_VOICE_TO_QUOTE`
+  blocks render the first two pricing cards with empty feature lists when the flag is off.
+- Phase 1 audit complete: see AUDIT.md (2026-06-11) for the full findings and Top 10 risks.
 - Labour & Employees module uses Jersey social security defaults.
 
 ## Product roadmap context (for design decisions)
@@ -79,7 +99,8 @@ don't paint us into a corner on:
 ## Conventions
 
 - Python: clear over clever; type hints on new code; docstrings on anything non-obvious.
-- All AI parsing calls use schema-enforced structured outputs — keep it that way.
+- Target: all AI parsing calls should use schema-enforced structured outputs. (Not yet true —
+  see AUDIT.md §3.5. Any new AI call must use structured outputs; migrate existing ones as touched.)
 - Telegram-style operational alerts and logging patterns are familiar territory; reuse
   existing notification patterns rather than inventing new ones.
 - Currency: GBP throughout. Jersey context: no VAT locally but UK customers have VAT —
@@ -94,7 +115,10 @@ don't paint us into a corner on:
 
 ## Testing
 
-- Run the existing test suite before and after changes (check repo for exact command —
-  likely `pytest`). If a critical-path module has no tests, write them as part of the change.
-- For extraction/validation changes: test against real sample invoices in the repo's
-  test fixtures if present; if not present, flag this gap.
+- Run the existing test suite before and after changes: `python -m pytest tests/`
+  (currently 18 tests, all for `invoice_validator.py`). If a critical-path module has no
+  tests, write them as part of the change — per the audit, parsers, markup, sync, and
+  billing currently have NONE (AUDIT.md §4).
+- For extraction/validation changes: there are NO sample-invoice fixtures in the repo
+  (gap confirmed by 2026-06 audit). Building the fixture corpus is a LAUNCH.md §0 item;
+  until it exists, flag this on every extraction change.
