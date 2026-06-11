@@ -1,4 +1,3 @@
-    {% if config.ENABLE_VOICE_TO_QUOTE %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -809,4 +808,8 @@
             }
             
             document.querySelectorAll('.lp-price-monthly, .lp-period-monthly, .lp-monthly-note, .lp-inv-monthly, .lp-invp-monthly').forEach(el => el.classList.toggle('hidden', lpIsAnnual));
-            document.querySelectorAll('.lp-price-annual, .lp-period-annual,     {% endif %}
+            document.querySelectorAll('.lp-price-annual, .lp-period-annual, .lp-annual-note, .lp-inv-annual, .lp-invp-annual').forEach(el => el.classList.toggle('hidden', !lpIsAnnual));
+        }
+    </script>
+</body>
+</html>
