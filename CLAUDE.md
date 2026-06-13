@@ -12,7 +12,11 @@ treat anything touching extraction, validation, or money maths as critical-path 
 
 - **Backend:** Python / Flask
 - **Database:** PostgreSQL
-- **Hosting:** Railway (staging + production environments)
+- **Hosting:** Railway. NOTE (2026-06-13): there is currently only ONE environment —
+  **production**, which auto-deploys from `master`. **No staging environment exists yet**,
+  so the `staging` branch does not auto-deploy anywhere. Building a real staging env is the
+  top-priority next task (see "Known context / open work"). The staging-first workflow below
+  is still the intended practice — we're just missing the environment.
 - **Integrations:** QuickBooks Online, Xero, Gmail OAuth, IMAP email ingestion, PayPal
   subscriptions (incl. annual tiers), Telegram alerts, reCAPTCHA v3
 - **AI:** Anthropic API for invoice/quote parsing. NOTE (2026-06 audit): calls do NOT yet use
@@ -39,9 +43,12 @@ treat anything touching extraction, validation, or money maths as critical-path 
    before moving on. Never deliver a big-bang change across many files without checkpoints.
 2. **Complete files over diffs** when presenting code for review outside the editor.
    Inside Claude Code, normal edits are fine — but summarise exactly which files changed.
-3. **Never push to production directly.** Workflow is: feature branch → `staging` branch →
-   verify on Railway staging → merge to production. Always stop and ask before anything
-   that deploys to production.
+3. **Never push to production directly.** Intended workflow is: feature branch → `staging`
+   branch → verify on Railway staging → merge to production. Always stop and ask before
+   anything that deploys to production. **Caveat (2026-06-13): no staging environment exists
+   yet**, so `staging` is currently a code-only branch with no live deploy to verify against —
+   production (`master`) is the only running environment. Until a staging env exists, the
+   user verifies on the live site after deploy. This makes building staging the top priority.
 4. **Don't delete features — flag them.** A feature-flag system exists (used to hide
    Voice to Quote and Quote Builder). When asked to remove/hide a feature, default to
    flagging it off, not deleting code, unless explicitly told to delete.
@@ -67,6 +74,13 @@ treat anything touching extraction, validation, or money maths as critical-path 
 
 ## Known context / open work
 
+- **TOP PRIORITY — build a real staging environment.** Stand up a second Railway environment
+  (separate service + its own PostgreSQL database) that auto-deploys from the `staging` branch,
+  so changes can be verified against a production-like setup before reaching `master`/production.
+  This is urgent because the upcoming Sprint A fixes — especially the **Float→Decimal money
+  migration** (AUDIT.md risk #4) — alter live financial data and must not land straight on
+  production unverified. Until this exists, every production deploy is verified only on the
+  live site.
 - Feature flags shipped to `staging`; production rollout pending verification.
 - QuickBooks App Store submission: submitted, review call requested — avoid breaking
   anything the QB review might exercise (OAuth flow, disconnect flow, sync accuracy).
@@ -109,9 +123,11 @@ don't paint us into a corner on:
 
 ## Deployment
 
-- Railway auto-deploys from connected branches. `staging` branch → staging environment.
-- Before any merge toward production: run the test suite, manually verify the changed
-  flows on staging, then confirm with me.
+- Railway auto-deploys **production from `master`**. This is currently the ONLY environment.
+- **No staging environment exists yet** — the `staging` branch is not connected to a Railway
+  env, so merging/pushing `staging` deploys nothing. Building one is the top open task below.
+- Before any merge toward production: run the test suite and confirm with me. Once a staging
+  env exists, also manually verify the changed flows on staging first (the intended gate).
 
 ## Testing
 
