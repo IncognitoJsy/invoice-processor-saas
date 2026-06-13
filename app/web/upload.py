@@ -449,11 +449,36 @@ def api_upload():
 
 
 def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice'):
-    """Save parsed invoice and items to database"""
+    """Save parsed invoice and items to database.
+
+    Runs the arithmetic validator over the extracted data before storing. If the
+    numbers don't reconcile (lines don't sum to the total, net+tax != gross, tax
+    inconsistent with rate, etc.) the invoice is still saved but flagged
+    needs_review with the failing checks recorded in validation_errors — which
+    blocks QB/Xero sync until a human clears it (see the sync guard in
+    app/web/integrations.py).
+    """
+    import json
     from app.models.invoice import Invoice, InvoiceItem
     from app.extensions import db
-    
+    from app.services.invoice_validator import validate_invoice
+
     items = invoice_data.get('items', [])
+
+    # ── Arithmetic validation (critical-path: accuracy is the product) ────────
+    validation = validate_invoice(invoice_data)
+    validation_errors = None
+    needs_review = bool(invoice_data.get('needs_review', False))
+    confidence = invoice_data.get('confidence')
+    if not validation.is_valid:
+        validation_errors = json.dumps(validation.errors)
+        needs_review = True
+        confidence = 'low'
+        current_app.logger.warning(
+            f"⚠️ Invoice failed arithmetic validation "
+            f"(supplier={invoice_data.get('supplier')}, "
+            f"number={invoice_data.get('invoice_number')}): {validation.errors}"
+        )
     
     # Calculate totals
     total_cost = sum(Decimal(str(item.get('total_amount', 0))) for item in items)
@@ -490,8 +515,9 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
         average_markup=avg_markup,
         items_count=len(items),
         parser_method=invoice_data.get('method'),
-        confidence=invoice_data.get('confidence'),
-        needs_review=invoice_data.get('needs_review', False),
+        confidence=confidence,
+        needs_review=needs_review,
+        validation_errors=validation_errors,
         status='completed',
         processed_at=datetime.utcnow(),
         supplier_tax_amount=float(invoice_data.get('tax_amount') or invoice_data.get('vat_amount') or invoice_data.get('gst_amount') or 0),

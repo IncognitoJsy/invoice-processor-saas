@@ -350,3 +350,25 @@ def suggest_customer(invoice_id):
         'suggestions': suggestions[:5],
         'customers': [{'id': c.id, 'name': c.display_name, 'email': c.email} for c in customers]
     })
+
+
+@bp.route('/api/invoices/<int:invoice_id>/mark-reviewed', methods=['POST'])
+@login_required
+def mark_invoice_reviewed(invoice_id):
+    """Clear an invoice's arithmetic-validation block after a human has checked it.
+
+    Sets validation_errors back to NULL and lifts needs_review, allowing the
+    invoice to sync to QuickBooks/Xero. Tenant-isolated by user_id.
+    """
+    from app.models.invoice import Invoice
+    from app.extensions import db
+
+    invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
+    if not invoice:
+        return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+
+    invoice.validation_errors = None
+    invoice.needs_review = False
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Invoice marked as reviewed'})

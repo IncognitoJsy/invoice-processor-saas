@@ -47,6 +47,10 @@ class Invoice(db.Model):
     parser_method = db.Column(db.String(50))  # 'claude_api', 'custom_yesss', 'both_agreed'
     confidence = db.Column(db.String(20))  # 'high', 'medium', 'low'
     needs_review = db.Column(db.Boolean, default=False)
+    # Arithmetic-validation failures from invoice_validator (JSON list of error
+    # strings). Non-null = invoice failed validation and is blocked from QB/Xero
+    # sync until a human clears it. See save_invoice_to_db() and the sync guard.
+    validation_errors = db.Column(db.Text, nullable=True)
     
     # Processing status
     status = db.Column(db.String(50), default='completed', index=True)

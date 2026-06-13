@@ -63,6 +63,14 @@ def create_app(config_name='default'):
                         conn2.commit()
                     except Exception:
                         pass  # Column already exists
+
+                # Add validation_errors to invoice table (arithmetic validator)
+                with db.engine.connect() as conn3:
+                    try:
+                        conn3.execute(db.text('ALTER TABLE invoice ADD COLUMN validation_errors TEXT'))
+                        conn3.commit()
+                    except Exception:
+                        pass  # Column already exists
                 
                 app.logger.info('Database connection established')
                 break

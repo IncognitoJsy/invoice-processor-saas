@@ -11,6 +11,33 @@ import os
 bp = Blueprint('integrations', __name__, url_prefix='/integrations')
 
 
+def _sync_validation_block(invoice):
+    """Block sync to an accounting system if the invoice failed arithmetic
+    validation and hasn't been cleared.
+
+    Returns a JSON error response tuple to return from the route, or None if the
+    invoice is clear to sync. Invoices are flagged at save time by
+    save_invoice_to_db(); a human clears the block via the mark-reviewed
+    endpoint once they've checked the figures.
+    """
+    import json
+    raw = getattr(invoice, 'validation_errors', None)
+    if not raw:
+        return None
+    try:
+        reasons = json.loads(raw)
+    except (ValueError, TypeError):
+        reasons = [raw]
+    return jsonify({
+        'success': False,
+        'error': ('This invoice failed arithmetic validation and is blocked '
+                  'from syncing. Review the figures, then mark it reviewed to '
+                  'clear the block.'),
+        'validation_errors': reasons,
+        'needs_review': True,
+    }), 400
+
+
 def verify_intuit_webhook_signature(payload_bytes, signature_header):
     """Verify Intuit webhook signature using HMAC-SHA256.
     
@@ -576,6 +603,11 @@ def quickbooks_sync_invoice(invoice_id):
     if not connection.default_expense_account_id:
         return jsonify({'success': False, 'error': 'Please set a default expense account in QuickBooks settings'}), 400
     
+    # Block sync if the invoice failed arithmetic validation
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Sync to QuickBooks
     qb = QuickBooksService(current_user)
     result = qb.sync_invoice_to_quickbooks(connection, invoice)
@@ -645,6 +677,13 @@ def quickbooks_bulk_sync():
     for invoice_id in invoice_ids:
         invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first()
         if invoice:
+            if getattr(invoice, 'validation_errors', None):
+                results['failed'] += 1
+                results['errors'].append(
+                    f"Invoice {invoice_id}: failed arithmetic validation — "
+                    f"review and clear before syncing"
+                )
+                continue
             result = qb.sync_invoice_to_quickbooks(connection, invoice)
             if result.get('success'):
                 results['synced'] += 1
@@ -789,6 +828,11 @@ def quickbooks_sync_to_customer(invoice_id):
     if not connection.default_income_account_id or not connection.default_expense_account_id:
         return jsonify({'success': False, 'error': 'Please configure income and expense accounts in QuickBooks settings'}), 400
     
+    # Block sync if the invoice failed arithmetic validation
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Perform full sync
     qb = QuickBooksService(current_user)
     result = qb.sync_invoice_to_customer(connection, invoice, customer_id, sync_mode=sync_mode)
@@ -1045,6 +1089,11 @@ def xero_sync_invoice(invoice_id):
     if not connection.default_expense_account_code:
         return jsonify({'success': False, 'error': 'Please set a default expense account in Xero settings'}), 400
     
+    # Block sync if the invoice failed arithmetic validation
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Sync to Xero
     xero = XeroService(current_user)
     result = xero.sync_invoice_to_bill(connection, invoice)
@@ -1188,6 +1237,11 @@ def xero_sync_to_customer(invoice_id):
     if not connection.default_sales_account_code or not connection.default_expense_account_code:
         return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
     
+    # Block sync if the invoice failed arithmetic validation
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Perform full sync
     xero = XeroService(current_user)
     result = xero.sync_to_customer_invoice(connection, invoice, customer_id)
