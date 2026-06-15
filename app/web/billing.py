@@ -321,12 +321,25 @@ def topup_capture_order():
 
 @bp.route('/webhook', methods=['POST'])
 def webhook():
-    body = request.get_json()
+    # --- Webhook signature verification (mandatory, fails closed) ---
+    # PayPal events are unauthenticated until verified against PayPal's
+    # verify-webhook-signature API. Without this, anyone can POST a forged
+    # event to grant a free plan or lock paying users out (AUDIT risk #2).
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    paypal = get_paypal_service()
+    is_valid, error_msg = paypal.verify_webhook_signature(request.headers, body)
+    if not is_valid:
+        current_app.logger.warning(f"PayPal webhook signature verification failed: {error_msg}")
+        return jsonify({'error': 'Unauthorized'}), 401
+
     event_type = body.get('event_type')
     resource = body.get('resource', {})
-    
+
     current_app.logger.info(f"PayPal webhook: {event_type}")
-    
+
     try:
         from app.models.user import User
         
