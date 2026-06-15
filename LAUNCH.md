@@ -16,6 +16,15 @@ Mark items `[x]` as done. "Done" means tested, not just built.
       small wholesalers, scanned/photographed ones) with measured accuracy score
 - [ ] Extraction accuracy ≥ target you're happy to put your name on (write it here: ____%)
 
+## Staging environment polish
+
+Staging is live (auto-deploys from `staging`); these are gaps that block full
+end-to-end testing on the staging domain.
+
+- [ ] Add `gozappify-staging.up.railway.app` to the reCAPTCHA v3 allowed domains
+      so staging registration / end-to-end testing works (currently registration
+      on staging fails because the domain isn't recognised by reCAPTCHA).
+
 ## 1. The first 10 minutes (new-user experience)
 
 - [ ] Full stranger-test completed: fresh account → connect QBO → upload invoice → result,
