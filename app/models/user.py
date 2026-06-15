@@ -40,7 +40,7 @@ class User(db.Model, UserMixin):
     setup_completed = db.Column(db.Boolean, default=False)
     tour_completed = db.Column(db.Boolean, default=False)
     company_name = db.Column(db.String(255))
-    default_markup = db.Column(db.Float, default=50.0)
+    default_markup = db.Column(db.Numeric(5, 2), default=50.0)
     # Platform mode & trade (multi-trade expansion)
     platform_mode = db.Column(db.String(20), default='sync')  # sync, full, both
     trade_type = db.Column(db.String(50))
@@ -67,7 +67,7 @@ class User(db.Model, UserMixin):
     tax_registered = db.Column(db.Boolean, default=False)
     tax_number = db.Column(db.String(100))
     tax_type = db.Column(db.String(10))
-    tax_rate = db.Column(db.Float, default=0.0)
+    tax_rate = db.Column(db.Numeric(5, 2), default=0)
     tax_registered_from = db.Column(db.DateTime)
 
 

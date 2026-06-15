@@ -87,10 +87,10 @@ class Invoice(db.Model):
 
     # Full platform customer linking
     # Supplier tax fields
-    supplier_tax_amount = db.Column(db.Float, default=0.0)
-    supplier_tax_rate = db.Column(db.Float, default=0.0)
-    total_ex_tax = db.Column(db.Float, default=0.0)
-    total_inc_tax = db.Column(db.Float, default=0.0)
+    supplier_tax_amount = db.Column(db.Numeric(10, 2), default=0)
+    supplier_tax_rate = db.Column(db.Numeric(5, 2), default=0)
+    total_ex_tax = db.Column(db.Numeric(10, 2), default=0)
+    total_inc_tax = db.Column(db.Numeric(10, 2), default=0)
 
     platform_customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
     platform_job_id = db.Column(db.Integer, db.ForeignKey('job.id'), nullable=True)

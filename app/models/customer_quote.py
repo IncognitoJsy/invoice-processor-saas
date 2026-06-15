@@ -14,10 +14,10 @@ class CustomerQuote(db.Model):
     status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined, expired, converted
     issue_date = db.Column(db.Date, default=datetime.utcnow)
     expiry_date = db.Column(db.Date, nullable=True)
-    subtotal = db.Column(db.Float, default=0.0)
-    tax_rate = db.Column(db.Float, default=0.0)
-    tax_amount = db.Column(db.Float, default=0.0)
-    total = db.Column(db.Float, default=0.0)
+    subtotal = db.Column(db.Numeric(12, 2), default=0)
+    tax_rate = db.Column(db.Numeric(5, 2), default=0)
+    tax_amount = db.Column(db.Numeric(12, 2), default=0)
+    total = db.Column(db.Numeric(12, 2), default=0)
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
     payment_terms = db.Column(db.String(20), default='30')
@@ -73,9 +73,9 @@ class CustomerQuoteLine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quote_id = db.Column(db.Integer, db.ForeignKey('customer_quote.id'), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    quantity = db.Column(db.Float, default=1.0)
-    unit_price = db.Column(db.Float, default=0.0)
-    line_total = db.Column(db.Float, default=0.0)
+    quantity = db.Column(db.Numeric(10, 3), default=1)
+    unit_price = db.Column(db.Numeric(10, 4), default=0)
+    line_total = db.Column(db.Numeric(10, 2), default=0)
     sort_order = db.Column(db.Integer, default=0)
 
     def calculate_total(self):
