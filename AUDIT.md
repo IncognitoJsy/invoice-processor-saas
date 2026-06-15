@@ -91,18 +91,25 @@ three different numeric regimes coexist (Decimal+ROUND_HALF_UP in the unused val
 binary floats + Python `round()` (banker's rounding) in most live code, and Numeric columns
 in some tables vs Float in others).
 
-### 2.1 Storage types (defects in bold)
+### 2.1 Storage types
+
+**UPDATE (2026-06-15) — Phase 1 of risk #4 done.** All 28 Float money columns were
+migrated to Numeric in production via `money_float_to_numeric` (storage-only,
+behaviour-preserving: verified checksum unchanged, row counts intact). The rows below
+that previously read **Float** are now Numeric ✅. **Phase 2 (the Decimal `money()`
+helper + converting the float `round()` calc sites + a test corpus) is still
+outstanding** — the calculation regimes in §2.2/§2.3 are unchanged.
 
 | Table / columns | Type |
 |---|---|
 | `invoice.total_cost/total_selling/total_profit/average_markup` | Numeric ✓ |
-| **`invoice.supplier_tax_amount/supplier_tax_rate/total_ex_tax/total_inc_tax`** (`invoice.py:86–89`) | **Float** |
+| `invoice.supplier_tax_amount/supplier_tax_rate/total_ex_tax/total_inc_tax` | Numeric ✅ (was Float, Phase 1) |
 | `invoice_item.*` (cost, selling, profit, markup) | Numeric(10,4)/(10,2) ✓ |
-| **`customer_invoice.subtotal/tax_rate/tax_amount/total` + line `quantity/unit_price/line_total`** | **Float** |
-| **`customer_quote.*` + lines** | **Float** |
-| **`customer_payment.amount`, `customer_payment_allocation.amount_applied`** | **Float** |
+| `customer_invoice.subtotal/tax_rate/tax_amount/total` + line `quantity/unit_price/line_total` | Numeric ✅ (was Float, Phase 1) |
+| `customer_quote.*` + lines | Numeric ✅ (was Float, Phase 1) |
+| `customer_payment.amount`, `customer_invoice_payment.amount_applied` | Numeric ✅ (was Float, Phase 1) |
 | `project`, `project_material`, `project_labour`, `supplier_quote_item`, `product`, `employee` | Numeric ✓ |
-| **`user.default_markup`, `user.tax_rate`**, `product_service.purchase_price/sale_price` | **Float** |
+| `user.default_markup`, `user.tax_rate`, `product_service.*`, `product_cache.*` | Numeric ✅ (was Float, Phase 1) |
 
 The **customer-facing invoice path — the documents users actually send for money — is entirely
 Float**, while the supplier-invoice path is mostly Numeric. VAT amounts on both sides
@@ -143,6 +150,17 @@ report sums them (`tax_reports.py:78,90–94`).
 
 Fix direction: migrate Float money columns to Numeric, do all arithmetic in Decimal with one
 shared `money()` quantize helper (the validator already has it), round per line then sum.
+
+**Progress (2026-06-15):**
+- **Phase 1 ✅ DONE (storage):** all 28 Float money columns migrated to Numeric in
+  production (`money_float_to_numeric`); behaviour-preserving, verified (checksum + row
+  counts unchanged). Scales: prices `Numeric(10,4)`, quantities `Numeric(10,3)`, line/tax
+  amounts `Numeric(10,2)`, document totals/payments `Numeric(12,2)`, rates `Numeric(5,2)`.
+- **Phase 2 ⏳ OUTSTANDING (the maths):** introduce the shared Decimal `money()` helper and
+  convert every float `round()` calc/sync site (§2.2) to round-per-line-then-sum in Decimal,
+  plus the missing test corpus (markup, mixed VAT, discounts, credits, VAT report, QB/Xero
+  sync). **Risk #4 is NOT closed until Phase 2 lands** — storage is now Numeric, but the live
+  arithmetic is still binary float + banker's rounding.
 
 ---
 
@@ -494,7 +512,7 @@ The audit confirms the "homepage pricing inconsistencies" item and pins it down:
 | 1 | Invoice validator never called — AI output stored & synced to QB/Xero unvalidated | `web/upload.py:451`, `web/queue.py:292`, `services/invoice_validator.py` | Wrong amounts silently reach customers' books; core product promise unenforced | Small (wire `validate_parse_result()` into `save_invoice_to_db`, set `needs_review`, block sync on errors) | **Now** |
 | 2 | PayPal webhook accepts forged events (no signature verification) | `web/billing.py:322–400` | Free subscriptions; paying users locked out; revenue integrity | Small–medium (verify-webhook-signature API + `PAYPAL_WEBHOOK_ID`) | **Now** |
 | 3 | Encryption-key handling: email key auto-generated (credentials bricked on restart), QB key silently optional, Xero tokens plaintext | `email_connection.py:61`, `integrations/quickbooks_service.py:44–56`, `models/xero.py:18` | Mass integration outage after a redeploy; token exposure on DB leak | Small (fail-hard startup checks; encrypt Xero like QB) | **Now** |
-| 4 | Float money columns + three inconsistent rounding regimes; job-card tax never rounded | `models/customer_invoice.py`, `customer_quote.py`, `customer_payment.py`, `invoice.py:86–89`, `web/job_cards.py:375–432`, `reports.py`, `tax_reports.py` | Penny drift on customer invoices & VAT returns — direct money/compliance errors | Medium (Numeric migration + shared Decimal `money()` helper + tests) | Pre-launch |
+| 4 | Float money columns + three inconsistent rounding regimes; job-card tax never rounded. **Phase 1 ✅ (Float→Numeric storage migration, done in prod 2026-06-15). Phase 2 ⏳ outstanding: Decimal `money()` helper + convert float `round()` calc sites + test corpus — risk NOT closed until then.** | `models/customer_invoice.py`, `customer_quote.py`, `customer_payment.py`, `invoice.py:86–89`, `web/job_cards.py:375–432`, `reports.py`, `tax_reports.py` | Penny drift on customer invoices & VAT returns — direct money/compliance errors | ~~Numeric migration~~ ✅ + shared Decimal `money()` helper + tests (Phase 2) | Pre-launch |
 | 5 | Zero tests on critical paths (parsers, markup, sync, billing); no fixture invoice corpus | `tests/` | Regressions invisible; LAUNCH.md accuracy target unmeasurable | Medium–large (start with §4.3 items 1–5) | Pre-launch |
 | 6 | IDOR: labour logging reads any tenant's job card; need isolation regression tests | `web/employees.py:114–118` | Cross-tenant data linkage in a financial app | Tiny (filter by `user_id`) + small (test sweep) | **Now** |
 | 7 | QB bill sync can duplicate on retry; sync failures not recorded anywhere user-visible | `integrations/quickbooks_service.py:585–619` | Duplicate bills in customers' accounting; silent failures | Small–medium (pre-sync `qb_bill_id` guard + sync-status store) | Pre-launch |
