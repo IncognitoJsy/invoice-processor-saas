@@ -54,7 +54,69 @@ class PayPalService:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
-    
+
+    def verify_webhook_signature(self, transmission_headers, event_body):
+        """Verify a PayPal webhook event is authentic.
+
+        Unlike the QuickBooks webhook (which uses a local HMAC of a shared
+        verifier token), PayPal signs events with a rotating certificate. The
+        documented way to verify is a server-to-server call to PayPal's
+        verify-webhook-signature API, passing the five PAYPAL-* transmission
+        headers, our webhook id, and the raw event body.
+
+        Fails closed: any missing config, transport error, or non-SUCCESS
+        verification status returns False. Never logs the event body or token.
+
+        Args:
+            transmission_headers: the inbound request's headers (case-insensitive
+                mapping, e.g. Flask's request.headers).
+            event_body: the parsed webhook event (the JSON dict PayPal sent).
+
+        Returns:
+            tuple: (is_valid: bool, error_message: str or None)
+        """
+        webhook_id = os.getenv('PAYPAL_WEBHOOK_ID')
+        if not webhook_id:
+            current_app.logger.error("PAYPAL_WEBHOOK_ID not configured")
+            return False, 'Webhook id not configured'
+
+        # PayPal sends these five headers; all are required to verify.
+        required = {
+            'auth_algo': transmission_headers.get('PAYPAL-AUTH-ALGO'),
+            'cert_url': transmission_headers.get('PAYPAL-CERT-URL'),
+            'transmission_id': transmission_headers.get('PAYPAL-TRANSMISSION-ID'),
+            'transmission_sig': transmission_headers.get('PAYPAL-TRANSMISSION-SIG'),
+            'transmission_time': transmission_headers.get('PAYPAL-TRANSMISSION-TIME'),
+        }
+        missing = [k for k, v in required.items() if not v]
+        if missing:
+            return False, f"Missing transmission headers: {', '.join(missing)}"
+
+        payload = dict(required, webhook_id=webhook_id, webhook_event=event_body)
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/v1/notifications/verify-webhook-signature",
+                headers=self._headers(),
+                json=payload,
+                timeout=10,
+            )
+        except requests.RequestException as e:
+            current_app.logger.error(f"PayPal webhook verify request failed: {str(e)}")
+            return False, 'Verification request failed'
+
+        if response.status_code != 200:
+            current_app.logger.error(
+                f"PayPal webhook verify returned {response.status_code}"
+            )
+            return False, 'Verification request rejected'
+
+        status = response.json().get('verification_status')
+        if status != 'SUCCESS':
+            return False, f'Verification status: {status}'
+
+        return True, None
+
     def create_subscription(self, plan_id, user_id, return_url, cancel_url, custom_id=None):
         """Create a subscription - returns approval URL for user to complete"""
         payload = {
