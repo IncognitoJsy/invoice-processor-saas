@@ -75,9 +75,17 @@ treat anything touching extraction, validation, or money maths as critical-path 
 - **DONE (2026-06-15) — real staging environment is live.** A second Railway environment
   (separate service + its own PostgreSQL database) now auto-deploys from the `staging` branch,
   so changes can be verified against a production-like setup before reaching `master`/production.
-  This unblocks the Sprint A fixes — especially the **Float→Decimal money migration**
-  (AUDIT.md risk #4), which alters live financial data and must be verified on staging before
-  it lands on production.
+  This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
+  (AUDIT.md risk #4), which alters live financial data.
+- **AUDIT risk #4 — Float→Decimal money: Phase 1 ✅ DONE, Phase 2 ⏳ OUTSTANDING.**
+  Phase 1 (2026-06-15) migrated all 28 Float money columns to Numeric in production
+  (`money_float_to_numeric`) — storage-only and behaviour-preserving (verified: checksum
+  and row counts unchanged). **Phase 2 is still to do and risk #4 is NOT closed until it
+  lands:** add the shared Decimal `money()` helper (the validator already has one) and
+  convert every float `round()` calculation/sync site to round-per-line-then-sum in Decimal,
+  plus build the missing money test corpus (markup, mixed VAT, discounts, credits, VAT
+  report, QB/Xero sync). Until then, storage is Numeric but the live arithmetic is still
+  binary float + banker's rounding. See AUDIT.md §2 and risk #4.
 - Feature flags shipped to `staging`; production rollout pending verification.
 - QuickBooks App Store submission: submitted, review call requested — avoid breaking
   anything the QB review might exercise (OAuth flow, disconnect flow, sync accuracy).
