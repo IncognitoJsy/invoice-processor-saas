@@ -114,8 +114,8 @@ class ProductCache(db.Model):
     name = db.Column(db.String(500))                        # Product name
     description = db.Column(db.Text)                        # Sales description
     purchase_description = db.Column(db.Text)               # Purchase/supplier description
-    purchase_price = db.Column(db.Float, default=0)
-    sale_price = db.Column(db.Float, default=0)
+    purchase_price = db.Column(db.Numeric(10, 4), default=0)
+    sale_price = db.Column(db.Numeric(10, 4), default=0)
     source = db.Column(db.String(20))                       # 'xero' or 'quickbooks'
     synced_at = db.Column(db.DateTime, default=datetime.utcnow)
     

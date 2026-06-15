@@ -9,7 +9,7 @@ class CustomerPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
     payment_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
     payment_method = db.Column(db.String(50), default='bank_transfer')
     reference = db.Column(db.String(255), nullable=True)
@@ -42,6 +42,6 @@ class CustomerInvoicePayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payment_id = db.Column(db.Integer, db.ForeignKey('customer_payment.id'), nullable=False)
     invoice_id = db.Column(db.Integer, db.ForeignKey('customer_invoice.id'), nullable=False)
-    amount_applied = db.Column(db.Float, nullable=False)
+    amount_applied = db.Column(db.Numeric(12, 2), nullable=False)
 
     invoice = db.relationship('CustomerInvoice', backref='payment_links', lazy='select')
