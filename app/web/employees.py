@@ -108,14 +108,20 @@ def log_labour():
     emp = Employee.query.filter_by(id=emp_id, user_id=current_user.id).first_or_404()
     contribution_rate = float(current_user.employer_contribution_rate or 6.5)
 
-    # If job_card_id provided, get customer from job card
+    # Tenant isolation (AUDIT risk #6): any job_card_id / customer_id supplied
+    # by the client must belong to the current user. Look them up scoped by
+    # user_id and 404 on a foreign/missing id rather than linking the labour
+    # entry to another tenant's job card or customer.
     job_card_id = data.get('job_card_id') or None
     customer_id = data.get('customer_id') or None
-    if job_card_id and not customer_id:
+    if job_card_id:
         from app.models.job_card import JobCard
-        job = JobCard.query.get(job_card_id)
-        if job:
+        job = JobCard.query.filter_by(id=job_card_id, user_id=current_user.id).first_or_404()
+        if not customer_id:
             customer_id = job.customer_id
+    if customer_id:
+        from app.models.customer import Customer
+        Customer.query.filter_by(id=customer_id, user_id=current_user.id).first_or_404()
 
     entry = LabourEntry(
         user_id=current_user.id,
