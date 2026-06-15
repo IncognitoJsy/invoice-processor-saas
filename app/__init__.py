@@ -18,7 +18,12 @@ def create_app(config_name='default'):
     app.config["ENABLE_VOICE_TO_QUOTE"] = _feature_on("ENABLE_VOICE_TO_QUOTE")
     app.config["ENABLE_QUOTE_BUILDER"] = _feature_on("ENABLE_QUOTE_BUILDER")
     app.config.from_object(config[config_name])
-    
+
+    # Fail hard if token-encryption keys are missing/invalid (AUDIT risk #3).
+    # Must run before anything reads or writes encrypted tokens.
+    from app.security.encryption_keys import validate_encryption_keys
+    validate_encryption_keys(app)
+
     # Ensure upload directories exist (important for Railway volumes)
     import os as _os
     upload_root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", app.config.get("UPLOAD_FOLDER", "uploads"))

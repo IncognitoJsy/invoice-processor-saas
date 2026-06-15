@@ -971,12 +971,14 @@ def xero_callback():
     # Check if connection already exists for this user
     connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
     
+    # Xero tokens are encrypted at rest (AUDIT risk #3), like QuickBooks.
+    from app.services.token_crypto import encrypt_token
     if connection:
         # Update existing connection
         connection.tenant_id = tenant['tenantId']
         connection.tenant_name = tenant.get('tenantName', 'Unknown')
-        connection.access_token = tokens['access_token']
-        connection.refresh_token = tokens['refresh_token']
+        connection.access_token = encrypt_token(tokens['access_token'])
+        connection.refresh_token = encrypt_token(tokens['refresh_token'])
         connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
         connection.is_active = True
     else:
@@ -985,8 +987,8 @@ def xero_callback():
             user_id=current_user.id,
             tenant_id=tenant['tenantId'],
             tenant_name=tenant.get('tenantName', 'Unknown'),
-            access_token=tokens['access_token'],
-            refresh_token=tokens['refresh_token'],
+            access_token=encrypt_token(tokens['access_token']),
+            refresh_token=encrypt_token(tokens['refresh_token']),
             token_expires_at=datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
         )
         db.session.add(connection)

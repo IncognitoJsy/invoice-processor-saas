@@ -40,54 +40,21 @@ class QuickBooksService:
     # TOKEN ENCRYPTION HELPERS
     # =========================================================================
     
-    @staticmethod
-    def _get_cipher():
-        """Get Fernet cipher for token encryption"""
-        from cryptography.fernet import Fernet
-        import os
-        
-        key = os.environ.get('TOKEN_ENCRYPTION_KEY')
-        if not key:
-            current_app.logger.warning(
-                "TOKEN_ENCRYPTION_KEY not set - tokens will be stored unencrypted. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-            )
-            return None
-        return Fernet(key.encode() if isinstance(key, str) else key)
-    
+    # Token encryption uses the shared TOKEN_ENCRYPTION_KEY helper. The key is
+    # validated at startup (AUDIT risk #3), so there is no silent plaintext
+    # fallback on encrypt; decrypt still tolerates pre-encryption plaintext rows.
     @staticmethod
     def encrypt_token(plaintext_token):
         """Encrypt a token for secure storage"""
-        if not plaintext_token:
-            return plaintext_token
-        
-        cipher = QuickBooksService._get_cipher()
-        if not cipher:
-            return plaintext_token  # Fallback to plaintext if no key configured
-        
-        try:
-            return cipher.encrypt(plaintext_token.encode()).decode()
-        except Exception as e:
-            current_app.logger.error(f"Token encryption failed: {type(e).__name__}")
-            return plaintext_token
-    
+        from app.services.token_crypto import encrypt_token
+        return encrypt_token(plaintext_token)
+
     @staticmethod
     def decrypt_token(encrypted_token):
-        """Decrypt a stored token"""
-        if not encrypted_token:
-            return encrypted_token
-        
-        cipher = QuickBooksService._get_cipher()
-        if not cipher:
-            return encrypted_token  # Assume plaintext if no key configured
-        
-        try:
-            return cipher.decrypt(encrypted_token.encode()).decode()
-        except Exception:
-            # Token might be stored in plaintext (pre-migration)
-            # Return as-is and it will work until next refresh encrypts it
-            return encrypted_token
-    
+        """Decrypt a stored token (plaintext rows returned as-is)"""
+        from app.services.token_crypto import decrypt_token
+        return decrypt_token(encrypted_token)
+
     # =========================================================================
     # OAUTH METHODS
     # =========================================================================
