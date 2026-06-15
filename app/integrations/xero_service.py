@@ -150,28 +150,36 @@ class XeroService:
             return []
     
     def _get_valid_token(self, connection) -> Optional[str]:
-        """Get a valid access token, refreshing if necessary"""
+        """Get a valid access token, refreshing if necessary.
+
+        Tokens are stored Fernet-encrypted (AUDIT risk #3); decrypt before use
+        and encrypt before storing. Pre-encryption plaintext rows decrypt to
+        themselves and are re-stored encrypted here on the next refresh.
+        """
         from app.extensions import db
-        
+        from app.services.token_crypto import encrypt_token, decrypt_token
+
         # Check if token is expired or about to expire (within 5 minutes)
         if connection.token_expires_at <= datetime.utcnow() + timedelta(minutes=5):
             logger.info("Xero token expired or expiring soon, refreshing...")
-            
-            tokens = self.refresh_access_token(connection.refresh_token)
-            
+
+            tokens = self.refresh_access_token(decrypt_token(connection.refresh_token))
+
             if tokens:
-                connection.access_token = tokens['access_token']
-                connection.refresh_token = tokens.get('refresh_token', connection.refresh_token)
+                connection.access_token = encrypt_token(tokens['access_token'])
+                new_refresh = tokens.get('refresh_token')
+                if new_refresh:
+                    connection.refresh_token = encrypt_token(new_refresh)
                 connection.token_expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
                 db.session.commit()
-                return connection.access_token
+                return tokens['access_token']
             else:
                 logger.error("Failed to refresh Xero token")
                 connection.is_active = False
                 db.session.commit()
                 return None
-        
-        return connection.access_token
+
+        return decrypt_token(connection.access_token)
     
     def _make_request(self, method: str, endpoint: str, connection, data: Optional[Dict] = None) -> Optional[Dict]:
         """Make authenticated request to Xero API"""

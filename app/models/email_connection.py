@@ -1,9 +1,14 @@
 """Email Connection model - stores OAuth tokens for email monitoring"""
 from app.extensions import db
 from datetime import datetime
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import os
 import json
+
+# Marker stored in last_error when a stored token can no longer be decrypted
+# (e.g. it was encrypted under a previous auto-generated key) and the user must
+# reconnect the account. See needs_reconnect.
+RECONNECT_REQUIRED = 'reconnect_required'
 
 
 class EmailConnection(db.Model):
@@ -53,28 +58,56 @@ class EmailConnection(db.Model):
     
     @staticmethod
     def _get_encryption_key():
-        """Get or generate encryption key from environment"""
+        """Return the email-token encryption key from the environment.
+
+        The key is validated at startup (AUDIT risk #3), so it is always set
+        here. It is never auto-generated: an ephemeral key would silently brick
+        every stored credential on the next restart.
+        """
         key = os.environ.get('EMAIL_TOKEN_ENCRYPTION_KEY')
         if not key:
-            # In production, this MUST be set as an environment variable
-            # For development, generate a consistent key
-            key = Fernet.generate_key().decode()
-            os.environ['EMAIL_TOKEN_ENCRYPTION_KEY'] = key
+            raise RuntimeError('EMAIL_TOKEN_ENCRYPTION_KEY is not set')
         return key.encode() if isinstance(key, str) else key
-    
+
     def set_token(self, token_data):
         """Encrypt and store OAuth token"""
         f = Fernet(self._get_encryption_key())
         token_json = json.dumps(token_data)
         self.encrypted_token = f.encrypt(token_json.encode()).decode()
-    
+        # A successful re-store clears any prior reconnect requirement.
+        if self.last_error == RECONNECT_REQUIRED:
+            self.last_error = None
+
     def get_token(self):
-        """Decrypt and return OAuth token"""
+        """Decrypt and return the stored OAuth token.
+
+        If the token cannot be decrypted (typically encrypted under a previous
+        auto-generated key that is now lost), flag the connection for reconnect
+        and return None instead of raising, so callers degrade gracefully.
+        """
         if not self.encrypted_token:
             return None
         f = Fernet(self._get_encryption_key())
-        token_json = f.decrypt(self.encrypted_token.encode()).decode()
+        try:
+            token_json = f.decrypt(self.encrypted_token.encode()).decode()
+        except InvalidToken:
+            self.mark_needs_reconnect()
+            return None
         return json.loads(token_json)
+
+    def mark_needs_reconnect(self):
+        """Deactivate the connection and flag that the user must reconnect."""
+        self.is_active = False
+        self.last_error = RECONNECT_REQUIRED
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    @property
+    def needs_reconnect(self):
+        """True if a decrypt failure means the user must re-authenticate."""
+        return self.last_error == RECONNECT_REQUIRED
     
     def to_dict(self):
         return {
@@ -82,6 +115,7 @@ class EmailConnection(db.Model):
             'provider': self.provider,
             'email_address': self.email_address,
             'is_active': self.is_active,
+            'needs_reconnect': self.needs_reconnect,
             'last_checked': self.last_checked.isoformat() if self.last_checked else None,
             'emails_fetched_count': self.emails_fetched_count,
             'created_at': self.created_at.isoformat() if self.created_at else None
