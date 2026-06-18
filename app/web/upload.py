@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 from decimal import Decimal
+from app.utils.money import money, to_decimal
 from app.utils.upload_validation import validate_upload, sanitize_filename
 
 bp = Blueprint('upload', __name__)
@@ -481,23 +482,30 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
         )
     
     # Calculate totals
-    total_cost = sum(Decimal(str(item.get('total_amount', 0))) for item in items)
-    total_selling = sum(
-        Decimal(str(item.get('selling_price', 0))) * Decimal(str(item.get('quantity', 0))) 
+    # Totals reconcile to the penny — the LINE is the authority:
+    #   line_cost    = total_amount (what was actually paid for the line)
+    #   line_selling = money(selling_per_unit * qty)
+    #   line_profit  = line_selling - line_cost
+    # so total_profit == total_selling - total_cost exactly. (profit_per_item is
+    # kept as the per-unit view and may differ from line profit by a penny on
+    # quantities that don't divide cleanly — the line is the authority for totals.)
+    line_costs = [money(item.get('total_amount', 0)) for item in items]
+    line_sellings = [
+        money(to_decimal(item.get('selling_price', 0)) * to_decimal(item.get('quantity', 0)))
         for item in items
-    )
-    total_profit = sum(
-        Decimal(str(item.get('profit_per_item', 0))) * Decimal(str(item.get('quantity', 0))) 
-        for item in items
-    )
-    
-    # Calculate average markup
+    ]
+    total_cost = money(sum(line_costs, Decimal('0')))
+    total_selling = money(sum(line_sellings, Decimal('0')))
+    total_profit = money(sum(
+        (sell - cost for sell, cost in zip(line_sellings, line_costs)),
+        Decimal('0')
+    ))
+
+    # Calculate average markup (percentage, not money)
     avg_markup = None
     if total_cost > 0:
-        avg_markup = ((total_selling - total_cost) / total_cost) * 100
-        # Cap at 999.99 to fit NUMERIC(5,2) column (Decimal cap so no float
-        # mixes into the Numeric column)
-        avg_markup = min(avg_markup, Decimal("999.99"))
+        # Cap at 999.99 to fit NUMERIC(5,2); Decimal throughout so no float mixes in.
+        avg_markup = money(min(((total_selling - total_cost) / total_cost) * 100, Decimal("999.99")))
     
     # Create invoice record
     invoice = Invoice(
@@ -521,10 +529,10 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
         validation_errors=validation_errors,
         status='completed',
         processed_at=datetime.utcnow(),
-        supplier_tax_amount=float(invoice_data.get('tax_amount') or invoice_data.get('vat_amount') or invoice_data.get('gst_amount') or 0),
-        supplier_tax_rate=float(invoice_data.get('tax_rate') or invoice_data.get('vat_rate') or 0),
-        total_ex_tax=float(invoice_data.get('total_ex_tax') or invoice_data.get('subtotal') or total_cost or 0),
-        total_inc_tax=float(invoice_data.get('total_inc_tax') or invoice_data.get('total_inc_vat') or invoice_data.get('total_inc_gst') or total_cost or 0),
+        supplier_tax_amount=money(invoice_data.get('tax_amount') or invoice_data.get('vat_amount') or invoice_data.get('gst_amount') or 0),
+        supplier_tax_rate=money(invoice_data.get('tax_rate') or invoice_data.get('vat_rate') or 0),
+        total_ex_tax=money(invoice_data.get('total_ex_tax') or invoice_data.get('subtotal') or total_cost or 0),
+        total_inc_tax=money(invoice_data.get('total_inc_tax') or invoice_data.get('total_inc_vat') or invoice_data.get('total_inc_gst') or total_cost or 0),
     )
     
     db.session.add(invoice)

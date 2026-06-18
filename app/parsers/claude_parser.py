@@ -6,7 +6,10 @@ import json
 import logging
 import re
 import io
+from decimal import Decimal
 from typing import Dict, List
+
+from app.utils.money import money, to_decimal
 
 # Try to import PIL for image enhancement
 try:
@@ -1057,29 +1060,31 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         for item in items:
             try:
                 # Safely parse values - handle 'None' strings and missing values
-                qty_raw = item.get('quantity')
-                if qty_raw is None or str(qty_raw).lower() == 'none':
+                # All money maths is Decimal; values are downcast to float only when
+                # the result dict is built (it is jsonified in the upload response).
+                quantity = to_decimal(item.get('quantity'))
+                if quantity is None:
                     self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - no quantity")
                     continue
-                quantity = float(qty_raw)
-                
-                total_raw = item.get('total_amount')
-                if total_raw is None or str(total_raw).lower() == 'none':
+
+                total_amount = to_decimal(item.get('total_amount'))
+                if total_amount is None:
                     self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - no total_amount")
                     continue
-                total_amount = float(total_raw)
-                
+
                 # Skip items with zero quantity or amount
                 if quantity <= 0 or total_amount <= 0:
                     self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - zero value")
                     continue
-                
-                # Get discount percentage - safely handle None
+
+                # Get discount percentage - safely handle None (kept as string for storage)
                 discount = str(item.get('discount', '0') or '0').replace('%', '')
                 if discount.lower() == 'none':
                     discount = '0'
-                discount_val = float(discount) if discount else 0
-                
+                discount_val = to_decimal(discount)
+                if discount_val is None:
+                    discount_val = Decimal('0')
+
                 # Apply discount to get actual cost
                 # For Wholesale Electrics, total_amount is BEFORE discount
                 # For YESSS and CEF, total_amount is ALREADY discounted
@@ -1088,8 +1093,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 else:
                     # YESSS, CEF, and others already show discounted amounts
                     discounted_total = total_amount
-                
-                cost_per_item = round(discounted_total / quantity, 2) if quantity > 0 else 0
+
+                cost_per_item = money(discounted_total / quantity)
 
                 # ─── BULK CABLE PER-METRE CONVERSION ────────────────────────────
                 # Cat6/data cable is sold as 1 box of 305m but needs per-metre pricing
@@ -1103,7 +1108,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 
                 if is_305m_box and quantity <= 10:
                     original_box_cost = cost_per_item
-                    cost_per_item = round(cost_per_item / 305, 4)
+                    cost_per_item = money(cost_per_item / 305, places=4)  # sub-penny unit rate
                     quantity = quantity * 305
                     self.logger.info(
                         f"📏 Per-metre conversion: {item.get('part_number', '')} "
@@ -1134,7 +1139,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 if not tax_registered and invoice_tax_rate > 0:
                     # Non-registered user cannot reclaim input tax
                     # Their real cost = ex-tax cost + irrecoverable tax
-                    effective_cost = round(cost_per_item * (1 + invoice_tax_rate / 100), 2)
+                    effective_cost = money(cost_per_item * (1 + to_decimal(invoice_tax_rate) / 100))
                     self.logger.info(
                         f"💰 Non-registered user: cost £{cost_per_item:.2f} "
                         f"+ {invoice_tax_rate}% supplier tax = effective cost £{effective_cost:.2f}"
@@ -1144,7 +1149,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     effective_cost = cost_per_item
 
                 # Calculate selling price using markup rules on effective cost
-                calculated_selling_price = round(effective_cost * (1 + markup), 2)
+                calculated_selling_price = money(effective_cost * (1 + to_decimal(markup)))
                 
                 # PRICE COMPARISON: Check if accounting software has higher price
                 final_selling_price = calculated_selling_price
@@ -1155,7 +1160,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     if part_upper and part_upper in known_products:
                         # QB/Xero stores a PER-UNIT price, and calculated_selling_price
                         # is ALSO per-unit — compare and store on a per-unit basis.
-                        existing_unit_price = known_products[part_upper].get('sales_price', 0)
+                        existing_unit_price = to_decimal(known_products[part_upper].get('sales_price', 0)) or Decimal('0')
                         calculated_unit_price = calculated_selling_price
                         if existing_unit_price and existing_unit_price > calculated_unit_price:
                             # Sanity check: if QB price is >10x calculated, it's stale/wrong data
@@ -1164,13 +1169,13 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                                 self.logger.warning(f"⚠️ Ignoring QB price for {part_upper} - {price_ratio:.0f}x higher than calculated (QB: £{existing_unit_price:.2f} vs calc: £{calculated_unit_price:.4f}) - likely stale QB data")
                             else:
                                 # Use the higher existing per-unit price (per-unit, not a line total)
-                                final_selling_price = round(existing_unit_price, 2)
+                                final_selling_price = money(existing_unit_price)
                                 if cost_per_item > 0:
                                     actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
                                 source = known_products[part_upper].get('source', 'accounting')
                                 self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
                 
-                profit_per_item = round(final_selling_price - effective_cost, 2)
+                profit_per_item = money(final_selling_price - effective_cost)
                 
                 # Track QB price if different from calculated
                 qb_price = None
@@ -1184,19 +1189,19 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 transformed.append({
                     'part_number': item['part_number'],
                     'description': item['description'],
-                    'quantity': quantity,
+                    'quantity': float(quantity),
                     'original_unit_price': float(item.get('original_unit_price', 0) or 0),
                     'discount': discount,
                     # For non-tax-registered users buying from tax-charging suppliers,
                     # store the tax-inclusive cost as their true cost.
                     # For tax-registered users or tax-free suppliers, store ex-tax cost.
-                    'cost_per_item': effective_cost,
-                    'total_amount': discounted_total,  # Store the DISCOUNTED ex-tax total
-                    'selling_price': final_selling_price,
-                    'calculated_selling_price': calculated_selling_price,
+                    'cost_per_item': float(effective_cost),
+                    'total_amount': float(money(discounted_total)),  # line net (rounded) — authority for totals
+                    'selling_price': float(final_selling_price),
+                    'calculated_selling_price': float(calculated_selling_price),
                     'qb_selling_price': qb_price,
                     'markup_percent': min(int(actual_markup * 100), 999),
-                    'profit_per_item': profit_per_item
+                    'profit_per_item': float(profit_per_item)
                 })
             except Exception as e:
                 self.logger.error(f"Error processing item: {str(e)}")

@@ -7,6 +7,9 @@ import base64
 import json
 import re
 import time
+from decimal import Decimal
+
+from app.utils.money import money, to_decimal
 
 
 class QuickBooksService:
@@ -830,11 +833,11 @@ class QuickBooksService:
         
         # Add cost (purchase cost - GST exclusive)
         if item_data.get('cost'):
-            item_payload["PurchaseCost"] = round(float(item_data['cost']), 2)
-        
+            item_payload["PurchaseCost"] = float(money(item_data['cost']))
+
         # Add selling price (unit price - GST exclusive)
         if item_data.get('selling_price'):
-            item_payload["UnitPrice"] = round(float(item_data['selling_price']), 2)
+            item_payload["UnitPrice"] = float(money(item_data['selling_price']))
         
         if existing:
             # Update existing item
@@ -1160,8 +1163,9 @@ Rules:
                 continue
 
             qty = float(item.get('quantity', 1))
-            unit_price = round(float(item.get('unit_price', 0)), 2)
-            amount = round(qty * unit_price, 2)
+            unit_dec = money(item.get('unit_price', 0))
+            unit_price = float(unit_dec)
+            amount = float(money(unit_dec * to_decimal(item.get('quantity', 1))))
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",
@@ -1253,7 +1257,7 @@ Rules:
         for item in line_items:
             item_id = item['item_id']
             new_qty = float(item.get('quantity', 1))
-            new_price = float(item.get('unit_price', 0))
+            new_price = float(money(item.get('unit_price', 0)))
             description = item.get('description', '')
             
             if item_id in existing_items_map:
@@ -1266,7 +1270,7 @@ Rules:
                 # Update the existing line
                 existing_lines[line_index]['SalesItemLineDetail']['Qty'] = combined_qty
                 existing_lines[line_index]['SalesItemLineDetail']['UnitPrice'] = new_price
-                existing_lines[line_index]['Amount'] = round(combined_qty * new_price, 2)
+                existing_lines[line_index]['Amount'] = float(money(to_decimal(combined_qty) * to_decimal(new_price)))
                 
                 # Update description if provided
                 if description:
@@ -1290,7 +1294,7 @@ Rules:
                 new_line = {
                     "Id": str(max_id),
                     "DetailType": "SalesItemLineDetail",
-                    "Amount": round(new_qty * new_price, 2),
+                    "Amount": float(money(to_decimal(new_qty) * to_decimal(new_price))),
                     "SalesItemLineDetail": {
                         "ItemRef": {
                             "value": item_id
@@ -1388,10 +1392,10 @@ Rules:
         if sync_mode == 'summary':
             # Summary mode: combine all items into one "Materials Used" line
             total_selling = sum(
-                (float(item.selling_price) if item.selling_price else 0) * (float(item.quantity) if item.quantity else 1)
-                for item in items
+                (money(to_decimal(item.selling_price or 0) * to_decimal(item.quantity or 1)) for item in items),
+                Decimal('0')
             )
-            
+
             materials_item_id = self._get_or_create_materials_used(qb_connection)
             if not materials_item_id:
                 results['errors'].append('Failed to find or create Materials Used product')
@@ -1401,7 +1405,7 @@ Rules:
             line_items = [{
                 'item_id': materials_item_id,
                 'quantity': 1,
-                'unit_price': round(total_selling, 2),
+                'unit_price': float(money(total_selling)),
                 'description': 'Materials Used'
             }]
         else:
@@ -1533,7 +1537,7 @@ Rules:
         
         if materials_line_idx is not None:
             old_amount = float(existing_lines[materials_line_idx].get('Amount', 0))
-            new_amount = round(old_amount + summary_item['unit_price'], 2)
+            new_amount = float(money(to_decimal(old_amount) + to_decimal(summary_item['unit_price'])))
             existing_lines[materials_line_idx]['Amount'] = new_amount
             existing_lines[materials_line_idx]['SalesItemLineDetail']['UnitPrice'] = new_amount
             existing_lines[materials_line_idx]['SalesItemLineDetail']['Qty'] = 1
@@ -1604,8 +1608,9 @@ Rules:
                 continue
             
             qty = float(item.get('quantity', 1))
-            unit_price = round(float(item.get('unit_price', 0)), 2)
-            amount = round(qty * unit_price, 2)
+            unit_dec = money(item.get('unit_price', 0))
+            unit_price = float(unit_dec)
+            amount = float(money(unit_dec * to_decimal(item.get('quantity', 1))))
             line = {
                 "Id": str(idx + 1),
                 "DetailType": "SalesItemLineDetail",

@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from flask import url_for
 
+from app.utils.money import money
+
 logger = logging.getLogger(__name__)
 
 
@@ -645,7 +647,7 @@ class XeroService:
             line = {
                 'Description': item.get('description', ''),
                 'Quantity': item.get('quantity', 1),
-                'UnitAmount': item.get('unit_price', 0),
+                'UnitAmount': float(money(item.get('unit_price', 0))),
                 'AccountCode': item.get('account_code'),
                 'TaxType': sales_tax_type
             }
@@ -761,7 +763,7 @@ class XeroService:
             for item in line_items:
                 item_code = item.get('item_code')
                 new_qty = float(item.get('quantity', 1))
-                new_price = float(item.get('unit_price', 0))
+                new_price = float(money(item.get('unit_price', 0)))
                 description = item.get('description', '')
                 account_code = item.get('account_code')
                 
@@ -878,7 +880,7 @@ class XeroService:
             line = {
                 'Description': item.get('description', ''),
                 'Quantity': item.get('quantity', 1),
-                'UnitAmount': item.get('unit_price', 0),
+                'UnitAmount': float(money(item.get('unit_price', 0))),
                 'AccountCode': item.get('account_code'),
                 'TaxType': sales_tax_type
             }

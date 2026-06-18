@@ -27,7 +27,7 @@ Usage:
 """
 
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 # Per-line rounding tolerance (suppliers round each line to the penny)
@@ -40,23 +40,8 @@ PLAUSIBLE_TAX_RATES = [Decimal("0"), Decimal("5"), Decimal("20")]
 TAX_RATE_SLACK = Decimal("0.5")
 
 
-def _to_decimal(value: Any) -> Optional[Decimal]:
-    """Convert parser values (str/float/int/None/'None') to Decimal safely."""
-    if value is None:
-        return None
-    s = str(value).strip()
-    if s == "" or s.lower() == "none":
-        return None
-    s = s.replace(",", "").replace("£", "").replace("%", "")
-    try:
-        return Decimal(s)
-    except InvalidOperation:
-        return None
-
-
-def _money(value: Decimal) -> Decimal:
-    """Quantise to 2dp, banker-safe for invoices (round half up)."""
-    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+# Money conversion/rounding lives in one place — see app/utils/money.py.
+from app.utils.money import to_decimal as _to_decimal, money as _money  # noqa: E402
 
 
 @dataclass
