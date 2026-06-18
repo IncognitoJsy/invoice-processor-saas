@@ -2,6 +2,7 @@
 import os
 import logging
 import base64
+import re
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
@@ -34,7 +35,7 @@ class XeroService:
         self.client_id = os.environ.get('XERO_CLIENT_ID')
         self.client_secret = os.environ.get('XERO_CLIENT_SECRET')
         self.user = user
-        self._tax_type_cache = None  # Cache tax type per request
+        self._output_tax_cache = None  # Cached (tax_type, status) tuple per request
         
         if not self.client_id or not self.client_secret:
             logger.warning("Xero credentials not configured")
@@ -250,77 +251,148 @@ class XeroService:
         result = self._make_request('GET', '/TaxRates', connection)
         return result.get('TaxRates', []) if result else []
     
-    def get_default_sales_tax_type(self, connection) -> str:
+    # TaxRate name keywords that mean "no output GST" (exempt / zero-rated).
+    EXEMPT_KEYWORDS = ('exempt', 'no gst', 'no vat', 'no tax', 'zero', 'none', 'out of scope')
+
+    def resolve_output_tax(self, connection):
+        """Resolve the output-GST TaxType for THIS user's synced sales lines.
+
+        Returns an (tax_type, status) tuple, cached for the request:
+          - (tax_type, 'taxable')  registered user; attach this Xero TaxType (output GST)
+          - (tax_type, 'exempt')   unregistered user; a zero/exempt sales TaxType (Xero's
+                                   built-in 'NONE' if the org has no named zero rate) ->
+                                   no output GST
+          - (None, 'unresolved')   registered user but no sales TaxType matches the
+                                   expected rate -> callers MUST block (fail closed)
+
+        Mirrors QuickBooksService.resolve_output_tax and is driven by
+        self.user.tax_registered so the sync can never disagree with the cost-base
+        treatment in claude_parser._transform_items (which folds irrecoverable input
+        GST into the markup base only for UNREGISTERED users), making the
+        "GST-in-base + output-GST-on-top" double charge impossible.
+
+        Xero differences vs QBO: tax is a TaxType *string* (not a code object); the
+        no-tax case is the built-in 'NONE' type rather than an omitted field; and rates
+        come from the TaxRate object, so matching is by numeric rate (with a sales-only
+        guard so a purchase/input rate is never used on a customer invoice).
         """
-        Get the appropriate sales tax type for the organisation.
-        Returns 'NONE' for tax-exempt orgs, otherwise the default sales tax.
-        """
-        if self._tax_type_cache:
-            return self._tax_type_cache
-        
+        if self._output_tax_cache is not None:
+            return self._output_tax_cache
+
+        # No user context -> cannot reason about registration -> fail closed.
+        if self.user is None:
+            logger.error("resolve_output_tax: no user on service — blocking sync")
+            self._output_tax_cache = (None, 'unresolved')
+            return self._output_tax_cache
+
+        tax_rates = self.get_tax_rates(connection)
+        logger.info(f"Available tax rates: {[tr.get('Name') for tr in tax_rates]}")
+
+        # Unregistered: never charge output GST (their cost base already absorbs it).
+        if not self.user.tax_registered:
+            exempt = self._select_exempt_tax_type(tax_rates)
+            self._output_tax_cache = (exempt, 'exempt')
+            logger.info(f"Output tax: user not GST/VAT-registered -> exempt ({exempt})")
+            return self._output_tax_cache
+
+        # Registered: lines MUST carry output GST at the user's region rate.
+        expected_rate = self._expected_tax_rate()
+        tax_type = self._select_taxable_tax_type(tax_rates, expected_rate)
+        if tax_type:
+            logger.info(f"Output tax: registered -> TaxType '{tax_type}' (target rate {expected_rate}%)")
+            self._output_tax_cache = (tax_type, 'taxable')
+        else:
+            logger.error(
+                f"Output tax: registered user, no sales tax type matching {expected_rate}% "
+                f"(tax_type={getattr(self.user, 'tax_type', None)}) — blocking sync")
+            self._output_tax_cache = (None, 'unresolved')
+        return self._output_tax_cache
+
+    @staticmethod
+    def _active(tax_rates):
+        return [tr for tr in tax_rates if (tr.get('Status') or 'ACTIVE').upper() == 'ACTIVE']
+
+    @staticmethod
+    def _tax_rate_value(tax_rate):
+        """Numeric percentage for a TaxRate: EffectiveRate, then DisplayTaxRate, then
+        the sum of TaxComponents, then a percentage parsed from the name. None if absent."""
+        for key in ('EffectiveRate', 'DisplayTaxRate'):
+            v = tax_rate.get(key)
+            if v is not None:
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    pass
+        comps = tax_rate.get('TaxComponents')
+        if comps:
+            try:
+                return float(sum(float(c.get('Rate', 0) or 0) for c in comps))
+            except (TypeError, ValueError):
+                pass
+        m = re.search(r'(\d+(?:\.\d+)?)\s*%', tax_rate.get('Name') or '')
+        return float(m.group(1)) if m else None
+
+    @classmethod
+    def _is_exempt_rate(cls, tax_rate):
+        name = (tax_rate.get('Name') or '').lower()
+        if any(k in name for k in cls.EXEMPT_KEYWORDS):
+            return True
+        rate = cls._tax_rate_value(tax_rate)
+        return rate is not None and rate == 0
+
+    @staticmethod
+    def _is_sales_applicable(tax_rate):
+        """Output (sales) rate, not a purchase/input one. Uses Xero's
+        CanApplyToRevenue flag when present, else a TaxType/name heuristic."""
+        if 'CanApplyToRevenue' in tax_rate:
+            return bool(tax_rate.get('CanApplyToRevenue'))
+        tt = (tax_rate.get('TaxType') or '').upper()
+        name = (tax_rate.get('Name') or '').upper()
+        return not ('INPUT' in tt or 'INPUT' in name or 'PURCHASE' in name)
+
+    def _select_exempt_tax_type(self, tax_rates):
+        """A zero/exempt sales TaxType if the org has one, else Xero's built-in 'NONE'."""
+        for tr in self._active(tax_rates):
+            if self._is_sales_applicable(tr) and self._is_exempt_rate(tr):
+                return tr.get('TaxType') or 'NONE'
+        return 'NONE'  # Xero's built-in no-tax type — always valid
+
+    def _expected_tax_rate(self):
+        """Output-GST rate this user should charge: explicit tax_rate first, then
+        tax_type (GST=5, VAT=20), then region/country, defaulting to UK VAT 20%."""
         try:
-            tax_rates = self.get_tax_rates(connection)
-            
-            if not tax_rates:
-                logger.info("No tax rates found, using NONE")
-                self._tax_type_cache = 'NONE'
-                return 'NONE'
-            
-            # Log available tax rates for debugging
-            logger.info(f"Available tax rates: {[tr.get('Name') for tr in tax_rates]}")
-            
-            # Look for common tax types in order of preference
-            # For Jersey/Guernsey - look for GST or Zero rated
-            for tax_rate in tax_rates:
-                name = tax_rate.get('Name', '').upper()
-                tax_type = tax_rate.get('TaxType', '')
-                status = tax_rate.get('Status', '')
-                
-                if status != 'ACTIVE':
-                    continue
-                
-                # Jersey GST (5%)
-                if 'GST' in name and 'EXEMPT' not in name:
-                    logger.info(f"Found GST tax type: {tax_type}")
-                    self._tax_type_cache = tax_type
-                    return tax_type
-            
-            # Look for Zero Rated (for exempt businesses)
-            for tax_rate in tax_rates:
-                name = tax_rate.get('Name', '').upper()
-                tax_type = tax_rate.get('TaxType', '')
-                status = tax_rate.get('Status', '')
-                
-                if status != 'ACTIVE':
-                    continue
-                    
-                if 'ZERO' in name or 'NO TAX' in name or 'EXEMPT' in name or 'NONE' in name:
-                    logger.info(f"Found zero/exempt tax type: {tax_type}")
-                    self._tax_type_cache = tax_type
-                    return tax_type
-            
-            # UK VAT - OUTPUT2 is standard rated sales
-            for tax_rate in tax_rates:
-                tax_type = tax_rate.get('TaxType', '')
-                if tax_type == 'OUTPUT2':
-                    logger.info("Using UK VAT OUTPUT2")
-                    self._tax_type_cache = 'OUTPUT2'
-                    return 'OUTPUT2'
-            
-            # Fallback - use first active tax rate or NONE
-            for tax_rate in tax_rates:
-                if tax_rate.get('Status') == 'ACTIVE':
-                    tax_type = tax_rate.get('TaxType', 'NONE')
-                    logger.info(f"Using fallback tax type: {tax_type}")
-                    self._tax_type_cache = tax_type
-                    return tax_type
-            
-            self._tax_type_cache = 'NONE'
-            return 'NONE'
-            
-        except Exception as e:
-            logger.error(f"Error getting tax type: {str(e)}")
-            return 'NONE'
+            rate = float(self.user.tax_rate) if self.user.tax_rate is not None else 0.0
+        except (TypeError, ValueError):
+            rate = 0.0
+        if rate > 0:
+            return rate
+        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
+        if tax_type == 'GST':
+            return 5.0
+        if tax_type == 'VAT':
+            return 20.0
+        country = (getattr(self.user, 'country', '') or
+                   getattr(self.user, 'business_address_country', '') or '').lower()
+        if any(x in country for x in ('jersey', 'guernsey')):
+            return 5.0
+        return 20.0
+
+    def _select_taxable_tax_type(self, tax_rates, expected_rate):
+        """Active, sales-applicable, non-exempt TaxType whose rate matches
+        expected_rate; falls back to a tax_type keyword when no rate matches."""
+        candidates = [tr for tr in self._active(tax_rates)
+                      if self._is_sales_applicable(tr) and not self._is_exempt_rate(tr)]
+        for tr in candidates:
+            rate = self._tax_rate_value(tr)
+            if rate is not None and abs(rate - expected_rate) < 0.01:
+                return tr.get('TaxType')
+        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
+        keyword = tax_type if tax_type in ('GST', 'VAT') else None
+        if keyword:
+            for tr in candidates:
+                if keyword in (tr.get('Name') or '').upper():
+                    return tr.get('TaxType')
+        return None
     
     def get_default_purchase_tax_type(self, connection) -> str:
         """Get the appropriate purchase tax type for bills"""
@@ -560,9 +632,13 @@ class XeroService:
         if not due_date:
             due_date = (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')
         
-        # Get the appropriate tax type for this organisation
-        sales_tax_type = self.get_default_sales_tax_type(connection)
-        
+        # Resolve output-GST treatment; fail closed for a registered user with no rate.
+        sales_tax_type, tax_status = self.resolve_output_tax(connection)
+        if tax_status == 'unresolved':
+            logger.error("Blocking Xero invoice creation: TAX_CODE_UNRESOLVED")
+            return {'error': 'No valid GST tax type could be resolved — invoice not synced',
+                    'code': 'TAX_CODE_UNRESOLVED'}
+
         # Format line items for Xero
         xero_line_items = []
         for item in line_items:
@@ -576,7 +652,7 @@ class XeroService:
             if item.get('item_code'):
                 line['ItemCode'] = item['item_code']
             xero_line_items.append(line)
-        
+
         data = {
             'Invoices': [{
                 'Type': 'ACCREC',  # Accounts Receivable (Invoice)
@@ -658,10 +734,14 @@ class XeroService:
             
             invoice = result['Invoices'][0]
             existing_lines = invoice.get('LineItems', [])
-            
-            # Get tax type
-            sales_tax_type = self.get_default_sales_tax_type(connection)
-            
+
+            # Resolve output-GST treatment; fail closed for a registered user with no rate.
+            sales_tax_type, tax_status = self.resolve_output_tax(connection)
+            if tax_status == 'unresolved':
+                logger.error("Blocking Xero invoice update: TAX_CODE_UNRESOLVED")
+                return {'error': 'No valid GST tax type could be resolved — invoice not updated',
+                        'code': 'TAX_CODE_UNRESOLVED'}
+
             # Build a map of existing items by ItemCode
             # Structure: {item_code: {'line_index': idx, 'quantity': qty, 'line': line_obj}}
             existing_items_map = {}
@@ -785,9 +865,13 @@ class XeroService:
         if not expiry_date:
             expiry_date = (datetime.utcnow() + timedelta(days=30)).strftime('%Y-%m-%d')
         
-        # Get the appropriate tax type for this organisation
-        sales_tax_type = self.get_default_sales_tax_type(connection)
-        
+        # Resolve output-GST treatment; fail closed for a registered user with no rate.
+        sales_tax_type, tax_status = self.resolve_output_tax(connection)
+        if tax_status == 'unresolved':
+            logger.error("Blocking Xero quote creation: TAX_CODE_UNRESOLVED")
+            return {'error': 'No valid GST tax type could be resolved — quote not synced',
+                    'code': 'TAX_CODE_UNRESOLVED'}
+
         # Format line items for Xero
         xero_line_items = []
         for item in line_items:
@@ -801,7 +885,7 @@ class XeroService:
             if item.get('item_code'):
                 line['ItemCode'] = item['item_code']
             xero_line_items.append(line)
-        
+
         data = {
             'Quotes': [{
                 'Contact': {'ContactID': customer_contact_id},
@@ -990,6 +1074,7 @@ class XeroService:
                     errors.append(f"Failed to add items to invoice: {result.get('error', 'Unknown error')}")
                     return {
                         'success': False,
+                        'code': result.get('code'),
                         'products_synced': product_results['synced'],
                         'products_failed': product_results['failed'],
                         'errors': errors
@@ -1003,7 +1088,7 @@ class XeroService:
                     reference=invoice.job_reference
                 )
                 
-                if xero_invoice:
+                if xero_invoice and not xero_invoice.get('error'):
                     return {
                         'success': True,
                         'invoice_action': invoice_action,
@@ -1013,9 +1098,10 @@ class XeroService:
                         'xero_invoice_number': xero_invoice.get('InvoiceNumber')
                     }
                 else:
-                    errors.append('Failed to create invoice in Xero')
+                    errors.append((xero_invoice or {}).get('error', 'Failed to create invoice in Xero'))
                     return {
                         'success': False,
+                        'code': (xero_invoice or {}).get('code'),
                         'products_synced': product_results['synced'],
                         'products_failed': product_results['failed'],
                         'errors': errors
@@ -1058,7 +1144,7 @@ class XeroService:
                 reference=quote.job_reference
             )
             
-            if xero_quote:
+            if xero_quote and not xero_quote.get('error'):
                 return {
                     'success': True,
                     'products_synced': product_results['synced'],
@@ -1067,7 +1153,11 @@ class XeroService:
                     'xero_quote_number': xero_quote.get('QuoteNumber')
                 }
             else:
-                return {'success': False, 'errors': ['Failed to create quote in Xero']}
+                return {
+                    'success': False,
+                    'code': (xero_quote or {}).get('code'),
+                    'errors': [(xero_quote or {}).get('error', 'Failed to create quote in Xero')]
+                }
                 
         except Exception as e:
             logger.error(f"Error syncing quote to Xero: {str(e)}")
