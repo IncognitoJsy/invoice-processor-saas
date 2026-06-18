@@ -987,12 +987,16 @@ Double-check your work - missing items, wrong document type, wrong account numbe
         return account_number
     
     def _get_admin_tiered_markup(self, discount_val: float) -> float:
-        """Get markup for admin user based on discount tiers"""
-        if discount_val == 0:
+        """Get markup for admin user based on discount tiers.
+
+        Bands are continuous (no gaps for fractional discounts):
+        d <= 0 -> 20%, 0 < d <= 30 -> 40%, 30 < d <= 70 -> 50%, d > 70 -> 70%.
+        """
+        if discount_val <= 0:
             return 0.20  # 20% markup
-        elif 1 <= discount_val <= 30:
+        elif discount_val <= 30:
             return 0.40  # 40% markup
-        elif 30 < discount_val <= 70:
+        elif discount_val <= 70:
             return 0.50  # 50% markup
         else:
             return 0.70  # 70% markup
@@ -1121,22 +1125,22 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 if known_products:
                     part_upper = item.get('part_number', '').upper().strip() if item.get('part_number') else ''
                     if part_upper and part_upper in known_products:
-                        # QB/Xero stores PER-UNIT price, calculated_selling_price is TOTAL
-                        # Compare on a per-unit basis
+                        # QB/Xero stores a PER-UNIT price, and calculated_selling_price
+                        # is ALSO per-unit — compare and store on a per-unit basis.
                         existing_unit_price = known_products[part_upper].get('sales_price', 0)
-                        calculated_unit_price = round(calculated_selling_price / quantity, 4) if quantity > 0 else calculated_selling_price
+                        calculated_unit_price = calculated_selling_price
                         if existing_unit_price and existing_unit_price > calculated_unit_price:
                             # Sanity check: if QB price is >10x calculated, it's stale/wrong data
                             price_ratio = existing_unit_price / calculated_unit_price if calculated_unit_price > 0 else 999
                             if price_ratio > 10:
                                 self.logger.warning(f"⚠️ Ignoring QB price for {part_upper} - {price_ratio:.0f}x higher than calculated (QB: £{existing_unit_price:.2f} vs calc: £{calculated_unit_price:.4f}) - likely stale QB data")
                             else:
-                                # Use the higher existing per-unit price × quantity
-                                final_selling_price = round(existing_unit_price * quantity, 2)
+                                # Use the higher existing per-unit price (per-unit, not a line total)
+                                final_selling_price = round(existing_unit_price, 2)
                                 if cost_per_item > 0:
                                     actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
                                 source = known_products[part_upper].get('source', 'accounting')
-                                self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit × {quantity} = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
+                                self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
                 
                 profit_per_item = round(final_selling_price - effective_cost, 2)
                 

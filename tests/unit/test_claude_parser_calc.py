@@ -260,17 +260,19 @@ def test_profit_equals_selling_minus_cost(part, qty, discount, net):
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. _get_admin_tiered_markup() returns the documented % per discount band
 # ═══════════════════════════════════════════════════════════════════════════
-# Documented bands: 0% -> 20%, 1-30% -> 40%, 30<d<=70 -> 50%, d>70 -> 70%.
+# Continuous bands: d<=0 -> 20%, 0<d<=30 -> 40%, 30<d<=70 -> 50%, d>70 -> 70%.
 MARKUP_BANDS = [
-    (0,   0.20),
-    (1,   0.40),
-    (15,  0.40),
-    (30,  0.40),   # boundary: 30 is in the 1-30 band
-    (31,  0.50),
-    (50,  0.50),
-    (70,  0.50),   # boundary: 70 is in the 30<d<=70 band
-    (71,  0.70),
-    (85,  0.70),
+    (0,    0.20),
+    (0.5,  0.40),  # fractional discount must NOT fall through the gap -> 40%
+    (1,    0.40),
+    (15,   0.40),
+    (30,   0.40),  # boundary: 30 is in the 0<d<=30 band
+    (30.5, 0.50),  # fractional discount in the next band -> 50%
+    (31,   0.50),
+    (50,   0.50),
+    (70,   0.50),  # boundary: 70 is in the 30<d<=70 band
+    (71,   0.70),
+    (85,   0.70),
 ]
 
 
@@ -291,7 +293,7 @@ def test_print_markup_table(capsys):
         print("-" * 25)
         for d in probes:
             print(f"{d:>12} | {parser._get_admin_tiered_markup(d) * 100:>6.0f}%")
-        print("note: 0<d<1 and 30<d<31 etc. fall through to the >70 branch -> 70% (gap)")
+        print("note: bands are continuous — fractional discounts map to their band (no gap)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
