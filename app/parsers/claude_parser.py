@@ -378,15 +378,43 @@ class ClaudeInvoiceParser:
                     return known_products[best_match]['sku'], best_score, 'fuzzy'
             
             return None, 0, None
-        
+
+        def differs_by_digit_swap(printed: str, candidate: str) -> bool:
+            """True when `candidate` differs from the printed code at one or more
+            positions where BOTH characters are digits (a digit swapped for a
+            different digit). Trade part numbers encode size/rating in their
+            digits — SB20MWH and SB25MWH are genuinely different products — so a
+            digit-for-digit difference is almost always two distinct parts, not a
+            scan error. These invoices are digital-text PDFs, so true OCR
+            digit/digit confusion does not occur here anyway. Glyph misreads
+            (O<->0, I<->1, S<->5, B<->8 ...) are NOT caught because one side is a
+            letter, so legitimate OCR correction still works."""
+            p, c = printed.upper().strip(), candidate.upper().strip()
+            if len(p) != len(c):
+                return False
+            return any(a != b and a.isdigit() and b.isdigit() for a, b in zip(p, c))
+
         # Validate each item's part number
         corrected_items = []
         for item in items:
             item_copy = item.copy()
             original_part = item.get('part_number', '')
-            
+
             matched_sku, confidence, source = find_best_match(original_part)
-            
+
+            # The printed code wins over a weak OCR-variant match when the only
+            # difference is digit-for-digit — keep the code as printed unless we
+            # have stronger evidence (a user-verified learned correction or an
+            # exact catalog hit, neither of which is gated here).
+            if (matched_sku and source == 'ocr'
+                    and differs_by_digit_swap(original_part, matched_sku)):
+                self.logger.info(
+                    f"Keeping printed part '{original_part}' over OCR candidate "
+                    f"'{matched_sku}' — digit-for-digit difference suggests a "
+                    f"distinct part, not a misread"
+                )
+                matched_sku = None
+
             if matched_sku and matched_sku.upper() != original_part.upper():
                 item_copy['part_number'] = matched_sku
                 item_copy['original_ocr_part_number'] = original_part
