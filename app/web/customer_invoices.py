@@ -6,6 +6,7 @@ from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
 from app.models.customer import Customer
 from app.models.invoice import Invoice, InvoiceItem
 from app.models.product_service import ProductService
+from app.utils.money import money, to_decimal
 from datetime import datetime
 import logging
 
@@ -233,8 +234,8 @@ def _add_itemised_lines(customer_invoice, supplier_invoice):
 
     for item in items:
         description = item.description or item.part_number or 'Material'
-        unit_price = float(item.selling_price or 0)
-        quantity = float(item.quantity or 1)
+        unit_price = to_decimal(item.selling_price or 0)
+        quantity = to_decimal(item.quantity or 1)
 
         # Check if this item already exists on the invoice (by description match)
         existing_line = CustomerInvoiceLine.query.filter_by(
@@ -244,10 +245,10 @@ def _add_itemised_lines(customer_invoice, supplier_invoice):
         ).first()
 
         if existing_line:
-            # Merge — update quantity
-            existing_line.quantity = (existing_line.quantity or 0) + quantity
-            existing_line.line_total = round(
-                existing_line.quantity * existing_line.unit_price, 2)
+            # Merge — update quantity (Decimal throughout)
+            existing_line.quantity = to_decimal(existing_line.quantity or 0) + quantity
+            existing_line.line_total = money(
+                to_decimal(existing_line.quantity) * to_decimal(existing_line.unit_price))
         else:
             # Add new line
             line = CustomerInvoiceLine(
@@ -256,7 +257,7 @@ def _add_itemised_lines(customer_invoice, supplier_invoice):
                 description=description,
                 quantity=quantity,
                 unit_price=unit_price,
-                line_total=round(quantity * unit_price, 2),
+                line_total=money(quantity * unit_price),
                 line_type='itemised',
             )
             db.session.add(line)
@@ -268,7 +269,7 @@ def _add_summary_line(customer_invoice, supplier_invoice):
     Each new supplier invoice processed adds its total to that single line.
     """
     materials_product = get_or_create_materials_used(current_user.id)
-    total_selling = float(supplier_invoice.total_selling or 0)
+    total_selling = to_decimal(supplier_invoice.total_selling or 0)
 
     # Find the single cumulative Materials Used line on this invoice
     existing = CustomerInvoiceLine.query.filter_by(
@@ -277,8 +278,9 @@ def _add_summary_line(customer_invoice, supplier_invoice):
     ).first()
 
     if existing:
-        # Add the new supplier invoice total to the running total
-        existing.unit_price = round((existing.unit_price or 0) + total_selling, 2)
+        # Add the new supplier invoice total to the running total (Decimal — was a
+        # Decimal+float TypeError when the line reloaded from the DB as Numeric).
+        existing.unit_price = money(to_decimal(existing.unit_price or 0) + total_selling)
         existing.line_total = existing.unit_price
     else:
         # First supplier invoice added to this customer invoice
@@ -444,14 +446,14 @@ def update_line(invoice_id, line_id):
         db.session.commit()
         return jsonify({'success': True})
     if 'quantity' in data:
-        line.quantity = float(data['quantity'] or 0)
+        line.quantity = to_decimal(data['quantity'] or 0)
     if 'unit_price' in data:
-        line.unit_price = float(data['unit_price'] or 0)
+        line.unit_price = to_decimal(data['unit_price'] or 0)
     if field == 'quantity':
-        line.quantity = float(data.get('value', line.quantity) or 0)
+        line.quantity = to_decimal(data.get('value', line.quantity) or 0)
     if field == 'unit_price':
-        line.unit_price = float(data.get('value', line.unit_price) or 0)
-    line.line_total = round(line.quantity * line.unit_price, 2)
+        line.unit_price = to_decimal(data.get('value', line.unit_price) or 0)
+    line.line_total = money(to_decimal(line.quantity) * to_decimal(line.unit_price))
     invoice.recalculate_totals()
     db.session.commit()
     return jsonify({
@@ -534,8 +536,8 @@ def add_line(invoice_id):
         return jsonify({'success': False, 'error': 'Cannot edit this invoice'}), 400
     data = request.get_json()
     description = data.get('description', '').strip()
-    quantity = float(data.get('quantity', 1) or 1)
-    unit_price = float(data.get('unit_price', 0) or 0)
+    quantity = to_decimal(data.get('quantity', 1) or 1)
+    unit_price = to_decimal(data.get('unit_price', 0) or 0)
     if not description:
         return jsonify({'success': False, 'error': 'Description required'}), 400
     line = CustomerInvoiceLine(
@@ -543,7 +545,7 @@ def add_line(invoice_id):
         description=description,
         quantity=quantity,
         unit_price=unit_price,
-        line_total=round(quantity * unit_price, 2),
+        line_total=money(quantity * unit_price),
         line_type='itemised',
     )
     db.session.add(line)
@@ -774,10 +776,9 @@ def create_manual():
         status='open',
         issue_date=issue,
         due_date=due,
-        subtotal=data.get('subtotal', 0),
-        tax_rate=data.get('tax_rate', 0),
-        tax_amount=data.get('tax_amount', 0),
-        total=data.get('total', 0),
+        # Totals are recomputed server-side from the lines below — never trust the
+        # client-supplied subtotal/tax_amount/total. Only the tax RATE is taken as given.
+        tax_rate=to_decimal(data.get('tax_rate', 0)),
         notes=data.get('notes', ''),
         payment_terms=data.get('payment_terms', '30'),
         job_card_id=data.get('job_card_id') or None,
@@ -785,15 +786,18 @@ def create_manual():
     db.session.add(invoice)
     db.session.flush()
     for line in data.get('lines', []):
+        qty = to_decimal(line.get('quantity', 0))
+        unit_price = to_decimal(line.get('unit_price', 0))
         inv_line = CustomerInvoiceLine(
             customer_invoice_id=invoice.id,
             description=line['description'],
-            quantity=line['quantity'],
-            unit_price=line['unit_price'],
-            line_total=line['line_total'],
+            quantity=qty,
+            unit_price=unit_price,
+            line_total=money(qty * unit_price),  # recomputed, not trusted from client
             sort_order=line.get('sort_order', 0),
         )
         db.session.add(inv_line)
+    invoice.recalculate_totals()  # subtotal / tax / total from the Decimal lines
     db.session.commit()
     return jsonify({'success': True, 'redirect': url_for('customer_invoices.view', invoice_id=invoice.id)})
 
