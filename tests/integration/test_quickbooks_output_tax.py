@@ -33,8 +33,9 @@ ITEM_DATA = {'name': 'PART1', 'sku': 'PART1', 'cost': 5, 'selling_price': 10,
 class FakeAPI:
     """Stand-in for make_api_request: routes by endpoint, records POST payloads."""
 
-    def __init__(self, tax_codes):
+    def __init__(self, tax_codes, tax_rates=()):
         self.tax_codes = tax_codes
+        self.tax_rates = list(tax_rates)
         self.posts = []  # list of (endpoint, data) for every POST
 
     def __call__(self, qb_connection, endpoint, method='GET', data=None):
@@ -53,6 +54,8 @@ class FakeAPI:
         # GET / query
         if 'FROM TaxCode' in endpoint:
             return {'QueryResponse': {'TaxCode': list(self.tax_codes)}}
+        if 'FROM TaxRate' in endpoint:
+            return {'QueryResponse': {'TaxRate': list(self.tax_rates)}}
         if 'FROM Item' in endpoint:
             return {'QueryResponse': {}}  # no existing item -> create path
         return {}
@@ -65,7 +68,7 @@ class FakeAPI:
 
 
 def make_service(tax_codes, *, tax_registered=True, tax_type='GST', tax_rate=5,
-                 country='Jersey'):
+                 country='Jersey', tax_rates=()):
     user = types.SimpleNamespace(
         id=1,
         tax_registered=tax_registered,
@@ -75,7 +78,7 @@ def make_service(tax_codes, *, tax_registered=True, tax_type='GST', tax_rate=5,
         business_address_country=country,
     )
     svc = QuickBooksService(user)
-    api = FakeAPI(tax_codes)
+    api = FakeAPI(tax_codes, tax_rates=tax_rates)
     svc.make_api_request = api
     return svc, api
 
@@ -150,10 +153,42 @@ def test_jersey_gst_picked_over_vat_by_rate(app):
     assert code['value'] == 'G5'
 
 
-def test_region_drives_gst_when_tax_type_and_rate_blank(app):
-    # blank tax_type + zero rate -> fall back to country (Jersey -> 5%).
+def test_unset_config_with_multiple_codes_is_unresolved(app):
+    # No tax_rate/tax_type set AND multiple sales codes -> genuine ambiguity -> fail
+    # closed. We deliberately do NOT guess from address country (Step 3c req 4): an
+    # address of 'United Kingdom' for a Jersey GST business would wrongly pick 20%.
     svc, _ = make_service([VAT20, GST5], tax_registered=True, tax_type='', tax_rate=0,
-                          country='Jersey')
+                          country=None)
+    code, status = svc.resolve_output_tax(CONN)
+    assert status == 'unresolved'
+    assert code is None
+
+
+# ── 5. Real-world shapes (Step 3c): rate in TaxRateRef detail, not the name ──────
+# Mirrors the live company: one sales code named just "GST" (id 2), rate carried in
+# its TaxRateRef detail, user tax config unset. Must resolve via the single-code
+# fallback instead of fail-closing.
+GST_REAL = {'Id': '2', 'Name': 'GST',
+            'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '5'}}]}}
+
+
+def test_single_gst_code_used_when_config_unset_real_shape(app):
+    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=0,
+                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
+    assert svc.resolve_output_tax(CONN) == ({'value': '2', 'name': 'GST'}, 'taxable')
+
+
+def test_registered_matches_by_real_rate_from_detail(app):
+    # Two codes named just "GST"/"VAT" (no % in either name) — rate lives only in the
+    # TaxRateRef detail. With tax_rate=5 the resolver must pick the one whose REAL
+    # rate is 5, proving it no longer trusts the name for the rate.
+    gst = {'Id': '2', 'Name': 'GST',
+           'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '5'}}]}}
+    vat = {'Id': '3', 'Name': 'VAT',
+           'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '9'}}]}}
+    svc, _ = make_service([vat, gst], tax_registered=True, tax_type='', tax_rate=5,
+                          country=None,
+                          tax_rates=[{'Id': '5', 'RateValue': 5}, {'Id': '9', 'RateValue': 20}])
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'taxable'
-    assert code['value'] == 'G5'
+    assert code['value'] == '2'

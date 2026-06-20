@@ -641,16 +641,16 @@ class QuickBooksService:
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        expected_rate = self._expected_tax_rate()
-        code = self._select_taxable_code(tax_codes, expected_rate)
+        code = self._select_taxable_code(qb_connection, tax_codes)
         if code:
             current_app.logger.info(
-                f"Output tax: registered -> taxable code '{code['name']}' (target rate {expected_rate}%)")
+                f"Output tax: registered -> taxable code '{code['name']}' (id {code['value']})")
             self._output_tax_cache = (code, 'taxable')
         else:
             current_app.logger.error(
-                f"Output tax: registered user, no tax code matching {expected_rate}% "
-                f"(tax_type={getattr(self.user, 'tax_type', None)}) — blocking sync")
+                "Output tax: registered user but no sales tax code could be resolved "
+                f"(tax_rate={getattr(self.user, 'tax_rate', None)}, "
+                f"tax_type={getattr(self.user, 'tax_type', None)}) — blocking sync")
             self._output_tax_cache = (None, 'unresolved')
         return self._output_tax_cache
 
@@ -667,6 +667,23 @@ class QuickBooksService:
             current_app.logger.error(f"Error fetching tax codes: {type(e).__name__}")
             return []
 
+    def _fetch_active_tax_rates(self, qb_connection):
+        """{TaxRate Id -> Decimal RateValue} ({} on error). Read-only. No
+        `WHERE Active` filter — we only look rates up by the IDs codes reference, so
+        over-fetching is harmless and avoids a 400 if Active isn't filterable here."""
+        try:
+            result = self.make_api_request(qb_connection, "query?query=SELECT * FROM TaxRate")
+            rows = result.get('QueryResponse', {}).get('TaxRate', []) if isinstance(result, dict) else []
+            out = {}
+            for r in rows:
+                rid, d = r.get('Id'), to_decimal(r.get('RateValue'))
+                if rid is not None and d is not None:
+                    out[str(rid)] = d
+            return out
+        except Exception as e:
+            current_app.logger.error(f"Error fetching tax rates: {type(e).__name__}")
+            return {}
+
     @classmethod
     def _is_exempt_code(cls, tax_code):
         name = (tax_code.get('Name') or '').lower()
@@ -674,10 +691,34 @@ class QuickBooksService:
 
     @staticmethod
     def _tax_code_rate(tax_code):
-        """Percentage parsed from a TaxCode's name, e.g. 'GST 5%' -> 5.0,
-        '20.0% S (VAT on Sales)' -> 20.0. None if the name has no percentage."""
+        """Percentage parsed from a TaxCode's NAME, e.g. 'GST 5%' -> 5.0. None if the
+        name has no percentage. Legacy fallback only — the real rate comes from the
+        code's TaxRateRef detail (see _code_sales_rate). Also used by the diagnostic."""
         m = re.search(r'(\d+(?:\.\d+)?)\s*%', tax_code.get('Name') or '')
         return float(m.group(1)) if m else None
+
+    @staticmethod
+    def _is_sales_applicable(tax_code):
+        """Usable on sales: exclude purchase-only codes. Codes with no rate-list info
+        are treated as usable (matches prior behaviour)."""
+        has_sales = bool((tax_code.get('SalesTaxRateList') or {}).get('TaxRateDetail'))
+        has_purchase = bool((tax_code.get('PurchaseTaxRateList') or {}).get('TaxRateDetail'))
+        return has_sales or not has_purchase
+
+    def _code_sales_rate(self, tax_code, rate_map):
+        """The code's ACTUAL sales rate (Decimal): sum of its SalesTaxRateList
+        components resolved via rate_map (TaxRateRef -> TaxRate.RateValue). Falls back
+        to a rate parsed from the name only if no detail is resolvable. None if unknown.
+        Rates are percents (RateValue 5 == 5%), same unit as user.tax_rate."""
+        total = None
+        for d in (tax_code.get('SalesTaxRateList') or {}).get('TaxRateDetail') or []:
+            rid = (d.get('TaxRateRef') or {}).get('value')
+            if rid is not None and str(rid) in rate_map:
+                total = (total or Decimal('0')) + rate_map[str(rid)]
+        if total is not None:
+            return total
+        named = self._tax_code_rate(tax_code)
+        return to_decimal(named) if named is not None else None
 
     def _select_exempt_code(self, tax_codes):
         for tc in tax_codes:
@@ -686,34 +727,36 @@ class QuickBooksService:
         return None
 
     def _expected_tax_rate(self):
-        """Output-GST rate this user should charge: explicit tax_rate first, then
-        tax_type (GST=5, VAT=20), then region/country, defaulting to UK VAT 20%."""
-        try:
-            rate = float(self.user.tax_rate) if self.user.tax_rate is not None else 0.0
-        except (TypeError, ValueError):
-            rate = 0.0
-        if rate > 0:
-            return rate
-        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
-        if tax_type == 'GST':
-            return 5.0
-        if tax_type == 'VAT':
-            return 20.0
-        country = (getattr(self.user, 'country', '') or
-                   getattr(self.user, 'business_address_country', '') or '').lower()
-        if any(x in country for x in ('jersey', 'guernsey')):
-            return 5.0
-        return 20.0
+        """The user's configured output rate (percent) as a Decimal, or None. We do
+        NOT guess from tax_type or address country — an address of 'United Kingdom' for
+        a Jersey GST business would wrongly pick 20%. When unset, selection leans on the
+        real-rate read + single-code fallback in _select_taxable_code."""
+        rate = to_decimal(self.user.tax_rate) if self.user is not None else None
+        return rate if (rate is not None and rate > 0) else None
 
-    def _select_taxable_code(self, tax_codes, expected_rate):
-        """Active, non-exempt TaxCode whose rate matches expected_rate. Matches by
-        the rate parsed from the code name; falls back to a tax_type keyword when
-        no rate is parseable."""
-        candidates = [tc for tc in tax_codes if not self._is_exempt_code(tc)]
-        for tc in candidates:
-            rate = self._tax_code_rate(tc)
-            if rate is not None and abs(rate - expected_rate) < 0.01:
-                return {'value': tc['Id'], 'name': tc.get('Name', '')}
+    def _select_taxable_code(self, qb_connection, tax_codes):
+        """Pick the sales TaxCode a registered user should charge:
+           1) exactly one active non-exempt sales code -> use it (QBO applies its rate);
+           2) else match a code whose REAL rate equals the user's configured tax_rate;
+           3) else, if tax_type is set, match GST/VAT by name;
+           4) else None (ambiguous -> caller fails closed)."""
+        candidates = [tc for tc in tax_codes
+                      if self._is_sales_applicable(tc) and not self._is_exempt_code(tc)]
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            tc = candidates[0]
+            current_app.logger.info(
+                f"Output tax: one active sales code '{tc.get('Name')}' (id {tc.get('Id')}) -> using it")
+            return {'value': tc['Id'], 'name': tc.get('Name', '')}
+
+        rate_map = self._fetch_active_tax_rates(qb_connection)
+        expected = self._expected_tax_rate()
+        if expected is not None:
+            for tc in candidates:
+                r = self._code_sales_rate(tc, rate_map)
+                if r is not None and abs(r - expected) < Decimal('0.01'):
+                    return {'value': tc['Id'], 'name': tc.get('Name', '')}
         tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
         keyword = tax_type if tax_type in ('GST', 'VAT') else None
         if keyword:

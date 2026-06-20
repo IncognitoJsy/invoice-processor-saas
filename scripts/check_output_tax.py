@@ -30,8 +30,9 @@ from app.integrations.quickbooks_service import QuickBooksService
 USER_EMAIL = os.environ.get('CHECK_USER_EMAIL', 'incognito.jsy@gmail.com')
 
 
-def _rate(tc):
-    r = QuickBooksService._tax_code_rate(tc)
+def _rate(svc, tc, rate_map):
+    """Real sales rate (from the code's TaxRateRef detail), name-parse as fallback."""
+    r = svc._code_sales_rate(tc, rate_map)
     return f"{r}%" if r is not None else "?"
 
 
@@ -86,12 +87,13 @@ def main():
             print("If running locally, try: railway run python scripts/check_output_tax.py")
             return
 
+        rate_map = svc._fetch_active_tax_rates(conn)  # READ-ONLY: SELECT * FROM TaxRate
         print(f"\nActive QBO tax codes resolve_output_tax selects from ({len(tax_codes)}):")
         if not tax_codes:
             print("  (none returned)")
         for tc in tax_codes:
             tag = " [exempt/zero]" if QuickBooksService._is_exempt_code(tc) else " [taxable]"
-            print(f"  - name={tc.get('Name')!r:42} id={tc.get('Id')!s:6} rate={_rate(tc):>6}{tag}")
+            print(f"  - name={tc.get('Name')!r:42} id={tc.get('Id')!s:6} rate={_rate(svc, tc, rate_map):>6}{tag}")
 
         # 3) Resolve on the REGISTERED path (tax_registered=True, in memory only).
         #    Fresh service per call so the per-request resolver cache doesn't reuse.
