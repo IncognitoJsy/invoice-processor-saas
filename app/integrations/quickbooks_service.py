@@ -10,6 +10,7 @@ import time
 from decimal import Decimal
 
 from app.utils.money import money, to_decimal
+from app.utils.tax import effective_output_rate
 
 
 class QuickBooksService:
@@ -726,44 +727,23 @@ class QuickBooksService:
                 return {'value': tc['Id'], 'name': tc.get('Name', '')}
         return None
 
-    def _expected_tax_rate(self):
-        """The user's configured output rate (percent) as a Decimal, or None. We do
-        NOT guess from tax_type or address country — an address of 'United Kingdom' for
-        a Jersey GST business would wrongly pick 20%. When unset, selection leans on the
-        real-rate read + single-code fallback in _select_taxable_code."""
-        rate = to_decimal(self.user.tax_rate) if self.user is not None else None
-        return rate if (rate is not None and rate > 0) else None
-
     def _select_taxable_code(self, qb_connection, tax_codes):
-        """Pick the sales TaxCode a registered user should charge:
-           1) exactly one active non-exempt sales code -> use it (QBO applies its rate);
-           2) else match a code whose REAL rate equals the user's configured tax_rate;
-           3) else, if tax_type is set, match GST/VAT by name;
-           4) else None (ambiguous -> caller fails closed)."""
+        """Pick the sales TaxCode for a registered user — MATCH-OR-FAIL against the user's
+        configured output rate (`effective_output_rate`). The chosen code's REAL rate (from
+        its TaxRateRef detail) must equal the configured rate within tolerance, so the synced
+        invoice can never carry a rate the user didn't configure / the document didn't show.
+        Returns None (caller fails closed) when the rate is unconfigured or no code matches."""
+        expected = effective_output_rate(self.user)   # registered path -> user.tax_rate
+        if expected <= 0:
+            # Registered but no output rate configured -> cannot reconcile -> fail closed.
+            return None
         candidates = [tc for tc in tax_codes
                       if self._is_sales_applicable(tc) and not self._is_exempt_code(tc)]
-        if not candidates:
-            return None
-        if len(candidates) == 1:
-            tc = candidates[0]
-            current_app.logger.info(
-                f"Output tax: one active sales code '{tc.get('Name')}' (id {tc.get('Id')}) -> using it")
-            return {'value': tc['Id'], 'name': tc.get('Name', '')}
-
         rate_map = self._fetch_active_tax_rates(qb_connection)
-        expected = self._expected_tax_rate()
-        if expected is not None:
-            for tc in candidates:
-                r = self._code_sales_rate(tc, rate_map)
-                if r is not None and abs(r - expected) < Decimal('0.01'):
-                    return {'value': tc['Id'], 'name': tc.get('Name', '')}
-        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
-        keyword = tax_type if tax_type in ('GST', 'VAT') else None
-        if keyword:
-            for tc in candidates:
-                name = (tc.get('Name') or '').upper()
-                if keyword in name and ('NO ' + keyword) not in name:
-                    return {'value': tc['Id'], 'name': tc.get('Name', '')}
+        for tc in candidates:
+            r = self._code_sales_rate(tc, rate_map)
+            if r is not None and abs(r - expected) < Decimal('0.01'):
+                return {'value': tc['Id'], 'name': tc.get('Name', '')}
         return None
     
     # =========================================================================

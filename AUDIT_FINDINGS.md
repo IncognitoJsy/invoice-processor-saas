@@ -231,3 +231,90 @@ key correctness item beyond rounding — flagged for the fix proposal.
   **D5 Decimal+float crash risk**).
 - ⚪ render/preview edges: leave as display, but verify they show the Decimal authority.
 - ⚠️ reconcile the customer-document tax line with the QB/Xero resolver (registration + rate).
+
+---
+
+# Step 2c — document tax vs resolver (diagnosis, 2026-06-20)
+
+Goal: the tax line on the customer-facing PDF must match the tax that the QB/Xero **resolver**
+puts on the synced invoice, so the document a customer receives equals the invoice that lands in
+their books. **Diagnosis only — no code changed.**
+
+## (a) Where `customer_invoice.tax_rate` / `customer_quote.tax_rate` is SET
+
+| # | Site | Source of the rate | Gated on `tax_registered`? |
+|---|---|---|---|
+| S0 | `models/customer_invoice.py:25`, `customer_quote.py:19` | column **default `0`** | n/a |
+| S1 | `web/customer_invoices.py:203` (auto-create from a supplier invoice) | `current_user.tax_rate or 0.0` | **No** |
+| S2 | `web/customer_invoices.py:781` (`create_manual`) | client `data.get('tax_rate')` (the form posts `current_user.tax_rate` — `new.html:193,354`) | **No** |
+| S3 | `web/job_cards.py:294` (job-card → customer invoice) | **hardcoded `tax_rate=0`** | **No** (ignores config entirely) |
+| S4 | `web/customer_quotes.py:83` (quote create) | `current_user.tax_rate or 0.0` | **No** |
+| S5 | `web/customer_quotes.py:282,346` (quote → invoice convert) | copies the **stored `quote.tax_rate`** snapshot | **No** (snapshot can be stale vs current registration) |
+| S6 | `web/customer_quotes.py:417` (`create_manual` quote) | client `data.get('tax_rate')` | **No** |
+
+Net: the document rate is **whatever `current_user.tax_rate` happened to be at create time**
+(S1/S2/S4), a **stale snapshot** (S5), **client-supplied** (S2/S6), or **hardcoded 0** (S3) —
+and **none of them check `tax_registered`**. `tax_rate` is an independently-settable/stale value.
+
+## (b) Document tax line vs resolver — exact divergence cases
+
+- **Document tax line:** `recalculate_totals()` → `tax_amount = money(subtotal × tax_rate / 100)`.
+  So `tax_rate > 0` ⇒ a tax line at that rate; `tax_rate == 0` ⇒ no tax line. Driven solely by
+  the stored `tax_rate` (per the set-sites above).
+- **Resolver on sync** (`resolve_output_tax`): **unregistered → exempt** (no output tax);
+  **registered → the matched/sole QBO `TaxCode`'s real rate** (single-code fallback uses the sole
+  code's `TaxRateRef` rate regardless of `user.tax_rate`; multi-code disambiguates by
+  `user.tax_rate`); **registered + nothing resolvable → fail closed** (`TAX_CODE_UNRESOLVED`,
+  blocks sync).
+
+Divergences (PDF ≠ synced books):
+
+| Case | Document shows | Resolver attaches | When it happens |
+|---|---|---|---|
+| **D-A** unregistered, `tax_rate > 0` | tax at `tax_rate`% | **exempt** (no tax) | any unregistered user with a non-zero `tax_rate` (stale config; S1/S2/S4 copy it ungated). Live account is `tax_rate=0` so safe **by luck**. |
+| **D-B** registered, job-card invoice | **£0 tax** (S3 hardcodes 0) | GST at the code's rate | every job-card→invoice for a registered user — PDF has no tax, books do |
+| **D-C** registered, rate mismatch | `current_user.tax_rate`% (e.g. 20, or 0 if unset) | the **sole code's real rate** (e.g. 5%) | registered user whose `tax_rate` ≠ the QBO code's rate, incl. the **registered-but-`tax_rate`-unset** case (doc shows no tax; sync attaches the code rate) |
+| **D-D** quote→invoice convert | the quote's **snapshot** rate (S5) | current registration/rate | registration or rate changed between quote creation and conversion |
+| **D-E** manual create | **client-supplied** rate (S2/S6) | config/registration | a crafted or stale client value on `create_manual` |
+
+## Display twins (client-side previews that also encode a rate)
+
+- `customer_invoices/new.html:193` & `customer_quotes/new.html:175`: `const taxRate = {{ current_user.tax_rate or 0 }}` → JS preview `subtotal × taxRate/100`. Config-derived but **not gated on `tax_registered`** (an unregistered user with a stale rate previews tax). The form then POSTs this rate into `create_manual` (S2/S6).
+- **V4 (from Phase 2b):** `invoices/index.html:722`, `quotes/index.html:361` — `* 1.05` **hardcodes 5% GST** for the "total with GST" modal preview, regardless of registration or actual rate (wrong for VAT/20% or unregistered users).
+
+## Out of scope (note — do NOT build in 2c)
+- **Per-line mixed VAT rates** (UK 0/5/20 on one invoice) — a separate future feature; 2c assumes a single document rate.
+- **Live-querying the resolver at document-generation time** — we rely on the shared user config as the single source; the resolver's existing **fail-closed** behaviour protects against a genuine QBO code mismatch (it blocks the sync rather than producing divergent books).
+
+## Adjacent gap noticed (not 2c, flag only)
+`customer_quotes.py:417` `create_manual` (quote) still trusts client `subtotal`/`tax_amount`/`total`
+— the same shape as invoice D9, which Phase 2b fixed for invoices but **not** for quotes. Worth a
+follow-up (recompute server-side). *(Fixed as part of 2c — quote manual create now recomputes
+line totals + `recalculate_totals` server-side.)*
+
+## Step 2c — RESOLVED (implementation, 2026-06-20)
+
+Single source of truth: `app/utils/tax.py` `effective_output_rate(user) = tax_registered ? tax_rate : 0`.
+- **Document side (Decision 1 — snapshot at create, immutable):** S1–S6 now snapshot
+  `effective_output_rate(current_user)` — killed the hardcoded `0` (S3 job-card), the
+  client-trust values (S2/S6), and the stale quote snapshot (S5, which now snapshots CURRENT
+  config at conversion). `recalculate_totals` keeps using the STORED rate, so a later settings
+  change never rewrites an issued document.
+- **Resolver side (Decision 2 — match-or-fail):** QB & Xero resolvers target
+  `effective_output_rate(self.user)`; the matched code/TaxType's REAL rate must equal it within
+  tolerance, else **fail closed** (the 3c single-code-regardless and the keyword/country fallbacks
+  are removed). Unregistered → exempt.
+- **Guard:** registered-but-rate-unset blocks document create (every create route) and settings
+  save; sync is blocked by the resolver's fail-closed.
+- **Display twins:** `new.html` JS `taxRate` gated on registration; the list-modal `* 1.05`
+  preview is now config-derived (`1` when unregistered).
+
+### Residual edge (accepted, documented)
+A full-platform user who BOTH sends a `CustomerInvoice` PDF **and** separately syncs the
+underlying supplier `Invoice` to QB/Xero for the same job, **and changes their configured rate in
+between**, can end up with the PDF (snapshot, old rate) and the QB/Xero invoice (resolver, new
+rate) differing. This is inherent to the two being separate artifacts from different objects (the
+PDF never syncs; the supplier invoice carries no output-rate snapshot). It's rare, and the
+resolver's **fail-closed** still prevents a genuine code mismatch from silently producing wrong
+books — it blocks the sync instead. Threading a single per-object snapshot through both would be
+Option B (over-coupling), explicitly not taken.

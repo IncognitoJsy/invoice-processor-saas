@@ -164,18 +164,35 @@ def test_unset_config_with_multiple_codes_is_unresolved(app):
     assert code is None
 
 
-# ── 5. Real-world shapes (Step 3c): rate in TaxRateRef detail, not the name ──────
-# Mirrors the live company: one sales code named just "GST" (id 2), rate carried in
-# its TaxRateRef detail, user tax config unset. Must resolve via the single-code
-# fallback instead of fail-closing.
+# ── 5. Real-world shapes + Step 2c match-or-fail ─────────────────────────────────
+# Live company shape: one sales code named just "GST" (id 2), rate in its TaxRateRef
+# detail (not the name).
 GST_REAL = {'Id': '2', 'Name': 'GST',
             'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '5'}}]}}
 
 
-def test_single_gst_code_used_when_config_unset_real_shape(app):
-    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=0,
+def test_single_gst_code_with_configured_rate_is_taxable(app):
+    # Proton.je shape once configured: sole "GST" code (5% in detail), user tax_rate=5 ->
+    # match-or-fail succeeds and attaches it.
+    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='GST', tax_rate=5,
                           country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
     assert svc.resolve_output_tax(CONN) == ({'value': '2', 'name': 'GST'}, 'taxable')
+
+
+def test_registered_rate_unset_is_unresolved(app):
+    # 2c: a registered user with NO configured output rate cannot reconcile doc vs sync
+    # — the 3c single-code fallback is gone; match-or-fail needs a configured rate.
+    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=0,
+                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
+    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
+
+
+def test_registered_rate_mismatch_fails_closed(app):
+    # 2c: configured 20% but the only code is 5% -> no match -> fail closed (never
+    # silently attach a rate the user didn't configure / the document didn't show).
+    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=20,
+                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
+    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
 
 
 def test_registered_matches_by_real_rate_from_detail(app):

@@ -9,6 +9,7 @@ from typing import Dict, Optional, List
 from flask import url_for
 
 from app.utils.money import money
+from app.utils.tax import effective_output_rate
 
 logger = logging.getLogger(__name__)
 
@@ -297,16 +298,16 @@ class XeroService:
             logger.info(f"Output tax: user not GST/VAT-registered -> exempt ({exempt})")
             return self._output_tax_cache
 
-        # Registered: lines MUST carry output GST at the user's region rate.
-        expected_rate = self._expected_tax_rate()
-        tax_type = self._select_taxable_tax_type(tax_rates, expected_rate)
+        # Registered: lines MUST carry output GST at the user's CONFIGURED rate.
+        tax_type = self._select_taxable_tax_type(tax_rates)
         if tax_type:
-            logger.info(f"Output tax: registered -> TaxType '{tax_type}' (target rate {expected_rate}%)")
+            logger.info(f"Output tax: registered -> TaxType '{tax_type}' "
+                        f"(target rate {effective_output_rate(self.user)}%)")
             self._output_tax_cache = (tax_type, 'taxable')
         else:
             logger.error(
-                f"Output tax: registered user, no sales tax type matching {expected_rate}% "
-                f"(tax_type={getattr(self.user, 'tax_type', None)}) — blocking sync")
+                "Output tax: registered user but no sales tax type matches the configured rate "
+                f"{effective_output_rate(self.user)}% — blocking sync")
             self._output_tax_cache = (None, 'unresolved')
         return self._output_tax_cache
 
@@ -359,41 +360,20 @@ class XeroService:
                 return tr.get('TaxType') or 'NONE'
         return 'NONE'  # Xero's built-in no-tax type — always valid
 
-    def _expected_tax_rate(self):
-        """Output-GST rate this user should charge: explicit tax_rate first, then
-        tax_type (GST=5, VAT=20), then region/country, defaulting to UK VAT 20%."""
-        try:
-            rate = float(self.user.tax_rate) if self.user.tax_rate is not None else 0.0
-        except (TypeError, ValueError):
-            rate = 0.0
-        if rate > 0:
-            return rate
-        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
-        if tax_type == 'GST':
-            return 5.0
-        if tax_type == 'VAT':
-            return 20.0
-        country = (getattr(self.user, 'country', '') or
-                   getattr(self.user, 'business_address_country', '') or '').lower()
-        if any(x in country for x in ('jersey', 'guernsey')):
-            return 5.0
-        return 20.0
-
-    def _select_taxable_tax_type(self, tax_rates, expected_rate):
-        """Active, sales-applicable, non-exempt TaxType whose rate matches
-        expected_rate; falls back to a tax_type keyword when no rate matches."""
+    def _select_taxable_tax_type(self, tax_rates):
+        """Active, sales-applicable, non-exempt TaxType — MATCH-OR-FAIL against the user's
+        configured output rate (`effective_output_rate`). The rate's real value must equal the
+        configured rate within tolerance, else None (caller fails closed) — so the synced
+        invoice never carries a rate the user didn't configure / the document didn't show."""
+        expected = float(effective_output_rate(self.user))
+        if expected <= 0:
+            return None
         candidates = [tr for tr in self._active(tax_rates)
                       if self._is_sales_applicable(tr) and not self._is_exempt_rate(tr)]
         for tr in candidates:
             rate = self._tax_rate_value(tr)
-            if rate is not None and abs(rate - expected_rate) < 0.01:
+            if rate is not None and abs(rate - expected) < 0.01:
                 return tr.get('TaxType')
-        tax_type = (getattr(self.user, 'tax_type', '') or '').upper()
-        keyword = tax_type if tax_type in ('GST', 'VAT') else None
-        if keyword:
-            for tr in candidates:
-                if keyword in (tr.get('Name') or '').upper():
-                    return tr.get('TaxType')
         return None
     
     def get_default_purchase_tax_type(self, connection) -> str:

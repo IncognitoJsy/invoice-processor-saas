@@ -140,12 +140,22 @@ def test_jersey_gst_picked_over_vat_by_rate(app):
     assert tax_type == 'GSTONINCOME'
 
 
-def test_region_drives_gst_when_tax_type_and_rate_blank(app):
+def test_registered_rate_unset_is_unresolved(app):
+    # 2c: no configured rate -> match-or-fail can't reconcile -> fail closed (we do NOT
+    # guess from address country).
     svc, _ = make_service([VAT20, GST5], tax_registered=True, tax_type='', tax_rate=0,
-                          country='Jersey')
-    tax_type, status = svc.resolve_output_tax(CONN)
-    assert status == 'taxable'
-    assert tax_type == 'GSTONINCOME'
+                          country=None)
+    code, status = svc.resolve_output_tax(CONN)
+    assert status == 'unresolved'
+    assert code is None
+
+
+def test_registered_rate_mismatch_fails_closed(app):
+    # configured 20% but only a 5% sales rate exists -> no match -> fail closed.
+    svc, _ = make_service([GST5], tax_registered=True, tax_type='', tax_rate=20, country=None)
+    code, status = svc.resolve_output_tax(CONN)
+    assert status == 'unresolved'
+    assert code is None
 
 
 def test_sales_rate_chosen_over_purchase_rate_same_percent(app):
