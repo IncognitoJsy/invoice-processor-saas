@@ -156,3 +156,78 @@ round-per-line-then-sum, per CLAUDE.md / AUDIT.md risk #4.
    Decimal only appears at the storage boundary. This is exactly AUDIT risk #4 Phase 2.
 5. Sync `created`/`updated` counters never incremented (cosmetic).
 6. Dead duplicate `app/services/quickbooks_service.py` — divergence risk.
+
+---
+
+# Phase 2b — customer-document / report money (diagnosis, 2026-06-20)
+
+Scope: the customer-facing document path and the tax reports — i.e. the half of AUDIT risk #4
+that Phase 2 (`fce9fd6`) deliberately left out. **No code changed in this section — diagnosis
+only.** Storage is already Numeric (Phase 1); the defects below are all in the *arithmetic*:
+binary-float maths and/or Python `round()` (banker's, round-half-even) instead of Decimal
+`money()` (ROUND_HALF_UP). Severity key: 🔴 GST/VAT-return figure · 🟠 customer-facing document
+figure (invoice/quote sent for money) · ⚪ render/preview edge (display only).
+
+## 🔴 Highest stakes — VAT/GST-return figures
+
+| # | File:line | Computes | Type | Feeds |
+|---|---|---|---|---|
+| R1 | `web/tax_reports.py:94` | `net_tax = round(output_tax_total − input_tax_total, 2)` | Python `round()` on Decimal sums (banker's) | **GST return** net tax due |
+| R2 | `web/tax_reports.py:103–107` | `round(...)` of input/output tax + net/gross totals | Python `round()` on Decimal sums | **GST return** all boxes |
+| R3 | `web/tax_reports.py:78,79,90,91,92` | `sum(inv.tax_amount or 0)`, `sum(inv.subtotal …)` etc. | Decimal sums (cols are Numeric) — but **inherit upstream mis-rounded `customer_invoice.tax_amount`** (see D1/D3) | **GST return** input/output totals |
+| R4 | `web/reports.py:171–172` | `output_vat = float(sales.vat)`; `input_vat_estimate = float(net) × float(vat_rate)/100` | **float** arithmetic | **VAT return** box1/box4 |
+| R5 | `web/reports.py:177–181` | `box1/4/5/6/7 = round(float, 2)` | `round()` on **float** | **VAT return** HMRC boxes |
+| R6 | `web/reports.py:87–117` | `sum(float(r.total/tax_amount/total_cost))`, `round(float, 2/1)` | **float** sums + `round()` | P&L report (revenue, VAT collected, costs, margin) |
+
+Note: `tax_reports` SQL-free totals are Decimal sums (good post-Phase-1), so the report's *own*
+rounding is a minor banker's-vs-half-up issue; the real exposure is that it faithfully sums
+per-invoice `tax_amount` values that were themselves computed in float/banker's (D1/D3). The
+`reports.py` VAT boxes are worse — they do the whole computation in float.
+
+## 🟠 Customer-facing document figures
+
+| # | File:line | Computes | Type | Feeds |
+|---|---|---|---|---|
+| D1 | `models/customer_invoice.py:63–65` `recalculate_totals()` | `subtotal=Σ line_total`; `tax_amount=round(subtotal×rate/100,2)`; `total=round(subtotal+tax,2)` | Decimal sum but Python `round()` (banker's) | **customer invoice** subtotal/tax/total (the PDF sent for money) |
+| D2 | `models/customer_quote.py:40–42` `recalculate_totals()` | same shape as D1 | Decimal sum + `round()` | **customer quote** totals |
+| D3 | `web/job_cards.py:425–433` `_recalculate_invoice()` | `subtotal=Σ float(line_total)`; `tax=subtotal×(float(rate)/100)`; `total=subtotal+tax` | **float, tax & total NEVER rounded** → stores e.g. 24.59999 into Numeric(12,2) | **customer invoice built from job cards** |
+| D4 | `models/customer_quote.py:82` `calculate_total()` | `line_total=round(qty×unit_price,2)` | `round()` on Decimal (banker's) | quote line total |
+| D5 | `web/customer_invoices.py:281` | `existing.unit_price = round((existing.unit_price or 0) + total_selling, 2)` | **`Decimal + float` → TypeError risk** when the line reloads from DB (unit_price is Numeric→Decimal); also banker's `round()` | Materials-Used running total on a customer invoice — **possible live crash**, not just rounding |
+| D6 | `web/customer_invoices.py:259,546` | new line `line_total = round(qty × unit_price, 2)` | **float×float** (qty/unit_price taken via `float()` at :236–237, :537–538) | new customer-invoice line totals |
+| D7 | `web/customer_invoices.py:249–250,454` | existing line `line_total = round(qty × unit_price, 2)` | `round()` on Decimal cols (banker's); at :454 operands set via `float()` (:447–453) | edited customer-invoice line totals |
+| D8 | `web/job_cards.py:375,385,398,409` | line/summary totals: `qty×unit_price` (no round), `Σ float(...)`, `float + float` | **float / unrounded** | job-card→customer-invoice line + Materials summary |
+| D9 | `web/customer_invoices.py:777–793` | create-from-JSON: `subtotal/tax_amount/total = data.get(...)`, line `unit_price/line_total` from payload | trusts client floats/strings as-is | manually created customer invoice |
+
+## ⚪ Render / preview edges (display only — not stored; lower priority)
+
+| # | File:line | Note |
+|---|---|---|
+| V1 | `services/pdf_generator.py:103` `_fmt_money` | `f'£{float(v):.2f}'` — formats a Decimal for the PDF. Lossless for clean 2dp; render edge. |
+| V2 | `web/reports.py:223–224`, `web/tax_reports.py:147–172` | CSV `f'{x:.2f}'` export formatting — render edge. |
+| V3 | `customer_invoices/new.html`, `customer_quotes/new.html` (line/tax JS) | **client-side preview** (`qty*price`, `subtotal*taxRate/100`) — server `recalculate_totals` is authoritative; ensure server matches. |
+| V4 | `invoices/index.html:722`, `quotes/index.html:361` | JS `* 1.05` hardcodes 5% GST in a modal preview — display only, but hardcoded rate is its own (non-Decimal) smell. |
+
+## ⚠️ Cross-check: printed customer tax vs what QB/Xero actually attaches
+
+The customer invoice/quote **tax line is computed locally** from `customer_invoice.tax_rate`
+(D1) / the job-card `tax_rate` (D3) as `subtotal × rate/100`. But on sync, the QB/Xero path
+(`create_invoice`/`add_items_to_invoice`) attaches a **tax code/TaxType** and lets QBO/Xero
+compute the tax (Step 3 resolver: registered → 5% GST code, unregistered → exempt). So the
+**printed document and the synced document can disagree** whenever:
+- `customer_invoice.tax_rate` ≠ the resolved code's real rate (e.g. doc rate 0 or 20 while the
+  resolver attaches GST 5%), or
+- the user is **unregistered**: the resolver forces exempt (no output tax), but
+  `recalculate_totals` will still add a tax line if `tax_rate > 0`.
+
+So Phase 2b should not only Decimalise these sites but also **drive the customer-document tax
+rate from the same source the resolver uses** (registration + the resolved code's rate), so the
+PDF the customer receives matches the invoice that lands in their accounting system. This is the
+key correctness item beyond rounding — flagged for the fix proposal.
+
+## Summary of what Phase 2b must touch
+- 🔴 `tax_reports.py` (R1–R3), `reports.py` VAT boxes + P&L (R4–R6) — GST/VAT-return figures.
+- 🟠 `customer_invoice.recalculate_totals`, `customer_quote.recalculate_totals` + `calculate_total`,
+  `job_cards._recalculate_invoice`, `customer_invoices.py` line/merge/summary sites (incl. the
+  **D5 Decimal+float crash risk**).
+- ⚪ render/preview edges: leave as display, but verify they show the Decimal authority.
+- ⚠️ reconcile the customer-document tax line with the QB/Xero resolver (registration + rate).
