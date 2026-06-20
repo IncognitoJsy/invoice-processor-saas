@@ -20,6 +20,7 @@ Optional env:
     APP_CONFIG=...         (default: default)
 """
 import os
+from decimal import Decimal
 
 from app import create_app
 from app.extensions import db
@@ -95,16 +96,19 @@ def main():
             tag = " [exempt/zero]" if QuickBooksService._is_exempt_code(tc) else " [taxable]"
             print(f"  - name={tc.get('Name')!r:42} id={tc.get('Id')!s:6} rate={_rate(svc, tc, rate_map):>6}{tag}")
 
-        # 3) Resolve on the REGISTERED path (tax_registered=True, in memory only).
+        # 3) Resolve on the REGISTERED path — force BOTH tax_registered=True AND a
+        #    configured rate (tax_rate=5) in memory only. The match-or-fail resolver needs a
+        #    configured rate; with the live tax_rate=0 it would (correctly) fail closed.
         #    Fresh service per call so the per-request resolver cache doesn't reuse.
         user.tax_registered = True
+        user.tax_rate = Decimal('5')
         reg = QuickBooksService(user).resolve_output_tax(conn)
-        print(f"\nREGISTERED   (tax_registered=True):  resolve_output_tax -> {reg}")
+        print(f"\nREGISTERED   (tax_registered=True, tax_rate=5):  resolve_output_tax -> {reg}")
 
         # 4) Resolve on the UNREGISTERED path (tax_registered=False, in memory only).
         user.tax_registered = False
         unreg = QuickBooksService(user).resolve_output_tax(conn)
-        print(f"UNREGISTERED (tax_registered=False): resolve_output_tax -> {unreg}")
+        print(f"UNREGISTERED (tax_registered=False):            resolve_output_tax -> {unreg}")
 
         # Discard any in-memory ORM state; we commit nothing.
         db.session.rollback()
