@@ -89,10 +89,16 @@ treat anything touching extraction, validation, or money maths as critical-path 
     line/merge/summary/manual, and `tax_reports.py` + `reports.py` P&L/VAT boxes). All live money
     arithmetic is now Decimal, ROUND_HALF_UP, line-authority, with float only at the
     DB/JSON/CSV/API edges; also fixed 3 reachable `Decimal+float` merge crashes. See AUDIT.md §2.
-    ⏳ **Lone remaining item — Step 2c (behaviour change, not rounding):** the printed
-    customer-document tax line (from `customer_invoice.tax_rate`) can disagree with the
-    rate/exemption the QB/Xero resolver attaches on sync; reconciling them is deferred and only
-    applies once an account is registered (today's live account is unregistered → exempt both ways).
+  - **Step 2c — ✅ DONE** (`7a7c284` document side, `87ac248` resolver side): the printed
+    customer-document tax line and the QB/Xero resolver both derive from one shared
+    `effective_output_rate(user)` = (registered ? tax_rate : 0) (`app/utils/tax.py`). Documents
+    snapshot it at create and never re-derive (immutable records); the resolver targets it with
+    **match-or-fail** (the matched code's real rate must equal the configured rate, else fail
+    closed — 3c's single-code/keyword/country fallbacks removed); registered-but-rate-unset is
+    blocked at document create, sync, and settings save. Production-verified read-only
+    (`scripts/check_output_tax.py`): registered → `(GST id 2, taxable)` at real 5%, unregistered →
+    exempt; no QBO writes. Residual edge (rare, documented): a PDF + a separately-synced supplier
+    invoice for one job can differ if the rate changes between — resolver fail-closed protects books.
     ⚠️ **DEFERRED money path — Quote Builder:** `project.py` contingency + `project_material`/
     `project_labour` maths are still float/unrounded. Quote Builder is flagged OFF so it isn't
     live, but this **must be migrated to `money()` before the flag is turned on / Quote Builder
