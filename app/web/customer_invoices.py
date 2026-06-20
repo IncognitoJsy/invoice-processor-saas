@@ -7,6 +7,7 @@ from app.models.customer import Customer
 from app.models.invoice import Invoice, InvoiceItem
 from app.models.product_service import ProductService
 from app.utils.money import money, to_decimal
+from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime
 import logging
 
@@ -176,6 +177,9 @@ def add_supplier_invoice():
     if not customer_id or not supplier_invoice_id:
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
 
+    if output_rate_unconfigured(current_user):
+        return jsonify({'success': False, 'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
+
     customer = Customer.query.filter_by(
         id=customer_id, user_id=current_user.id).first_or_404()
     supplier_invoice = Invoice.query.filter_by(
@@ -200,7 +204,7 @@ def add_supplier_invoice():
             invoice_mode=mode,
             payment_terms=customer.payment_terms or current_user.default_payment_terms or '30',
             issue_date=datetime.utcnow(),
-            tax_rate=current_user.tax_rate or 0.0,
+            tax_rate=effective_output_rate(current_user),  # snapshot: 0 if unregistered
         )
         customer_invoice.calculate_due_date()
         db.session.add(customer_invoice)
@@ -760,6 +764,8 @@ def create_manual():
     """Create invoice from manual entry"""
     from datetime import date, timedelta
     data = request.get_json()
+    if output_rate_unconfigured(current_user):
+        return jsonify({'success': False, 'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
     inv_num = current_user.next_invoice_number or 1
     current_user.next_invoice_number = inv_num + 1
     invoice_number = f"{current_user.invoice_prefix or 'INV'}-{inv_num:03d}"
@@ -776,9 +782,9 @@ def create_manual():
         status='open',
         issue_date=issue,
         due_date=due,
-        # Totals are recomputed server-side from the lines below — never trust the
-        # client-supplied subtotal/tax_amount/total. Only the tax RATE is taken as given.
-        tax_rate=to_decimal(data.get('tax_rate', 0)),
+        # Totals AND the tax rate are derived server-side — never trust the client. The
+        # rate is the config snapshot (0 if unregistered); totals recomputed from lines below.
+        tax_rate=effective_output_rate(current_user),
         notes=data.get('notes', ''),
         payment_terms=data.get('payment_terms', '30'),
         job_card_id=data.get('job_card_id') or None,

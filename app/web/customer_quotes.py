@@ -5,6 +5,8 @@ from app.extensions import db
 from app.models.customer_quote import CustomerQuote, CustomerQuoteLine
 from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
 from app.models.customer import Customer
+from app.utils.money import money, to_decimal
+from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime, date, timedelta
 
 bp = Blueprint('customer_quotes', __name__, url_prefix='/customer-quotes')
@@ -73,6 +75,9 @@ def new():
 @login_required
 def create():
     customer_id = request.form.get('customer_id') or None
+    if output_rate_unconfigured(current_user):
+        flash(OUTPUT_RATE_UNSET_MESSAGE, 'error')
+        return redirect(request.referrer or url_for('customer_quotes.index'))
     quote = CustomerQuote(
         user_id=current_user.id,
         customer_id=int(customer_id) if customer_id else None,
@@ -80,7 +85,7 @@ def create():
         status='draft',
         issue_date=date.today(),
         expiry_date=date.today() + timedelta(days=30),
-        tax_rate=current_user.tax_rate or 0.0,
+        tax_rate=effective_output_rate(current_user),  # snapshot: 0 if unregistered
         payment_terms=current_user.default_payment_terms or '30',
         notes=current_user.invoice_notes or '',
     )
@@ -261,6 +266,8 @@ def convert_to_invoice(quote_id):
     quote = CustomerQuote.query.filter_by(id=quote_id, user_id=current_user.id).first_or_404()
     if quote.status not in ('accepted', 'sent', 'draft'):
         return jsonify({'error': 'Quote cannot be converted'}), 400
+    if output_rate_unconfigured(current_user):
+        return jsonify({'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
 
     from datetime import timedelta
     # Create invoice
@@ -278,10 +285,8 @@ def convert_to_invoice(quote_id):
         status='open',
         issue_date=date.today(),
         due_date=due,
-        subtotal=quote.subtotal,
-        tax_rate=quote.tax_rate,
-        tax_amount=quote.tax_amount,
-        total=quote.total,
+        # Snapshot CURRENT config at conversion (not the quote's old rate); totals recomputed below.
+        tax_rate=effective_output_rate(current_user),
         notes=quote.notes,
         payment_terms=terms,
         mode='itemised',
@@ -301,6 +306,7 @@ def convert_to_invoice(quote_id):
         )
         db.session.add(inv_line)
 
+    invoice.recalculate_totals()  # subtotal/tax/total from lines + the conversion-time rate
     quote.status = 'converted'
     quote.converted_invoice_id = invoice.id
     db.session.commit()
@@ -327,6 +333,8 @@ def accept_manual(quote_id):
 
     if convert:
         # Convert to invoice
+        if output_rate_unconfigured(current_user):
+            return jsonify({'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
         from datetime import timedelta
         inv_num = current_user.next_invoice_number or 1
         current_user.next_invoice_number = inv_num + 1
@@ -342,10 +350,8 @@ def accept_manual(quote_id):
             status='open',
             issue_date=date.today(),
             due_date=due,
-            subtotal=quote.subtotal,
-            tax_rate=quote.tax_rate,
-            tax_amount=quote.tax_amount,
-            total=quote.total,
+            # Snapshot CURRENT config at conversion; totals recomputed from lines below.
+            tax_rate=effective_output_rate(current_user),
             notes=quote.notes,
             payment_terms=terms,
         )
@@ -361,6 +367,7 @@ def accept_manual(quote_id):
                 sort_order=i,
             )
             db.session.add(inv_line)
+        invoice.recalculate_totals()
         quote.status = 'converted'
         quote.converted_invoice_id = invoice.id
         db.session.commit()
@@ -397,6 +404,8 @@ def create_manual():
     """Create quote from manual entry"""
     from datetime import date, timedelta, datetime as dt
     data = request.get_json()
+    if output_rate_unconfigured(current_user):
+        return jsonify({'success': False, 'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
     quote_num = current_user.next_quote_number or 1
     current_user.next_quote_number = quote_num + 1
     quote_number = f"{current_user.quote_prefix or 'QUO'}-{quote_num:03d}"
@@ -413,10 +422,8 @@ def create_manual():
         status='draft',
         issue_date=issue,
         expiry_date=expiry,
-        subtotal=data.get('subtotal', 0),
-        tax_rate=data.get('tax_rate', 0),
-        tax_amount=data.get('tax_amount', 0),
-        total=data.get('total', 0),
+        # Rate is the config snapshot (0 if unregistered); totals recomputed server-side below.
+        tax_rate=effective_output_rate(current_user),
         notes=data.get('notes', ''),
         payment_terms=data.get('payment_terms', '30'),
         job_card_id=data.get('job_card_id') or None,
@@ -425,14 +432,17 @@ def create_manual():
     db.session.add(quote)
     db.session.flush()
     for line in data.get('lines', []):
+        qty = to_decimal(line.get('quantity', 0))
+        unit_price = to_decimal(line.get('unit_price', 0))
         q_line = CustomerQuoteLine(
             quote_id=quote.id,
             description=line['description'],
-            quantity=line['quantity'],
-            unit_price=line['unit_price'],
-            line_total=line['line_total'],
+            quantity=qty,
+            unit_price=unit_price,
+            line_total=money(qty * unit_price),  # recomputed, not trusted from client
             sort_order=line.get('sort_order', 0),
         )
         db.session.add(q_line)
+    quote.recalculate_totals()  # subtotal/tax/total from the Decimal lines
     db.session.commit()
     return jsonify({'success': True, 'redirect': url_for('customer_quotes.view', quote_id=quote.id)})

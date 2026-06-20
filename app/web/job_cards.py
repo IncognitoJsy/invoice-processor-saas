@@ -6,6 +6,7 @@ from app.models.job_card import JobCard
 from app.models.customer_invoice import CustomerInvoiceLine
 from app.models.customer import Customer
 from app.utils.money import money, to_decimal
+from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime
 
 bp = Blueprint('job_cards', __name__, url_prefix='/jobs')
@@ -224,6 +225,9 @@ def api_attach_supplier_invoice():
     if not invoice_id:
         return jsonify({'error': 'No invoice ID'}), 400
 
+    if output_rate_unconfigured(current_user):
+        return jsonify({'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
+
     from app.models.invoice import Invoice, InvoiceItem
     from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
     from app.models.user import User
@@ -291,7 +295,7 @@ def api_attach_supplier_invoice():
             due_date=due,
             payment_terms=str(terms_days),
             subtotal=0,
-            tax_rate=0,
+            tax_rate=effective_output_rate(current_user),  # snapshot: 0 if unregistered
             tax_amount=0,
             total=0,
             notes='',

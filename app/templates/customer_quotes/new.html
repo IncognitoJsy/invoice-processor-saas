@@ -172,7 +172,7 @@
 <script>
 const docType = '{{ doc_type }}';
 const csrf = '{{ csrf_token() }}';
-const taxRate = {{ current_user.tax_rate or 0 }};
+const taxRate = {{ (current_user.tax_rate if current_user.tax_registered else 0) or 0 }};
 let lines = [];
 let lineIdCounter = 0;
 

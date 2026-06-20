@@ -216,6 +216,12 @@ def save_tax():
                 current_user.tax_rate = float(request.form.get('tax_rate', 0))
             except ValueError:
                 current_user.tax_rate = 0.0
+            # A registered user MUST have an output rate, or the printed document (which
+            # would show no tax) and the QB/Xero sync (which attaches the code's rate) diverge.
+            if not current_user.tax_rate or current_user.tax_rate <= 0:
+                db.session.rollback()
+                flash('Enter your output tax rate (e.g. 5 for GST, 20 for VAT) to register.', 'error')
+                return redirect(url_for('setup.step', step=4))
             tax_from = request.form.get('tax_registered_from', '')
             if tax_from:
                 current_user.tax_registered_from = datetime.strptime(tax_from, '%Y-%m-%d')
