@@ -9,6 +9,47 @@ celery references) were independently re-verified, not just pattern-matched.
 
 ---
 
+## STATUS UPDATE (2026-06-18) — Sprint A Phase 2 fixes landed
+
+Branch `sprint-a-phase2-markup`; per-line diagnosis preserved in `AUDIT_FINDINGS.md`. The items
+below are now **CLOSED** (sections further down carry inline ✅ markers). Full suite: **143 passed**.
+
+- **Risk #4 — money maths: ✅ CLOSED for the supplier-invoice + sync path; ⏳ customer-facing
+  path still open.** Phase 1 (Float→Numeric storage, 2026-06-15, all 28 columns) + Phase 2
+  (`fce9fd6`): a single shared Decimal `money()` helper (`app/utils/money.py`, also adopted by
+  `invoice_validator`). All money arithmetic on the **supplier-invoice extraction → markup →
+  storage path and the QB/Xero sync path** is now Decimal, with float only at the DB / JSON
+  response / QB+Xero API edges; invoice totals are line-authority and reconcile to the penny
+  (`total_profit == total_selling − total_cost`); ROUND_HALF_UP throughout. Money test corpus
+  added (`tests/unit/test_money.py`, `tests/unit/test_claude_parser_calc.py`,
+  `tests/integration/test_money_totals.py`).
+  **Still float `round()` (NOT in this sprint):** the full-platform customer-document maths —
+  `customer_invoice.recalculate_totals()`, `customer_quote`, `customer_invoices.py` line/summary,
+  `job_cards.py` invoice lines/tax, and the P&L / VAT-return reports (`reports.py`,
+  `tax_reports.py`). Storage is Numeric there (Phase 1) but the arithmetic is still binary float —
+  these inherit `money()` next.
+- **Markup — ✅** per-unit price-override no longer multiplies a line total by quantity (the
+  qty² overcharge), markup tier bands made continuous (no fractional-discount gap), `avg_markup`
+  cap kept in Decimal (F1) — `7da148b`.
+- **Part-number OCR — ✅** matcher no longer conflates distinct parts on a digit-for-digit
+  difference (SB20MWH↔SB25MWH); the printed code wins unless it's a glyph misread or a
+  learned/exact match — `0b3c7d5`.
+- **QuickBooks & Xero output GST — ✅** registration- & region-aware: unregistered → tax-exempt,
+  registered → the rate-matched code/TaxType (Jersey 5% over UK 20%), and a registered user with
+  no resolvable code **fails closed** (`TAX_CODE_UNRESOLVED`) instead of silently syncing
+  tax-free — `b357f33` (QB), `cd54ffc` (Xero).
+- **QB resolver hardened against real tax-code shapes (Step 3c) — ✅** `16edb91`. Reads each
+  code's ACTUAL rate from its `TaxRateRef → TaxRate.RateValue` (stops parsing the rate from the
+  name); adds a single-code fallback (one active non-exempt sales code → use it); drops the
+  UK-20% / address-country default that fail-closed the live GST-only company (Proton.je, sole
+  code named just `"GST"`, 5% in the detail). Verified read-only against production: registered →
+  `(GST id 2, taxable)` at a real 5%, unregistered → exempt.
+- **Dead duplicate `app/services/quickbooks_service.py` deleted** — `fbee76a`.
+- **Parser-calc regression suite added** — `9aa9aa0`. Read-only QBO diagnostic
+  `scripts/check_output_tax.py` — `3b7071b`.
+
+---
+
 ## 1. Codebase map
 
 ### 1.1 Structure
@@ -39,8 +80,8 @@ app/
 │                        #   pdf_generator.py, pdf_service.py (dead), product_matcher.py,
 │                        #   duplicate_detection.py, description_cleaner.py (OpenAI!),
 │                        #   email_sender.py + email_service.py (overlapping),
-│                        #   symbol_detector.py + symbol_detector_ai.py (overlapping),
-│                        #   quickbooks_service.py (stale duplicate of integrations copy)
+│                        #   symbol_detector.py + symbol_detector_ai.py (overlapping)
+│                        #   [quickbooks_service.py stale duplicate — DELETED fbee76a]
 ├── integrations/        # quickbooks_service.py (the imported copy), xero_service.py
 ├── models/              # 22 model modules (see §7)
 ├── utils/               # password_validation.py, upload_validation.py
@@ -93,12 +134,13 @@ in some tables vs Float in others).
 
 ### 2.1 Storage types
 
-**UPDATE (2026-06-15) — Phase 1 of risk #4 done.** All 28 Float money columns were
-migrated to Numeric in production via `money_float_to_numeric` (storage-only,
-behaviour-preserving: verified checksum unchanged, row counts intact). The rows below
-that previously read **Float** are now Numeric ✅. **Phase 2 (the Decimal `money()`
-helper + converting the float `round()` calc sites + a test corpus) is still
-outstanding** — the calculation regimes in §2.2/§2.3 are unchanged.
+**UPDATE (2026-06-18) — storage fully Numeric; arithmetic now Decimal on the supplier path.**
+Phase 1 (2026-06-15) migrated all 28 Float money columns to Numeric in production via
+`money_float_to_numeric` (storage-only, behaviour-preserving: verified checksum unchanged, row
+counts intact) — the rows below that previously read **Float** are now Numeric ✅. Phase 2
+(`fce9fd6`, 2026-06-18) replaced float arithmetic with the shared Decimal `money()` helper on the
+**supplier-invoice + QB/Xero sync path** (§2.2 rows marked ✅). The customer-facing/full-platform
+calculation sites in §2.2 (storage already Numeric) still use float `round()` — see §2.3.
 
 | Table / columns | Type |
 |---|---|
@@ -120,11 +162,11 @@ report sums them (`tax_reports.py:78,90–94`).
 
 | Location | Calculation | Type / rounding issue |
 |---|---|---|
-| `parsers/yesss_parser.py:154–221`, `wholesale_parser.py:160–278` | discount + markup (`cost × (1+markup)`) | float, Python `round()` (banker's) |
-| `web/upload.py:459–467` | totals from items | Decimal sums **cast to float** for Float columns |
-| `web/upload.py:472` | average markup | capped at 999.99, never rounded |
-| `web/upload.py:567` | product sync sale price | float `round()` |
-| `models/customer_invoice.py:61–65` | `recalculate_totals()` | float, `round()` |
+| `parsers/claude_parser.py` `_transform_items` | discount + markup (`cost × (1+markup)`) | ✅ Decimal + `money()` (`fce9fd6`). NOTE: `yesss_parser.py`/`wholesale_parser.py` regex parsers still float `round()` |
+| `web/upload.py` `save_invoice_to_db` totals | totals from items | ✅ Decimal, line-authority, `money()` (`fce9fd6`) |
+| `web/upload.py` average markup | average markup | ✅ Decimal cap + `money()` (F1, `7da148b`/`fce9fd6`) |
+| `web/upload.py` tax columns | supplier tax / ex-/inc-tax write | ✅ `money()` (F4, `fce9fd6`) — was raw `float()` into Numeric |
+| `models/customer_invoice.py:61–65` | `recalculate_totals()` | ⏳ still float, `round()` (full-platform path, not this sprint) |
 | `models/customer_quote.py:39–42`, line `:81–82` | quote totals | float, `round()` |
 | `web/customer_invoices.py:249–281` | line merge/summary lines | float, `round()` |
 | `web/job_cards.py:375,385` | merged/new invoice lines | float, **no rounding at all** |
@@ -132,9 +174,9 @@ report sums them (`tax_reports.py:78,90–94`).
 | `models/project.py:83` | contingency amount | no rounding |
 | `web/reports.py:87–117,171–173` | P&L + VAT estimate | float aggregation, rounding only at output |
 | `web/tax_reports.py:78–108` | VAT return sums | sums Float columns, output rounding only |
-| `integrations/quickbooks_service.py:827,831,1145,1237–1246` | QB prices/line amounts | float `round()` |
-| `integrations/xero_service.py:474–475` | price-change comparison | **raw float `>` comparison** |
-| `services/invoice_validator.py:43–59` | `_to_decimal()`/`_money()` | Decimal + `ROUND_HALF_UP` ✓ — but unused in pipeline |
+| `integrations/quickbooks_service.py` payloads | QB prices/line amounts | ✅ `float(money(...))` at payload edge (`fce9fd6`); GST tax code registration/region-aware (`b357f33`), hardened to read the real `TaxRateRef` rate + single-code fallback (`16edb91`) |
+| `integrations/xero_service.py` payloads | price comparison + line amounts | ✅ Decimal rate compare + `float(money(...))` UnitAmount (`cd54ffc`/`fce9fd6`) |
+| `services/invoice_validator.py` | `_to_decimal()`/`_money()` | ✅ now delegate to the shared `app/utils/money.py` helper (`fce9fd6`) — one rounding implementation |
 | `web/billing.py:11,270` | top-up amount | float (`0.50 × qty`) — exact in practice for .50 steps |
 
 ### 2.3 Consistency verdict
@@ -151,16 +193,22 @@ report sums them (`tax_reports.py:78,90–94`).
 Fix direction: migrate Float money columns to Numeric, do all arithmetic in Decimal with one
 shared `money()` quantize helper (the validator already has it), round per line then sum.
 
-**Progress (2026-06-15):**
-- **Phase 1 ✅ DONE (storage):** all 28 Float money columns migrated to Numeric in
+**Progress:**
+- **Phase 1 ✅ DONE (storage, 2026-06-15):** all 28 Float money columns migrated to Numeric in
   production (`money_float_to_numeric`); behaviour-preserving, verified (checksum + row
   counts unchanged). Scales: prices `Numeric(10,4)`, quantities `Numeric(10,3)`, line/tax
   amounts `Numeric(10,2)`, document totals/payments `Numeric(12,2)`, rates `Numeric(5,2)`.
-- **Phase 2 ⏳ OUTSTANDING (the maths):** introduce the shared Decimal `money()` helper and
-  convert every float `round()` calc/sync site (§2.2) to round-per-line-then-sum in Decimal,
-  plus the missing test corpus (markup, mixed VAT, discounts, credits, VAT report, QB/Xero
-  sync). **Risk #4 is NOT closed until Phase 2 lands** — storage is now Numeric, but the live
-  arithmetic is still binary float + banker's rounding.
+- **Phase 2 ✅ DONE for the supplier-invoice + sync path (`fce9fd6`, 2026-06-18):** shared
+  Decimal `money()` helper (`app/utils/money.py`); `claude_parser`, `save_invoice_to_db`,
+  `quickbooks_service`, `xero_service`, `invoice_validator`, and `Invoice.to_dict` all Decimal
+  with float only at DB/JSON/API edges; round-per-line, line-authority totals reconcile to the
+  penny; ROUND_HALF_UP. Test corpus added (markup tiers, mixed VAT, discount round-half-up,
+  per-unit penny, QB/Xero sync, totals reconciliation).
+- **Phase 2 ⏳ REMAINING — full-platform customer-document path:** `customer_invoice`/
+  `customer_quote` totals, `customer_invoices.py` line/summary maths, `job_cards.py` invoice
+  lines + tax, and the P&L / VAT-return reports (`reports.py`, `tax_reports.py`) still use float
+  `round()` (storage is Numeric, arithmetic is not). These inherit the same `money()` helper next;
+  until then customer-facing documents and VAT returns can still carry penny drift.
 
 ---
 
@@ -177,7 +225,8 @@ shared `money()` quantize helper (the validator already has it), round per line 
 3. **Parsing**: `app/parsers/parser_service.py:31` tries supplier-specific regex parsers
    (YESSS/CEF/Wholesale) first, then `app/parsers/claude_parser.py:462` `ClaudeInvoiceParser.parse()` —
    the main AI call (`claude_parser.py:519–539`, hardcoded model, no schema enforcement). Post-parse:
-   document-type/credit-note rejection, part-number OCR correction (`claude_parser.py:241`),
+   document-type/credit-note rejection, part-number OCR correction (`claude_parser.py:241`;
+   ✅ `0b3c7d5` — no longer rewrites a printed code to a sibling on a digit-for-digit difference),
    duplicate detection (`parser_service.py:104`).
 4. **Storage**: `app/web/upload.py:451` `save_invoice_to_db()` sums item totals and writes
    `Invoice` + `InvoiceItem` rows. **No arithmetic validation happens here.**
@@ -320,8 +369,8 @@ revokes tokens and soft-deactivates the connection; the app-disconnect webhook v
 - No persistent sync-error history; failures are log-only, so LAUNCH.md §3 "every failed sync
   visible in a status list" has no backing store.
 - OAuth `state` falls back to a hardcoded `'random_state'` (`:102`) instead of a per-request nonce.
-- The file is **duplicated** at `app/services/quickbooks_service.py` (1,585 vs 1,710 lines — they
-  have already drifted); only the `integrations` copy is imported. Delete the stale one (§8).
+- ~~The file is **duplicated** at `app/services/quickbooks_service.py` (drifted copy).~~
+  ✅ **Deleted** (`fbee76a`) — confirmed unimported; the live copy is `app/integrations/quickbooks_service.py`.
 
 ### 5.2 Xero (`app/integrations/xero_service.py`)
 
@@ -470,7 +519,7 @@ No other features are flagged. The flag system works, with one template bug — 
 
 | Item | Evidence | Action |
 |---|---|---|
-| `app/services/quickbooks_service.py` (1,585 lines) | only `app/integrations/` copy is imported; copies have drifted | delete |
+| ~~`app/services/quickbooks_service.py` (1,585 lines)~~ | only `app/integrations/` copy is imported; copies have drifted | ✅ **deleted** (`fbee76a`) |
 | `app/parsers/parser_service.py.backup`, `yesss_parser.py.backup` | never imported | delete |
 | `app/parsers/upload_fixed.py` | orphaned alternate upload route, not registered | delete |
 | `app/services/pdf_service.py` | not imported anywhere (pdf_generator.py is the live one) | delete |
@@ -512,7 +561,7 @@ The audit confirms the "homepage pricing inconsistencies" item and pins it down:
 | 1 | Invoice validator never called — AI output stored & synced to QB/Xero unvalidated | `web/upload.py:451`, `web/queue.py:292`, `services/invoice_validator.py` | Wrong amounts silently reach customers' books; core product promise unenforced | Small (wire `validate_parse_result()` into `save_invoice_to_db`, set `needs_review`, block sync on errors) | **Now** |
 | 2 | PayPal webhook accepts forged events (no signature verification) | `web/billing.py:322–400` | Free subscriptions; paying users locked out; revenue integrity | Small–medium (verify-webhook-signature API + `PAYPAL_WEBHOOK_ID`) | **Now** |
 | 3 | Encryption-key handling: email key auto-generated (credentials bricked on restart), QB key silently optional, Xero tokens plaintext | `email_connection.py:61`, `integrations/quickbooks_service.py:44–56`, `models/xero.py:18` | Mass integration outage after a redeploy; token exposure on DB leak | Small (fail-hard startup checks; encrypt Xero like QB) | **Now** |
-| 4 | Float money columns + three inconsistent rounding regimes; job-card tax never rounded. **Phase 1 ✅ (Float→Numeric storage migration, done in prod 2026-06-15). Phase 2 ⏳ outstanding: Decimal `money()` helper + convert float `round()` calc sites + test corpus — risk NOT closed until then.** | `models/customer_invoice.py`, `customer_quote.py`, `customer_payment.py`, `invoice.py:86–89`, `web/job_cards.py:375–432`, `reports.py`, `tax_reports.py` | Penny drift on customer invoices & VAT returns — direct money/compliance errors | ~~Numeric migration~~ ✅ + shared Decimal `money()` helper + tests (Phase 2) | Pre-launch |
+| 4 | Float money columns + inconsistent rounding regimes. **Phase 1 ✅ (Float→Numeric storage, prod 2026-06-15). Phase 2 ✅ for the supplier-invoice + QB/Xero sync path (`fce9fd6`, 2026-06-18): shared Decimal `money()`, line-authority totals, ROUND_HALF_UP, test corpus. ⏳ STILL OPEN: full-platform customer-document maths still float `round()`** — `customer_invoice.recalculate_totals()`, `customer_quote`, `customer_invoices.py`, `job_cards.py:375–432`, `reports.py`, `tax_reports.py` | Penny drift on **customer invoices & VAT returns** — direct money/compliance errors (supplier-side now correct) | Apply the same `money()` helper to the customer-document/report paths | Pre-launch |
 | 5 | Zero tests on critical paths (parsers, markup, sync, billing); no fixture invoice corpus | `tests/` | Regressions invisible; LAUNCH.md accuracy target unmeasurable | Medium–large (start with §4.3 items 1–5) | Pre-launch |
 | 6 | IDOR: labour logging reads any tenant's job card; need isolation regression tests | `web/employees.py:114–118` | Cross-tenant data linkage in a financial app | Tiny (filter by `user_id`) + small (test sweep) | **Now** |
 | 7 | QB bill sync can duplicate on retry; sync failures not recorded anywhere user-visible | `integrations/quickbooks_service.py:585–619` | Duplicate bills in customers' accounting; silent failures | Small–medium (pre-sync `qb_bill_id` guard + sync-status store) | Pre-launch |

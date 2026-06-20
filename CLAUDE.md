@@ -77,15 +77,33 @@ treat anything touching extraction, validation, or money maths as critical-path 
   so changes can be verified against a production-like setup before reaching `master`/production.
   This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
   (AUDIT.md risk #4), which alters live financial data.
-- **AUDIT risk #4 — Float→Decimal money: Phase 1 ✅ DONE, Phase 2 ⏳ OUTSTANDING.**
-  Phase 1 (2026-06-15) migrated all 28 Float money columns to Numeric in production
-  (`money_float_to_numeric`) — storage-only and behaviour-preserving (verified: checksum
-  and row counts unchanged). **Phase 2 is still to do and risk #4 is NOT closed until it
-  lands:** add the shared Decimal `money()` helper (the validator already has one) and
-  convert every float `round()` calculation/sync site to round-per-line-then-sum in Decimal,
-  plus build the missing money test corpus (markup, mixed VAT, discounts, credits, VAT
-  report, QB/Xero sync). Until then, storage is Numeric but the live arithmetic is still
-  binary float + banker's rounding. See AUDIT.md §2 and risk #4.
+- **DONE (2026-06-18) — Sprint A Phase 2** (branch `sprint-a-phase2-markup`; per-line diagnosis
+  in `AUDIT_FINDINGS.md`; full suite 143 passed). Closed:
+  - **AUDIT risk #4 — Float→Decimal money: supplier-invoice + sync path CLOSED.** Phase 1
+    (2026-06-15) migrated the 28 Float money columns to Numeric; Phase 2 (`fce9fd6`) added the
+    shared Decimal `money()` helper (`app/utils/money.py`, also used by `invoice_validator`) and
+    moved all arithmetic on the parser → markup → `save_invoice_to_db` → QB/Xero sync path to
+    Decimal (float only at DB/JSON/API edges). Totals are line-authority and reconcile to the
+    penny; ROUND_HALF_UP throughout. ⏳ **Still float `round()` (NOT done):** the full-platform
+    customer-document maths — `customer_invoice`/`customer_quote` totals, `customer_invoices.py`,
+    `job_cards.py` invoice lines/tax, and the P&L / VAT-return reports (`reports.py`,
+    `tax_reports.py`). Those inherit `money()` next; until then customer invoices & VAT returns
+    can still carry penny drift. See AUDIT.md §2.
+  - **Markup** (`7da148b`): per-unit price-override no longer multiplies a line total by quantity
+    (the qty² overcharge); markup tier bands made continuous (no fractional-discount gap);
+    `avg_markup` cap kept in Decimal (F1).
+  - **Part-number OCR** (`0b3c7d5`): matcher no longer conflates distinct parts on a
+    digit-for-digit difference (SB20MWH↔SB25MWH); printed code wins unless glyph misread /
+    learned / exact match.
+  - **QuickBooks & Xero output GST** (`b357f33` QB, `cd54ffc` Xero): registration- & region-aware
+    — unregistered → tax-exempt, registered → rate-matched code/TaxType (Jersey 5% over UK 20%),
+    no resolvable code → fail closed (`TAX_CODE_UNRESOLVED`) instead of silently syncing tax-free.
+  - **QB resolver hardened (Step 3c)** (`16edb91`): reads each code's real rate from its
+    `TaxRateRef` detail (not the name) + single-code fallback; drops the UK-20%/address-country
+    default. Fixes the live GST-only company whose sole code is named just `"GST"` (5% in the
+    detail) — previously fail-closed the registered path. Verified read-only against production
+    via `scripts/check_output_tax.py` (`3b7071b`): registered → `(GST id 2, taxable)` at 5%.
+  - **Cleanup** (`fbee76a`): deleted the dead duplicate `app/services/quickbooks_service.py`.
 - Feature flags shipped to `staging`; production rollout pending verification.
 - QuickBooks App Store submission: submitted, review call requested — avoid breaking
   anything the QB review might exercise (OAuth flow, disconnect flow, sync accuracy).
