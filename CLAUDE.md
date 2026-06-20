@@ -78,17 +78,25 @@ treat anything touching extraction, validation, or money maths as critical-path 
   This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
   (AUDIT.md risk #4), which alters live financial data.
 - **DONE (2026-06-18) — Sprint A Phase 2** (branch `sprint-a-phase2-markup`; per-line diagnosis
-  in `AUDIT_FINDINGS.md`; full suite 143 passed). Closed:
-  - **AUDIT risk #4 — Float→Decimal money: supplier-invoice + sync path CLOSED.** Phase 1
-    (2026-06-15) migrated the 28 Float money columns to Numeric; Phase 2 (`fce9fd6`) added the
-    shared Decimal `money()` helper (`app/utils/money.py`, also used by `invoice_validator`) and
-    moved all arithmetic on the parser → markup → `save_invoice_to_db` → QB/Xero sync path to
-    Decimal (float only at DB/JSON/API edges). Totals are line-authority and reconcile to the
-    penny; ROUND_HALF_UP throughout. ⏳ **Still float `round()` (NOT done):** the full-platform
-    customer-document maths — `customer_invoice`/`customer_quote` totals, `customer_invoices.py`,
-    `job_cards.py` invoice lines/tax, and the P&L / VAT-return reports (`reports.py`,
-    `tax_reports.py`). Those inherit `money()` next; until then customer invoices & VAT returns
-    can still carry penny drift. See AUDIT.md §2.
+  in `AUDIT_FINDINGS.md`; full suite 147 passed). Closed:
+  - **AUDIT risk #4 — Float→Decimal money: ✅ CLOSED on the rounding/Decimal axis (both halves).**
+    Phase 1 (2026-06-15) migrated the 28 Float money columns to Numeric; Phase 2 (`fce9fd6`)
+    added the shared Decimal `money()` helper (`app/utils/money.py`, also used by
+    `invoice_validator`) and Decimalised the **supplier-invoice + QB/Xero sync** path (parser →
+    markup → `save_invoice_to_db` → sync payloads); Phase 2b (`ec98ba7`, diagnosis `d37f77b`)
+    Decimalised the **customer-document + report** path (`customer_invoice`/`customer_quote`
+    recalc + `calculate_total`, `job_cards` recalc/merge, `customer_invoices.py`
+    line/merge/summary/manual, and `tax_reports.py` + `reports.py` P&L/VAT boxes). All live money
+    arithmetic is now Decimal, ROUND_HALF_UP, line-authority, with float only at the
+    DB/JSON/CSV/API edges; also fixed 3 reachable `Decimal+float` merge crashes. See AUDIT.md §2.
+    ⏳ **Lone remaining item — Step 2c (behaviour change, not rounding):** the printed
+    customer-document tax line (from `customer_invoice.tax_rate`) can disagree with the
+    rate/exemption the QB/Xero resolver attaches on sync; reconciling them is deferred and only
+    applies once an account is registered (today's live account is unregistered → exempt both ways).
+    ⚠️ **DEFERRED money path — Quote Builder:** `project.py` contingency + `project_material`/
+    `project_labour` maths are still float/unrounded. Quote Builder is flagged OFF so it isn't
+    live, but this **must be migrated to `money()` before the flag is turned on / Quote Builder
+    goes public** (AUDIT.md §2.3).
   - **Markup** (`7da148b`): per-unit price-override no longer multiplies a line total by quantity
     (the qty² overcharge); markup tier bands made continuous (no fractional-discount gap);
     `avg_markup` cap kept in Decimal (F1).

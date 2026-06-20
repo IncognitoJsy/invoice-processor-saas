@@ -12,22 +12,28 @@ celery references) were independently re-verified, not just pattern-matched.
 ## STATUS UPDATE (2026-06-18) — Sprint A Phase 2 fixes landed
 
 Branch `sprint-a-phase2-markup`; per-line diagnosis preserved in `AUDIT_FINDINGS.md`. The items
-below are now **CLOSED** (sections further down carry inline ✅ markers). Full suite: **143 passed**.
+below are now **CLOSED** (sections further down carry inline ✅ markers). Full suite: **147 passed**.
 
-- **Risk #4 — money maths: ✅ CLOSED for the supplier-invoice + sync path; ⏳ customer-facing
-  path still open.** Phase 1 (Float→Numeric storage, 2026-06-15, all 28 columns) + Phase 2
-  (`fce9fd6`): a single shared Decimal `money()` helper (`app/utils/money.py`, also adopted by
-  `invoice_validator`). All money arithmetic on the **supplier-invoice extraction → markup →
-  storage path and the QB/Xero sync path** is now Decimal, with float only at the DB / JSON
-  response / QB+Xero API edges; invoice totals are line-authority and reconcile to the penny
-  (`total_profit == total_selling − total_cost`); ROUND_HALF_UP throughout. Money test corpus
-  added (`tests/unit/test_money.py`, `tests/unit/test_claude_parser_calc.py`,
-  `tests/integration/test_money_totals.py`).
-  **Still float `round()` (NOT in this sprint):** the full-platform customer-document maths —
-  `customer_invoice.recalculate_totals()`, `customer_quote`, `customer_invoices.py` line/summary,
-  `job_cards.py` invoice lines/tax, and the P&L / VAT-return reports (`reports.py`,
-  `tax_reports.py`). Storage is Numeric there (Phase 1) but the arithmetic is still binary float —
-  these inherit `money()` next.
+- **Risk #4 — money maths: ✅ CLOSED on the rounding/Decimal axis (both halves).** Phase 1
+  (Float→Numeric storage, 2026-06-15, all 28 columns) + Phase 2 (`fce9fd6`) + Phase 2b
+  (`ec98ba7`, diagnosis `d37f77b`): a single shared Decimal `money()` helper
+  (`app/utils/money.py`, also adopted by `invoice_validator`); **all live money arithmetic** is
+  now Decimal with float only at the DB / JSON / CSV / QB+Xero API edges, ROUND_HALF_UP
+  throughout, line-authority totals reconciling to the penny.
+  - **Supplier-invoice + QB/Xero sync path** (`fce9fd6`): parser → markup → `save_invoice_to_db`
+    → QB/Xero payloads; `total_profit == total_selling − total_cost`.
+  - **Customer-document + report path** (`ec98ba7`): `customer_invoice`/`customer_quote`
+    `recalculate_totals` + `calculate_total`, `job_cards` recalc/merge, `customer_invoices.py`
+    line/merge/summary/manual (manual totals recomputed server-side), and the GST/VAT reports
+    (`tax_reports.py`, `reports.py` P&L + VAT boxes). Also fixed **3 reachable `Decimal+float`
+    merge crashes** uncovered while Decimalising (`customer_invoices._add_summary_line` (D5) +
+    `_add_itemised_lines`, `job_cards._merge_itemised` — all on the 2nd+ merge into a reloaded
+    line). Tests: `tests/integration/test_customer_money.py` (+ the Phase 2 corpus).
+  - ⏳ **Remaining under risk #4 — Step 2c (behaviour change, NOT rounding):** the printed
+    customer-document tax line is computed locally from `customer_invoice.tax_rate`, which can
+    disagree with the rate/exemption the QB/Xero **resolver** attaches on sync. Reconciling them
+    so the PDF matches what syncs is deferred; it only bites once an account is registered
+    (today's live account is unregistered → exempt both ways).
 - **Markup — ✅** per-unit price-override no longer multiplies a line total by quantity (the
   qty² overcharge), markup tier bands made continuous (no fractional-discount gap), `avg_markup`
   cap kept in Decimal (F1) — `7da148b`.
@@ -139,8 +145,8 @@ Phase 1 (2026-06-15) migrated all 28 Float money columns to Numeric in productio
 `money_float_to_numeric` (storage-only, behaviour-preserving: verified checksum unchanged, row
 counts intact) — the rows below that previously read **Float** are now Numeric ✅. Phase 2
 (`fce9fd6`, 2026-06-18) replaced float arithmetic with the shared Decimal `money()` helper on the
-**supplier-invoice + QB/Xero sync path** (§2.2 rows marked ✅). The customer-facing/full-platform
-calculation sites in §2.2 (storage already Numeric) still use float `round()` — see §2.3.
+**supplier-invoice + QB/Xero sync path** (`fce9fd6`); Phase 2b (`ec98ba7`) did the same for the
+customer-document + report sites. All §2.2 rows are now Decimal/`money()` — see §2.3.
 
 | Table / columns | Type |
 |---|---|
@@ -166,14 +172,13 @@ report sums them (`tax_reports.py:78,90–94`).
 | `web/upload.py` `save_invoice_to_db` totals | totals from items | ✅ Decimal, line-authority, `money()` (`fce9fd6`) |
 | `web/upload.py` average markup | average markup | ✅ Decimal cap + `money()` (F1, `7da148b`/`fce9fd6`) |
 | `web/upload.py` tax columns | supplier tax / ex-/inc-tax write | ✅ `money()` (F4, `fce9fd6`) — was raw `float()` into Numeric |
-| `models/customer_invoice.py:61–65` | `recalculate_totals()` | ⏳ still float, `round()` (full-platform path, not this sprint) |
-| `models/customer_quote.py:39–42`, line `:81–82` | quote totals | float, `round()` |
-| `web/customer_invoices.py:249–281` | line merge/summary lines | float, `round()` |
-| `web/job_cards.py:375,385` | merged/new invoice lines | float, **no rounding at all** |
-| `web/job_cards.py:429–432` | `_recalculate_invoice()` tax | **tax never rounded** before storage |
-| `models/project.py:83` | contingency amount | no rounding |
-| `web/reports.py:87–117,171–173` | P&L + VAT estimate | float aggregation, rounding only at output |
-| `web/tax_reports.py:78–108` | VAT return sums | sums Float columns, output rounding only |
+| `models/customer_invoice.py` `recalculate_totals()` | invoice subtotal/tax/total | ✅ Decimal, line-authority, `money()` (`ec98ba7`) |
+| `models/customer_quote.py` `recalculate_totals`/`calculate_total` | quote totals + line | ✅ Decimal + `money()` (`ec98ba7`) |
+| `web/customer_invoices.py` line/merge/summary/manual | line totals + manual create | ✅ Decimal + `money()`; manual totals recomputed server-side; D5 + sibling `Decimal+float` crashes fixed (`ec98ba7`) |
+| `web/job_cards.py` `_merge_itemised`/`_merge_summary`/`_recalculate_invoice` | merged lines + tax | ✅ Decimal + `money()`; tax now rounded; merge `Decimal+float` crash fixed (`ec98ba7`) |
+| `models/project.py:83` | contingency amount | ⏳ **DEFERRED** — still float, no rounding. Quote Builder (flagged off), so not live; **must be Decimalised via `money()` before Quote Builder is un-flagged / goes public** (see §2.3). |
+| `web/reports.py` P&L + VAT boxes | P&L + VAT return | ✅ Decimal recompute, `money()` once, `float()` at JSON edge (`ec98ba7`) |
+| `web/tax_reports.py` GST return | input/output tax + net totals | ✅ Decimal sums + `money()`; `f'{:.2f}'` at CSV edge (`ec98ba7`) |
 | `integrations/quickbooks_service.py` payloads | QB prices/line amounts | ✅ `float(money(...))` at payload edge (`fce9fd6`); GST tax code registration/region-aware (`b357f33`), hardened to read the real `TaxRateRef` rate + single-code fallback (`16edb91`) |
 | `integrations/xero_service.py` payloads | price comparison + line amounts | ✅ Decimal rate compare + `float(money(...))` UnitAmount (`cd54ffc`/`fce9fd6`) |
 | `services/invoice_validator.py` | `_to_decimal()`/`_money()` | ✅ now delegate to the shared `app/utils/money.py` helper (`fce9fd6`) — one rounding implementation |
@@ -198,17 +203,29 @@ shared `money()` quantize helper (the validator already has it), round per line 
   production (`money_float_to_numeric`); behaviour-preserving, verified (checksum + row
   counts unchanged). Scales: prices `Numeric(10,4)`, quantities `Numeric(10,3)`, line/tax
   amounts `Numeric(10,2)`, document totals/payments `Numeric(12,2)`, rates `Numeric(5,2)`.
-- **Phase 2 ✅ DONE for the supplier-invoice + sync path (`fce9fd6`, 2026-06-18):** shared
+- **Phase 2 ✅ DONE — supplier-invoice + sync path (`fce9fd6`, 2026-06-18):** shared
   Decimal `money()` helper (`app/utils/money.py`); `claude_parser`, `save_invoice_to_db`,
   `quickbooks_service`, `xero_service`, `invoice_validator`, and `Invoice.to_dict` all Decimal
   with float only at DB/JSON/API edges; round-per-line, line-authority totals reconcile to the
   penny; ROUND_HALF_UP. Test corpus added (markup tiers, mixed VAT, discount round-half-up,
   per-unit penny, QB/Xero sync, totals reconciliation).
-- **Phase 2 ⏳ REMAINING — full-platform customer-document path:** `customer_invoice`/
-  `customer_quote` totals, `customer_invoices.py` line/summary maths, `job_cards.py` invoice
-  lines + tax, and the P&L / VAT-return reports (`reports.py`, `tax_reports.py`) still use float
-  `round()` (storage is Numeric, arithmetic is not). These inherit the same `money()` helper next;
-  until then customer-facing documents and VAT returns can still carry penny drift.
+- **Phase 2b ✅ DONE — customer-document + report path (`ec98ba7`, 2026-06-20; diagnosis
+  `d37f77b`):** `customer_invoice`/`customer_quote` `recalculate_totals` + `calculate_total`,
+  `job_cards` recalc/merge, `customer_invoices.py` line/merge/summary/manual (manual totals
+  recomputed server-side), and the GST/VAT reports (`tax_reports.py`, `reports.py` P&L + VAT
+  boxes) — all Decimal + `money()`, line-authority, float/`f'{:.2f}'` only at the JSON/CSV edge.
+  Also fixed **3 reachable `Decimal+float` merge crashes** (D5 + two siblings). Tests:
+  `tests/integration/test_customer_money.py`.
+- **⏳ REMAINING — Step 2c (behaviour change, not rounding):** the printed customer-document tax
+  line (from `customer_invoice.tax_rate`) can disagree with the rate/exemption the QB/Xero
+  resolver attaches on sync. Reconciling the document tax with the resolver is deferred; it only
+  applies once an account is registered (today's live account is unregistered → exempt both ways).
+  Risk #4 is **closed on the money-rounding/Decimal axis**; 2c is the lone open follow-up.
+- **⏳ DEFERRED (gated on a flag, not risk #4) — Quote Builder money path:** `project.py`
+  contingency and the `project_material`/`project_labour` maths are still float and unrounded.
+  Quote Builder is flagged OFF so this isn't live — but it **must be migrated to `money()` before
+  the flag is turned on and Quote Builder goes public.** Tracking it here so it isn't forgotten
+  when the feature is revived.
 
 ---
 
@@ -561,7 +578,7 @@ The audit confirms the "homepage pricing inconsistencies" item and pins it down:
 | 1 | Invoice validator never called — AI output stored & synced to QB/Xero unvalidated | `web/upload.py:451`, `web/queue.py:292`, `services/invoice_validator.py` | Wrong amounts silently reach customers' books; core product promise unenforced | Small (wire `validate_parse_result()` into `save_invoice_to_db`, set `needs_review`, block sync on errors) | **Now** |
 | 2 | PayPal webhook accepts forged events (no signature verification) | `web/billing.py:322–400` | Free subscriptions; paying users locked out; revenue integrity | Small–medium (verify-webhook-signature API + `PAYPAL_WEBHOOK_ID`) | **Now** |
 | 3 | Encryption-key handling: email key auto-generated (credentials bricked on restart), QB key silently optional, Xero tokens plaintext | `email_connection.py:61`, `integrations/quickbooks_service.py:44–56`, `models/xero.py:18` | Mass integration outage after a redeploy; token exposure on DB leak | Small (fail-hard startup checks; encrypt Xero like QB) | **Now** |
-| 4 | Float money columns + inconsistent rounding regimes. **Phase 1 ✅ (Float→Numeric storage, prod 2026-06-15). Phase 2 ✅ for the supplier-invoice + QB/Xero sync path (`fce9fd6`, 2026-06-18): shared Decimal `money()`, line-authority totals, ROUND_HALF_UP, test corpus. ⏳ STILL OPEN: full-platform customer-document maths still float `round()`** — `customer_invoice.recalculate_totals()`, `customer_quote`, `customer_invoices.py`, `job_cards.py:375–432`, `reports.py`, `tax_reports.py` | Penny drift on **customer invoices & VAT returns** — direct money/compliance errors (supplier-side now correct) | Apply the same `money()` helper to the customer-document/report paths | Pre-launch |
+| 4 | Float money columns + inconsistent rounding regimes. **✅ CLOSED on the rounding/Decimal axis.** Phase 1 (Float→Numeric storage, prod 2026-06-15) + Phase 2 supplier/sync (`fce9fd6`) + Phase 2b customer-document & reports (`ec98ba7`, diagnosis `d37f77b`): shared Decimal `money()`, line-authority totals, ROUND_HALF_UP throughout, float only at DB/JSON/CSV/API edges; 3 reachable `Decimal+float` merge crashes fixed; test corpora added. **⏳ Lone remaining item — Step 2c:** reconcile the printed customer-document tax with the rate/exemption the QB/Xero resolver attaches (behaviour change; only applies once an account is registered). | Penny drift on customer invoices & VAT returns — now correct on both sides | Step 2c only (printed-vs-synced tax) | Pre-launch |
 | 5 | Zero tests on critical paths (parsers, markup, sync, billing); no fixture invoice corpus | `tests/` | Regressions invisible; LAUNCH.md accuracy target unmeasurable | Medium–large (start with §4.3 items 1–5) | Pre-launch |
 | 6 | IDOR: labour logging reads any tenant's job card; need isolation regression tests | `web/employees.py:114–118` | Cross-tenant data linkage in a financial app | Tiny (filter by `user_id`) + small (test sweep) | **Now** |
 | 7 | QB bill sync can duplicate on retry; sync failures not recorded anywhere user-visible | `integrations/quickbooks_service.py:585–619` | Duplicate bills in customers' accounting; silent failures | Small–medium (pre-sync `qb_bill_id` guard + sync-status store) | Pre-launch |
