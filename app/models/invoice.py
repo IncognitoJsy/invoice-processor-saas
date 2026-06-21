@@ -2,6 +2,7 @@
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index
+from app.utils.money import money
 
 class Invoice(db.Model):
     """Stored parsed invoice or quote"""
@@ -120,9 +121,9 @@ class Invoice(db.Model):
             'supplier_name': self.supplier_name,
             'invoice_number': self.invoice_number,
             'job_reference': self.job_reference,
-            'total_cost': float(self.total_cost) if self.total_cost else 0,
-            'total_selling': float(self.total_selling) if self.total_selling else 0,
-            'total_profit': float(self.total_profit) if self.total_profit else 0,
+            'total_cost': float(money(self.total_cost)) if self.total_cost else 0,
+            'total_selling': float(money(self.total_selling)) if self.total_selling else 0,
+            'total_profit': float(money(self.total_profit)) if self.total_profit else 0,
             'items_count': self.items_count,
             'confidence': self.confidence,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -180,12 +181,12 @@ class InvoiceItem(db.Model):
             'part_number': self.part_number,
             'description': self.description,
             'quantity': float(self.quantity),
-            'cost_per_item': float(self.cost_per_item),
-            'total_amount': float(self.total_amount),
-            'selling_price': float(self.selling_price) if self.selling_price else 0,
-            'calculated_selling_price': float(self.calculated_selling_price) if self.calculated_selling_price else 0,
-            'qb_selling_price': float(self.qb_selling_price) if self.qb_selling_price else None,
-            'profit_per_item': float(self.profit_per_item) if self.profit_per_item else 0
+            'cost_per_item': float(self.cost_per_item),  # Numeric(10,4) unit rate — no 2dp re-round
+            'total_amount': float(money(self.total_amount)),
+            'selling_price': float(money(self.selling_price)) if self.selling_price else 0,
+            'calculated_selling_price': float(money(self.calculated_selling_price)) if self.calculated_selling_price else 0,
+            'qb_selling_price': float(money(self.qb_selling_price)) if self.qb_selling_price else None,
+            'profit_per_item': float(money(self.profit_per_item)) if self.profit_per_item else 0
         }
 
 

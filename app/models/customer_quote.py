@@ -1,6 +1,7 @@
 """Customer Quote model for full platform mode"""
 from app.extensions import db
 from datetime import datetime
+from app.utils.money import money, to_decimal
 import secrets
 
 
@@ -37,9 +38,10 @@ class CustomerQuote(db.Model):
         self.acceptance_token = secrets.token_urlsafe(32)
 
     def recalculate_totals(self):
-        self.subtotal = round(sum(l.line_total or 0 for l in self.lines), 2)
-        self.tax_amount = round(self.subtotal * (self.tax_rate or 0) / 100, 2)
-        self.total = round(self.subtotal + self.tax_amount, 2)
+        # Line-authority, Decimal end-to-end (ROUND_HALF_UP via money()).
+        self.subtotal = money(sum((money(l.line_total or 0) for l in self.lines), to_decimal(0)))
+        self.tax_amount = money(self.subtotal * to_decimal(self.tax_rate or 0) / 100)
+        self.total = money(self.subtotal + self.tax_amount)
 
     @property
     def payment_terms_label(self):
@@ -79,4 +81,4 @@ class CustomerQuoteLine(db.Model):
     sort_order = db.Column(db.Integer, default=0)
 
     def calculate_total(self):
-        self.line_total = round((self.quantity or 0) * (self.unit_price or 0), 2)
+        self.line_total = money(to_decimal(self.quantity or 0) * to_decimal(self.unit_price or 0))

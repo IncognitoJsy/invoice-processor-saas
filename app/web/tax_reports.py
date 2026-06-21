@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.invoice import Invoice
 from app.models.customer_invoice import CustomerInvoice
+from app.utils.money import money, to_decimal
 from datetime import datetime, date
 import csv
 import io
@@ -75,8 +76,9 @@ def index():
         Invoice.status == 'completed'
     ).order_by(Invoice.processed_at.desc()).all()
 
-    input_tax_total = sum(inv.supplier_tax_amount or 0 for inv in supplier_invoices)
-    input_net_total = sum(inv.total_ex_tax or inv.total_cost or 0 for inv in supplier_invoices)
+    # GST return — Decimal end-to-end, money() rounds once (ROUND_HALF_UP).
+    input_tax_total = money(sum((to_decimal(inv.supplier_tax_amount or 0) for inv in supplier_invoices), to_decimal(0)))
+    input_net_total = money(sum((to_decimal(inv.total_ex_tax or inv.total_cost or 0) for inv in supplier_invoices), to_decimal(0)))
 
     # Output tax — VAT/GST collected from customers on PAID customer invoices
     customer_invoices = CustomerInvoice.query.filter(
@@ -87,11 +89,11 @@ def index():
         CustomerInvoice.tax_rate > 0
     ).order_by(CustomerInvoice.paid_at.desc()).all()
 
-    output_tax_total = sum(inv.tax_amount or 0 for inv in customer_invoices)
-    output_net_total = sum(inv.subtotal or 0 for inv in customer_invoices)
-    output_gross_total = sum(inv.total or 0 for inv in customer_invoices)
+    output_tax_total = money(sum((to_decimal(inv.tax_amount or 0) for inv in customer_invoices), to_decimal(0)))
+    output_net_total = money(sum((to_decimal(inv.subtotal or 0) for inv in customer_invoices), to_decimal(0)))
+    output_gross_total = money(sum((to_decimal(inv.total or 0) for inv in customer_invoices), to_decimal(0)))
 
-    net_tax = round(output_tax_total - input_tax_total, 2)
+    net_tax = money(output_tax_total - input_tax_total)
 
     return render_template('tax_reports/index.html',
         tax_type=tax_type,
@@ -100,11 +102,11 @@ def index():
         period=period,
         supplier_invoices=supplier_invoices,
         customer_invoices=customer_invoices,
-        input_tax_total=round(input_tax_total, 2),
-        input_net_total=round(input_net_total, 2),
-        output_tax_total=round(output_tax_total, 2),
-        output_net_total=round(output_net_total, 2),
-        output_gross_total=round(output_gross_total, 2),
+        input_tax_total=input_tax_total,
+        input_net_total=input_net_total,
+        output_tax_total=output_tax_total,
+        output_net_total=output_net_total,
+        output_gross_total=output_gross_total,
         net_tax=net_tax,
     )
 
@@ -147,7 +149,7 @@ def export_csv():
                 f'{inv.supplier_tax_amount or 0:.2f}',
                 f'{inv.total_inc_tax or inv.total_cost or 0:.2f}',
             ])
-        input_tax = sum(inv.supplier_tax_amount or 0 for inv in supplier_invoices)
+        input_tax = money(sum((to_decimal(inv.supplier_tax_amount or 0) for inv in supplier_invoices), to_decimal(0)))
         writer.writerow(['', '', 'TOTAL', '', f'{input_tax:.2f}', ''])
         writer.writerow([])
 
@@ -169,7 +171,7 @@ def export_csv():
                 f'{inv.tax_amount or 0:.2f}',
                 f'{inv.total or 0:.2f}',
             ])
-        output_tax = sum(inv.tax_amount or 0 for inv in customer_invoices)
+        output_tax = money(sum((to_decimal(inv.tax_amount or 0) for inv in customer_invoices), to_decimal(0)))
         writer.writerow(['', '', 'TOTAL', '', f'{output_tax:.2f}', ''])
 
     csv_content = output.getvalue()

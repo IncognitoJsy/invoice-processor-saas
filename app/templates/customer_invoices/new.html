@@ -190,7 +190,7 @@ const docType = '{{ doc_type }}';
 const selectedJobId = {{ selected_job.id if selected_job else 'null' }};
 const selectedJobName = {{ selected_job.name|tojson if selected_job else 'null' }};
 const csrf = '{{ csrf_token() }}';
-const taxRate = {{ current_user.tax_rate or 0 }};
+const taxRate = {{ (current_user.tax_rate if current_user.tax_registered else 0) or 0 }};
 let lines = [];
 let lineIdCounter = 0;
 

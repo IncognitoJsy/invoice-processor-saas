@@ -1,6 +1,7 @@
 """Customer Invoice model - invoices sent TO customers (full platform mode)"""
 from app.extensions import db
 from datetime import datetime, timedelta
+from app.utils.money import money, to_decimal
 
 
 class CustomerInvoice(db.Model):
@@ -60,9 +61,10 @@ class CustomerInvoice(db.Model):
 
     def recalculate_totals(self):
         lines = CustomerInvoiceLine.query.filter_by(customer_invoice_id=self.id).all()
-        self.subtotal = sum(l.line_total or 0 for l in lines)
-        self.tax_amount = round(self.subtotal * (self.tax_rate or 0) / 100, 2)
-        self.total = round(self.subtotal + self.tax_amount, 2)
+        # Line-authority, Decimal end-to-end (ROUND_HALF_UP via money()).
+        self.subtotal = money(sum((money(l.line_total or 0) for l in lines), to_decimal(0)))
+        self.tax_amount = money(self.subtotal * to_decimal(self.tax_rate or 0) / 100)
+        self.total = money(self.subtotal + self.tax_amount)
 
     def generate_view_token(self, expires_days=90):
         """Generate a unique secure token for customer invoice viewing"""

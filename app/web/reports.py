@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, request, jsonify, make_response
 from flask_login import login_required, current_user
 from app.extensions import db
+from app.utils.money import money, to_decimal
 from sqlalchemy import text
 from datetime import datetime, date, timedelta
 import csv
@@ -84,37 +85,39 @@ def api_pnl():
         ORDER BY processed_at DESC
     """), {'uid': current_user.id, 'df': df, 'dt': dt}).fetchall()
 
-    total_revenue = sum(float(r.total or 0) for r in revenue_rows)
-    total_vat_collected = sum(float(r.tax_amount or 0) for r in revenue_rows)
-    total_revenue_ex_vat = total_revenue - total_vat_collected
-    total_costs = sum(float(r.total_cost or 0) for r in cost_rows)
-    gross_profit = total_revenue_ex_vat - total_costs
-    margin = (gross_profit / total_revenue_ex_vat * 100) if total_revenue_ex_vat > 0 else 0
+    # Decimal end-to-end; money() rounds, float() only at the JSON edge below.
+    total_revenue = money(sum((to_decimal(r.total or 0) for r in revenue_rows), to_decimal(0)))
+    total_vat_collected = money(sum((to_decimal(r.tax_amount or 0) for r in revenue_rows), to_decimal(0)))
+    total_revenue_ex_vat = money(total_revenue - total_vat_collected)
+    total_costs = money(sum((to_decimal(r.total_cost or 0) for r in cost_rows), to_decimal(0)))
+    gross_profit = money(total_revenue_ex_vat - total_costs)
+    margin = (money(gross_profit / total_revenue_ex_vat * 100, places=1)
+              if total_revenue_ex_vat > 0 else to_decimal(0))
 
-    # Monthly breakdown
+    # Monthly breakdown (Decimal; converted to float at the return edge)
     monthly = {}
     for r in revenue_rows:
         if r.paid_at:
             key = r.paid_at.strftime('%b %Y')
             if key not in monthly:
-                monthly[key] = {'revenue': 0, 'costs': 0}
-            monthly[key]['revenue'] += float(r.total or 0)
+                monthly[key] = {'revenue': to_decimal(0), 'costs': to_decimal(0)}
+            monthly[key]['revenue'] += to_decimal(r.total or 0)
     for r in cost_rows:
         if r.processed_at:
             key = r.processed_at.strftime('%b %Y')
             if key not in monthly:
-                monthly[key] = {'revenue': 0, 'costs': 0}
-            monthly[key]['costs'] += float(r.total_cost or 0)
+                monthly[key] = {'revenue': to_decimal(0), 'costs': to_decimal(0)}
+            monthly[key]['costs'] += to_decimal(r.total_cost or 0)
 
     return jsonify({
         'period': {'from': date_from, 'to': date_to},
         'summary': {
-            'total_revenue': round(total_revenue, 2),
-            'total_revenue_ex_vat': round(total_revenue_ex_vat, 2),
-            'total_vat_collected': round(total_vat_collected, 2),
-            'total_costs': round(total_costs, 2),
-            'gross_profit': round(gross_profit, 2),
-            'margin_pct': round(margin, 1),
+            'total_revenue': float(total_revenue),
+            'total_revenue_ex_vat': float(total_revenue_ex_vat),
+            'total_vat_collected': float(total_vat_collected),
+            'total_costs': float(total_costs),
+            'gross_profit': float(gross_profit),
+            'margin_pct': float(margin),
             'invoice_count': len(revenue_rows),
             'cost_count': len(cost_rows),
         },
@@ -123,16 +126,17 @@ def api_pnl():
             'customer': r.customer_name or '—',
             'issue_date': r.issue_date.strftime('%d %b %Y') if r.issue_date else '—',
             'paid_date': r.paid_at.strftime('%d %b %Y') if r.paid_at else '—',
-            'total': float(r.total or 0),
-            'vat': float(r.tax_amount or 0),
+            'total': float(money(r.total or 0)),
+            'vat': float(money(r.tax_amount or 0)),
         } for r in revenue_rows],
         'cost_items': [{
             'supplier': r.supplier_name,
             'invoice_number': r.invoice_number or '—',
             'date': r.invoice_date.strftime('%d %b %Y') if r.invoice_date else '—',
-            'total': float(r.total_cost or 0),
+            'total': float(money(r.total_cost or 0)),
         } for r in cost_rows],
-        'monthly': monthly,
+        'monthly': {k: {'revenue': float(money(v['revenue'])), 'costs': float(money(v['costs']))}
+                    for k, v in monthly.items()},
     })
 
 
@@ -168,17 +172,17 @@ def api_vat():
         AND processed_at >= :df AND processed_at <= :dt
     """), {'uid': current_user.id, 'df': df, 'dt': dt}).fetchone()
 
-    output_vat = float(sales.vat or 0)
-    input_vat_estimate = float(purchases.net or 0) * float(current_user.vat_rate or 20) / 100
-    vat_due = output_vat - input_vat_estimate
+    output_vat = money(sales.vat or 0)
+    input_vat_estimate = money(to_decimal(purchases.net or 0) * to_decimal(current_user.vat_rate or 20) / 100)
+    vat_due = money(output_vat - input_vat_estimate)
 
     return jsonify({
         'period': {'from': date_from, 'to': date_to},
-        'box1_vat_due_sales': round(output_vat, 2),
-        'box4_vat_reclaimed': round(input_vat_estimate, 2),
-        'box5_net_vat_due': round(vat_due, 2),
-        'box6_total_sales_ex_vat': round(float(sales.net or 0), 2),
-        'box7_total_purchases_ex_vat': round(float(purchases.net or 0), 2),
+        'box1_vat_due_sales': float(output_vat),
+        'box4_vat_reclaimed': float(input_vat_estimate),
+        'box5_net_vat_due': float(vat_due),
+        'box6_total_sales_ex_vat': float(money(sales.net or 0)),
+        'box7_total_purchases_ex_vat': float(money(purchases.net or 0)),
         'note': 'Input VAT is estimated. Confirm with your accountant.'
     })
 
