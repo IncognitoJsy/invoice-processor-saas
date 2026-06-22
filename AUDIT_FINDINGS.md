@@ -318,3 +318,33 @@ PDF never syncs; the supplier invoice carries no output-rate snapshot). It's rar
 resolver's **fail-closed** still prevents a genuine code mismatch from silently producing wrong
 books — it blocks the sync instead. Threading a single per-object snapshot through both would be
 Option B (over-coupling), explicitly not taken.
+
+---
+
+# Tracked follow-up — transient TaxRate-read failure → false fail-closed (reliability)
+
+**Tag:** pre-go-live reliability — **NOT money-correctness** (no wrong amounts, no writes at risk).
+**Surfaced by:** `scripts/dryrun_customer_invoice_sync.py` against production (2026-06-22). The same
+registered-5% dry run resolved `taxable (GST id 2)` on one execution but **fail-closed
+(`TAX_CODE_UNRESOLVED`, sync blocked)** on a back-to-back execution, with identical config/data.
+
+**Root cause:** the QB resolver's match-or-fail reads each code's real rate from its
+`TaxRateRef → TaxRate.RateValue`. `_fetch_active_tax_rates` issues `SELECT * FROM TaxRate` and
+**swallows any error → returns `{}`**; `_code_sales_rate` then falls back to parsing the rate from
+the code's *name* ("GST" has no `%`) → `None` → no rate matches the configured rate →
+fail-closed. The rate read is **re-fetched per line** (single dry run did ~30 QBO GETs across
+3 scenarios × 7 items + tax-code/rate queries), which tripped QBO **rate-limiting**; a 429/transient
+failure then empties `rate_map` and blocks an otherwise-valid registered sync.
+
+**Fix direction (when addressed):** make the TaxRate read resilient —
+1. **retry-with-backoff** on the `TaxRate` query (the service already has backoff for the data
+   API; apply it here), and
+2. **cache the TaxRate read once per sync** (fetch `rate_map` a single time, not per line/per
+   `resolve_output_tax` call).
+
+**Explicitly NOT the fix:** do **not** "trust the sole code's rate on read error" / re-introduce a
+single-code-regardless leniency — that re-opens the silent-rate assumption Step 2c deliberately
+removed (the document could show one rate while QBO applies another). Fail-closed on a genuine
+unknown is correct; the goal is only to stop *transient read failures* from masquerading as
+"unknown rate". The Xero resolver (`_tax_rate_value`) has the same shape — apply the same
+retry + per-sync cache there.
