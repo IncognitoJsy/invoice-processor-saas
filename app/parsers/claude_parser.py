@@ -1177,19 +1177,23 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                                 source = known_products[part_upper].get('source', 'accounting')
                                 self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
 
-                # ── RETAIL CAP ───────────────────────────────────────────────
-                # Our per-unit selling must never exceed the supplier's list/counter price
-                # (original_unit_price = the unit price BEFORE discount) — the customer could
-                # otherwise buy at full retail for less than we charge. Applied AFTER the markup
-                # band AND the QB-price override, so retail is the ABSOLUTE ceiling (a stale-high
-                # catalog price can't push us above counter price). No-op when:
+                # ── RETAIL CAP (discounted lines only) ───────────────────────
+                # On DISCOUNTED lines, our per-unit selling must never exceed the supplier's
+                # list/counter price (original_unit_price = unit price BEFORE discount) — the
+                # customer could otherwise buy at full retail for less than we charge. Applied
+                # AFTER the markup band AND the QB-price override, so retail is the ABSOLUTE
+                # ceiling (a stale-high catalog price can't push us above counter price). No-op when:
+                #   - the line had NO discount (discount_val == 0): a zero-discount SKU has
+                #     list ≈ cost, so capping would force zero/negative margin — the normal markup
+                #     is allowed to exceed retail there (deliberate user exception),
                 #   - retail is unknown (0 / not extracted — best-effort, no schema enforcement),
                 #   - the per-metre cable conversion ran (original_unit_price is per-box, not
                 #     per-unit, so not comparable), or
-                #   - retail <= our real cost (effective_cost) — capping there would sell at/below
-                #     cost, so we leave the price and flag the line for review instead.
+                #   - retail <= our real cost (effective_cost) on a discounted line — capping
+                #     there would sell at/below cost, so we leave the price and flag for review.
                 retail_unit = to_decimal(item.get('original_unit_price', 0) or 0) or Decimal('0')
-                if retail_unit > 0 and not per_metre_converted and retail_unit < final_selling_price:
+                if (discount_val > 0 and retail_unit > 0 and not per_metre_converted
+                        and retail_unit < final_selling_price):
                     if retail_unit > effective_cost:
                         self.logger.info(
                             f"🧢 Retail cap: {item.get('part_number', '?')} £{final_selling_price:.2f} "

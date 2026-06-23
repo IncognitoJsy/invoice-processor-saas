@@ -405,8 +405,19 @@ def test_retail_cap_beats_qb_override():
     assert round_half_up(row["selling_price"]) == Decimal("100.00")
 
 
-def test_retail_cap_noops_below_cost():
-    # Bad/low retail (50) below our cost (100): capping would sell at a loss -> no-op, flag instead.
+def test_retail_cap_skipped_when_no_discount():
+    # NO-discount line (discount==0): list ≈ cost, so the 20% markup is allowed to exceed retail.
+    # The cap must NOT fire (deliberate exception) — this is the 482271 case.
     p = make_parser(is_admin=True, tax_registered=True)
-    row = _cap_line(p, "LOSS", 1, 0, "100.00", "50.00")
-    assert round_half_up(row["selling_price"]) == Decimal("120.00")  # 100×1.20, NOT 50
+    row = _cap_line(p, "NODISC", 1, 0, "100.00", "100.00")   # disc 0, list == cost
+    assert round_half_up(row["selling_price"]) == Decimal("120.00")  # 100×1.20, NOT capped to 100
+    assert Decimal(str(row["selling_price"])) > Decimal("100.00")    # intentionally over retail
+
+
+def test_retail_cap_discounted_below_cost_noops():
+    # DISCOUNTED line whose (mis-extracted) list is below our cost: capping would sell at a loss,
+    # so the below-cost guard no-ops + flags. Keeps that guard covered now that the cap is
+    # discount-gated. disc 50 -> 50% band; cost 100, list 40 (< cost) -> stays 150, not 40.
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = _cap_line(p, "DLOSS", 1, 50, "100.00", "40.00")
+    assert round_half_up(row["selling_price"]) == Decimal("150.00")  # 100×1.50, NOT 40
