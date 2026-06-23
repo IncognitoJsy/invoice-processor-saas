@@ -15,9 +15,12 @@ import types
 
 import pytest
 
+from decimal import Decimal
+
 from app.integrations.quickbooks_service import QuickBooksService
 from app.integrations.xero_service import XeroService
 from app.models.quickbooks import QuickBooksConnection
+from app.models.user import User
 
 
 # ── QB TaxCode/TaxRate shapes ────────────────────────────────────────────────
@@ -152,3 +155,69 @@ def test_endpoint_listing_error_returns_502(app, db, user, monkeypatch):
     resp = client.get('/settings/tax-codes', headers=_HTTPS)
     assert resp.status_code == 502
     assert resp.get_json()['success'] is False
+
+
+# ── POST /settings/tax-code (save) ───────────────────────────────────────────
+def _connect_qb(db, user):
+    db.session.add(QuickBooksConnection(
+        user_id=user.id, realm_id='R1', access_token='tok', refresh_token='r', is_active=True))
+
+
+def _patch_qb_codes(monkeypatch, codes):
+    monkeypatch.setattr(
+        'app.integrations.quickbooks_service.QuickBooksService.list_sales_tax_codes',
+        lambda self, conn: codes)
+
+
+def test_save_tax_code_stores_server_validated_pick(app, db, user, monkeypatch):
+    app.config['WTF_CSRF_ENABLED'] = False  # CSRF token isn't the unit under test here
+    _connect_qb(db, user)
+    user.tax_registered = True
+    _active_plan(db, user)
+    _patch_qb_codes(monkeypatch, [{'ref': '2', 'name': 'GST', 'rate': Decimal('5'), 'exempt': False}])
+
+    client = app.test_client()
+    _login(client, user)
+    # A tampered client `rate` must be ignored — the server takes the rate from its own listing.
+    resp = client.post('/settings/tax-code', data={'tax_code_ref': '2', 'rate': '99'}, headers=_HTTPS)
+    assert resp.status_code == 302
+
+    u = db.session.get(User, user.id)
+    assert u.output_tax_code_ref == '2'
+    assert u.output_tax_code_name == 'GST'
+    assert u.output_tax_provider == 'quickbooks'
+    assert u.tax_rate == Decimal('5')   # server rate, not the tampered 99
+
+
+def test_save_tax_code_unknown_ref_rejected_no_change(app, db, user, monkeypatch):
+    app.config['WTF_CSRF_ENABLED'] = False
+    _connect_qb(db, user)
+    _active_plan(db, user)
+    _patch_qb_codes(monkeypatch, [{'ref': '2', 'name': 'GST', 'rate': Decimal('5'), 'exempt': False}])
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.post('/settings/tax-code', data={'tax_code_ref': '999'}, headers=_HTTPS)
+    assert resp.status_code == 302
+    assert db.session.get(User, user.id).output_tax_code_ref is None  # nothing stored
+
+
+def test_save_tax_code_no_connection_rejected(app, db, user):
+    app.config['WTF_CSRF_ENABLED'] = False
+    _active_plan(db, user)  # no QB/Xero connection
+    client = app.test_client()
+    _login(client, user)
+    resp = client.post('/settings/tax-code', data={'tax_code_ref': '2'}, headers=_HTTPS)
+    assert resp.status_code == 302
+    assert db.session.get(User, user.id).output_tax_code_ref is None
+
+
+def test_settings_page_prompts_registered_user_to_pick(app, db, user):
+    _connect_qb(db, user)
+    user.tax_registered = True   # registered + connected + no pick -> must pick
+    _active_plan(db, user)
+    client = app.test_client()
+    _login(client, user)
+    html = client.get('/settings/', headers=_HTTPS).get_data(as_text=True)
+    assert 'Pick your output tax code' in html
+    assert 'Output tax code' in html  # the picker card is rendered
