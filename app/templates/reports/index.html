@@ -29,8 +29,8 @@
                 <select id="report-type" onchange="switchReport(this.value)"
                         class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
                     <option value="pnl">Profit & Loss</option>
-                    {% if current_user.vat_registered %}
-                    <option value="vat">VAT Return Summary</option>
+                    {% if current_user.tax_registered %}
+                    <option value="vat">{{ current_user.tax_type or 'VAT' }} Return Summary</option>
                     {% endif %}
                 </select>
             </div>
