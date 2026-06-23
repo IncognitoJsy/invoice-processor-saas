@@ -48,8 +48,12 @@ def test_override_sets_manual_state_and_recomputes(app, db, user):
     resp = client.put(f'/invoices/item/{it.id}/price', json={'selling_price': 18}, headers=_HTTPS)
     assert resp.status_code == 200
     u = db.session.get(InvoiceItem, it.id)
-    assert u.price_overridden is True
-    assert u.selling_price == Decimal('18.00')          # above retail 15 — NOT capped
+    # Override (18) is ABOVE the line's retail/list price (15) and must STAND (cap is parse-time
+    # only; the override path never caps) AND flag price_overridden so the MANUAL badge renders.
+    assert u.original_unit_price == Decimal('15')
+    assert u.selling_price == Decimal('18.00')          # > retail 15 — NOT capped
+    assert u.selling_price > u.original_unit_price       # explicitly above retail
+    assert u.price_overridden is True                    # drives the ⚑ MANUAL badge
     assert u.markup_percent == Decimal('80.00')         # (18-10)/10*100
     assert u.profit_per_item == Decimal('8.00')
     assert u.updated_at is not None
