@@ -50,8 +50,10 @@ TEMPLATES = {
 # Document-type wording threaded into the shared builders so the same templates render the
 # right words for invoices vs quotes (no forking). 'due' labels the date cell that holds the
 # invoice due date / the quote's valid-until (expiry) date.
-_INVOICE_LABELS = {'heading': 'INVOICE', 'total': 'TOTAL DUE', 'due': 'Due Date'}
-_QUOTE_LABELS   = {'heading': 'QUOTE',   'total': 'TOTAL',     'due': 'Valid Until'}
+# 'show_reference' controls the "use <number> as your payment reference" line — invoices show it,
+# quotes omit it (you don't pay a quote, so a payment reference would be misleading).
+_INVOICE_LABELS = {'heading': 'INVOICE', 'total': 'TOTAL DUE', 'due': 'Due Date', 'show_reference': True}
+_QUOTE_LABELS   = {'heading': 'QUOTE',   'total': 'TOTAL',     'due': 'Valid Until', 'show_reference': False}
 
 
 class _QuoteDoc:
@@ -240,7 +242,7 @@ def _totals_block(invoice, user, brand, align=TA_RIGHT, labels=_INVOICE_LABELS):
     ]))
     return t
 
-def _bank_block(invoice, user, brand, align=TA_CENTER):
+def _bank_block(invoice, user, brand, align=TA_CENTER, labels=_INVOICE_LABELS):
     cols = []
     for lbl, val in [
         ('Bank', user.bank_name),
@@ -266,9 +268,10 @@ def _bank_block(invoice, user, brand, align=TA_CENTER):
     if user.bank_iban:
         story += [Spacer(1,2*mm),
                   _p(f'IBAN: {user.bank_iban}', 9, '#111827', True, TA_CENTER)]
-    story += [Spacer(1,3*mm),
-              _p(f'Please use {invoice.invoice_number} as your payment reference',
-                 8, '#9ca3af', align=TA_CENTER)]
+    if labels.get('show_reference', True):
+        story += [Spacer(1,3*mm),
+                  _p(f'Please use {invoice.invoice_number} as your payment reference',
+                     8, '#9ca3af', align=TA_CENTER)]
     return KeepTogether(story)
 
 
@@ -332,7 +335,7 @@ def _build_classic(invoice, user, brand, labels=_INVOICE_LABELS):
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
-        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand)]
+        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand, labels=labels)]
     return story
 
 
@@ -402,7 +405,7 @@ def _build_minimal(invoice, user, brand, labels=_INVOICE_LABELS):
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
-        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand)]
+        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand, labels=labels)]
     return story
 
 
@@ -461,7 +464,7 @@ def _build_bold(invoice, user, brand, labels=_INVOICE_LABELS):
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
-        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand)]
+        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand, labels=labels)]
     return story
 
 
@@ -530,7 +533,7 @@ def _build_professional(invoice, user, brand, labels=_INVOICE_LABELS):
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
-        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand)]
+        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand, labels=labels)]
     return story
 
 
@@ -584,7 +587,7 @@ def _build_modern(invoice, user, brand, labels=_INVOICE_LABELS):
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
-        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand)]
+        story += [Spacer(1,5*mm), _bank_block(invoice, user, brand, labels=labels)]
     return story
 
 
@@ -652,13 +655,13 @@ def _build_branded(invoice, user, brand, labels=_INVOICE_LABELS):
             t.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER'),
                                     ('VALIGN',(0,0),(-1,-1),'TOP')]))
 
-            footer = Table([[
-                [_p('PAYMENT DETAILS', 8, 'white', True, TA_CENTER),
-                 Spacer(1,3*mm),
-                 t,
-                 Spacer(1,2*mm),
-                 _p(f'Reference: {invoice.invoice_number}', 8, '#bfdbfe', align=TA_CENTER)]
-            ]], colWidths=[180*mm])
+            footer_items = [_p('PAYMENT DETAILS', 8, 'white', True, TA_CENTER),
+                            Spacer(1,3*mm),
+                            t]
+            if labels.get('show_reference', True):
+                footer_items += [Spacer(1,2*mm),
+                                 _p(f'Reference: {invoice.invoice_number}', 8, '#bfdbfe', align=TA_CENTER)]
+            footer = Table([[footer_items]], colWidths=[180*mm])
             footer.setStyle(TableStyle([
                 ('BACKGROUND',(0,0),(-1,-1), brand),
                 ('LEFTPADDING',(0,0),(-1,-1),8*mm),

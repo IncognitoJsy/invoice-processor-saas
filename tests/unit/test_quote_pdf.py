@@ -79,3 +79,29 @@ def test_invoice_pdf_wording_unchanged():
     assert 'INVOICE' in text
     assert 'TOTAL DUE' in text
     assert 'DUE DATE' in text
+
+
+def _bank_user(template='classic'):
+    u = _fake_user(template)
+    u.bank_name = 'Jersey Bank'
+    u.bank_account_name = 'Me Ltd'
+    u.bank_account_number = '12345678'
+    u.bank_sort_code = '00-00-00'
+    u.bank_iban = None
+    return u
+
+
+def test_quote_pdf_omits_payment_reference_even_with_bank_details():
+    # With bank details set, the PAYMENT DETAILS block renders — but a quote must NOT print the
+    # "use <number> as your payment reference" / "Reference: <number>" line (you don't pay a quote).
+    for tmpl in ('classic', 'branded'):
+        text = extract_text(io.BytesIO(generate_quote_pdf(_fake_quote(), _bank_user(tmpl)))).upper()
+        assert 'PAYMENT DETAILS' in text, tmpl     # bank block did render
+        assert 'REFERENCE' not in text, tmpl       # but no payment-reference line
+
+
+def test_invoice_pdf_keeps_payment_reference():
+    for tmpl in ('classic', 'branded'):
+        text = extract_text(io.BytesIO(generate_invoice_pdf(_fake_invoice(), _bank_user(tmpl)))).upper()
+        assert 'PAYMENT DETAILS' in text, tmpl
+        assert 'REFERENCE' in text, tmpl           # invoice still shows the payment reference

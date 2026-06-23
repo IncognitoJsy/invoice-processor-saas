@@ -401,9 +401,13 @@ of edge as the stored rate. Tests: `tests/unit/test_pdf_tax_label.py`.
 > **✅ FOLLOW-UP DONE (2026-06-23, own commit) — quote wording.** A doc-type label dict
 > (`_INVOICE_LABELS` / `_QUOTE_LABELS`) is threaded `_render → builders → _totals_block`, so quote
 > PDFs read **'QUOTE' / 'TOTAL' / 'Valid Until'** (matching `expiry_date`) instead of
-> 'INVOICE' / 'TOTAL DUE' / 'Due Date'. Builders take a `labels=` param (default = invoice labels),
-> so nothing was forked and invoices are unchanged. Asserted on the real rendered PDF text
-> (pdfminer) in `tests/unit/test_quote_pdf.py`.
+> 'INVOICE' / 'TOTAL DUE' / 'Due Date'. The same dict also carries `show_reference` (True for
+> invoices, False for quotes), threaded into `_bank_block` + the branded footer so quotes omit the
+> "use <number> as your payment reference" / "Reference: <number>" line entirely (you don't pay a
+> quote). Builders take a `labels=` param (default = invoice labels), so nothing was forked and
+> invoices are unchanged. Asserted on the real rendered PDF text (pdfminer) in
+> `tests/unit/test_quote_pdf.py`, including the reference line present on invoices / absent on
+> quotes even with bank details set.
 
 ### Sync block states
 - **`TAX_CODE_UNRESOLVED`** — registered user with **no pick** (or a transient/empty code list).
