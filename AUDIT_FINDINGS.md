@@ -398,8 +398,12 @@ of edge as the stored rate. Tests: `tests/unit/test_pdf_tax_label.py`.
 > `generate_quote_pdf(quote, user)` reusing the invoice templates + `_totals_block` (so it inherits
 > this tax label) via a thin `_QuoteDoc` adapter (`quote_number`/`expiry_date`/no payment-terms);
 > builders aren't forked. Tests: `tests/unit/test_quote_pdf.py`, `tests/integration/test_quote_pdf_routes.py`.
-> **Cosmetic follow-up (not done):** the shared builders still print invoice wording ("INVOICE",
-> "TOTAL DUE", "Due Date") on quote PDFs — relabel needs per-builder `is_quote` branches.
+> **✅ FOLLOW-UP DONE (2026-06-23, own commit) — quote wording.** A doc-type label dict
+> (`_INVOICE_LABELS` / `_QUOTE_LABELS`) is threaded `_render → builders → _totals_block`, so quote
+> PDFs read **'QUOTE' / 'TOTAL' / 'Valid Until'** (matching `expiry_date`) instead of
+> 'INVOICE' / 'TOTAL DUE' / 'Due Date'. Builders take a `labels=` param (default = invoice labels),
+> so nothing was forked and invoices are unchanged. Asserted on the real rendered PDF text
+> (pdfminer) in `tests/unit/test_quote_pdf.py`.
 
 ### Sync block states
 - **`TAX_CODE_UNRESOLVED`** — registered user with **no pick** (or a transient/empty code list).

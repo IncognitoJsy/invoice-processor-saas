@@ -47,6 +47,12 @@ TEMPLATES = {
     'branded':      'Branded',
 }
 
+# Document-type wording threaded into the shared builders so the same templates render the
+# right words for invoices vs quotes (no forking). 'due' labels the date cell that holds the
+# invoice due date / the quote's valid-until (expiry) date.
+_INVOICE_LABELS = {'heading': 'INVOICE', 'total': 'TOTAL DUE', 'due': 'Due Date'}
+_QUOTE_LABELS   = {'heading': 'QUOTE',   'total': 'TOTAL',     'due': 'Valid Until'}
+
 
 class _QuoteDoc:
     """Adapts a CustomerQuote to the field names the PDF builders read off an invoice, so quotes
@@ -74,9 +80,10 @@ class _QuoteDoc:
         return ''                               # quotes carry no payment-terms label
 
 
-def _render(doc_obj, user, title):
+def _render(doc_obj, user, title, labels):
     """Build a PDF (bytes) for an invoice (or a quote via _QuoteDoc) using the template selected
-    by user.invoice_template. Both document types share the builders + _totals_block."""
+    by user.invoice_template. Both document types share the builders + _totals_block; `labels`
+    (a doc-type wording dict) selects invoice vs quote words."""
     generators = {
         'classic':      _build_classic,
         'minimal':      _build_minimal,
@@ -95,24 +102,22 @@ def _render(doc_obj, user, title):
                             topMargin=15*mm, bottomMargin=15*mm,
                             title=title,
                             author=user.company_name or 'GoZappify')
-    doc.build(builder(doc_obj, user, brand))
+    doc.build(builder(doc_obj, user, brand, labels))
     buffer.seek(0)
     return buffer.read()
 
 
 def generate_invoice_pdf(invoice, user):
     """Generate an invoice PDF and return bytes. Template selected from user.invoice_template."""
-    return _render(invoice, user, f"Invoice {invoice.invoice_number}")
+    return _render(invoice, user, f"Invoice {invoice.invoice_number}", _INVOICE_LABELS)
 
 
 def generate_quote_pdf(quote, user):
     """Generate a quote PDF and return bytes. Reuses the invoice templates via the _QuoteDoc
     adapter, so layout, money formatting and the shared output-tax label all apply; only
-    quote_number / expiry_date / (no) payment-terms differ.
-
-    NOTE: the shared builders still print invoice wording ('INVOICE', 'TOTAL DUE', 'Due Date').
-    That's cosmetic — quote-specific wording is a separate follow-up; not forking the builders here."""
-    return _render(_QuoteDoc(quote), user, f"Quote {quote.quote_number}")
+    quote_number / expiry_date / (no) payment-terms differ. Quote wording ('QUOTE', 'TOTAL',
+    'Valid Until') is supplied via _QUOTE_LABELS threaded into the shared builders."""
+    return _render(_QuoteDoc(quote), user, f"Quote {quote.quote_number}", _QUOTE_LABELS)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -213,7 +218,7 @@ def _lines_table(invoice, brand, light, show_border=True):
     t.setStyle(TableStyle(s))
     return t
 
-def _totals_block(invoice, user, brand, align=TA_RIGHT):
+def _totals_block(invoice, user, brand, align=TA_RIGHT, labels=_INVOICE_LABELS):
     rows = []
     if invoice.tax_rate and invoice.tax_rate > 0:
         rows += [
@@ -223,7 +228,7 @@ def _totals_block(invoice, user, brand, align=TA_RIGHT):
              _p(_fmt_money(invoice.tax_amount), 9, '#374151', True, align)],
         ]
     rows.append([
-        _p('TOTAL DUE', 13, '#111827', True, align),
+        _p(labels['total'], 13, '#111827', True, align),
         _p(_fmt_money(invoice.total), 15, brand, True, align),
     ])
     t = Table(rows, colWidths=[130*mm, 30*mm])
@@ -268,7 +273,7 @@ def _bank_block(invoice, user, brand, align=TA_CENTER):
 
 
 # ── Template 1: Classic ───────────────────────────────────────────────────────
-def _build_classic(invoice, user, brand):
+def _build_classic(invoice, user, brand, labels=_INVOICE_LABELS):
     light = _lighten(brand)
     story = []
 
@@ -288,7 +293,7 @@ def _build_classic(invoice, user, brand):
     hdr = Table([[
         left_col,
         [_p(invoice.invoice_number, 22, 'white', True, TA_RIGHT),
-         _p('INVOICE', 8, '#bfdbfe', align=TA_RIGHT)],
+         _p(labels['heading'], 8,'#bfdbfe', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     hdr.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), brand),
@@ -307,7 +312,7 @@ def _build_classic(invoice, user, brand):
          _p(invoice.customer.full_address or '', 8, '#6b7280')],
         [_label('Issue Date', TA_RIGHT), _p(_date(invoice.issue_date), 10, '#111827', True, TA_RIGHT),
          Spacer(1,2*mm),
-         _label('Due Date', TA_RIGHT), _p(_date(invoice.due_date), 10, '#111827', True, TA_RIGHT),
+         _label(labels['due'], TA_RIGHT), _p(_date(invoice.due_date), 10, '#111827', True, TA_RIGHT),
          Spacer(1,1*mm),
          _p(invoice.payment_terms_label, 8, '#6b7280', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
@@ -323,7 +328,7 @@ def _build_classic(invoice, user, brand):
     story.append(Spacer(1, 5*mm))
     story.append(_lines_table(invoice, brand, light))
     story.append(Spacer(1, 4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
@@ -332,7 +337,7 @@ def _build_classic(invoice, user, brand):
 
 
 # ── Template 2: Minimal ───────────────────────────────────────────────────────
-def _build_minimal(invoice, user, brand):
+def _build_minimal(invoice, user, brand, labels=_INVOICE_LABELS):
     story = []
 
     # Simple top line — company left, invoice number right
@@ -346,7 +351,7 @@ def _build_minimal(invoice, user, brand):
     top = Table([[
         left_minimal,
         [_p(invoice.invoice_number, 24, brand, True, TA_RIGHT),
-         _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT)],
+         _p(labels['heading'], 8,'#9ca3af', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     top.setStyle(TableStyle([
         ('VALIGN',(0,0),(-1,-1),'TOP'),
@@ -363,7 +368,7 @@ def _build_minimal(invoice, user, brand):
          _p(invoice.customer.email or '', 8, '#6b7280')],
         [_label('Date', TA_RIGHT), _p(_date(invoice.issue_date), 9, '#374151', True, TA_RIGHT),
          Spacer(1,2*mm),
-         _label('Due', TA_RIGHT), _p(_date(invoice.due_date), 9, '#374151', True, TA_RIGHT),
+         _label(labels['due'], TA_RIGHT), _p(_date(invoice.due_date), 9, '#374151', True, TA_RIGHT),
          Spacer(1,1*mm),
          _p(invoice.payment_terms_label, 8, '#9ca3af', align=TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
@@ -393,7 +398,7 @@ def _build_minimal(invoice, user, brand):
     ]))
     story.append(t)
     story.append(Spacer(1,4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
@@ -402,7 +407,7 @@ def _build_minimal(invoice, user, brand):
 
 
 # ── Template 3: Bold ─────────────────────────────────────────────────────────
-def _build_bold(invoice, user, brand):
+def _build_bold(invoice, user, brand, labels=_INVOICE_LABELS):
     story = []
 
     # Full width bold header
@@ -445,14 +450,14 @@ def _build_bold(invoice, user, brand):
          _p(invoice.customer.email or '', 9, '#6b7280')],
         [_label('Issue Date', TA_RIGHT), _p(_date(invoice.issue_date), 10, '#111827', True, TA_RIGHT),
          Spacer(1,2*mm),
-         _label('Due Date', TA_RIGHT), _p(_date(invoice.due_date), 10, '#111827', True, TA_RIGHT)],
+         _label(labels['due'], TA_RIGHT), _p(_date(invoice.due_date), 10, '#111827', True, TA_RIGHT)],
     ]], colWidths=[95*mm, 85*mm])
     details.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP')]))
     story.append(details)
     story.append(Spacer(1,6*mm))
     story.append(_lines_table(invoice, brand, _lighten(brand)))
     story.append(Spacer(1,4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
@@ -461,7 +466,7 @@ def _build_bold(invoice, user, brand):
 
 
 # ── Template 4: Professional ─────────────────────────────────────────────────
-def _build_professional(invoice, user, brand):
+def _build_professional(invoice, user, brand, labels=_INVOICE_LABELS):
     """Two column — sidebar left with company + bank, content right"""
     story = []
     light = _lighten(brand, 0.95)
@@ -483,10 +488,10 @@ def _build_professional(invoice, user, brand):
 
     main = [
         _p(invoice.invoice_number, 20, 'white', True, TA_RIGHT),
-        _p('INVOICE', 8, '#bfdbfe', align=TA_RIGHT),
+        _p(labels['heading'], 8, '#bfdbfe', align=TA_RIGHT),
         Spacer(1,3*mm),
         _p(_date(invoice.issue_date), 9, '#e0f2fe', align=TA_RIGHT),
-        _p(f'Due: {_date(invoice.due_date)}', 9, '#fbbf24', True, TA_RIGHT),
+        _p(f'{labels["due"]}: {_date(invoice.due_date)}', 9, '#fbbf24', True, TA_RIGHT),
     ]
 
     hdr = Table([[sidebar, main]], colWidths=[70*mm, 110*mm])
@@ -521,7 +526,7 @@ def _build_professional(invoice, user, brand):
     story.append(Spacer(1,5*mm))
     story.append(_lines_table(invoice, brand, light))
     story.append(Spacer(1,4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
@@ -530,7 +535,7 @@ def _build_professional(invoice, user, brand):
 
 
 # ── Template 5: Modern ───────────────────────────────────────────────────────
-def _build_modern(invoice, user, brand):
+def _build_modern(invoice, user, brand, labels=_INVOICE_LABELS):
     """Left accent bar, mostly white, clean typography"""
     story = []
 
@@ -545,7 +550,7 @@ def _build_modern(invoice, user, brand):
     top = Table([[
         left_modern,
         [_p(invoice.invoice_number, 22, brand, True, TA_RIGHT),
-         _p('INVOICE', 8, '#9ca3af', align=TA_RIGHT),
+         _p(labels['heading'], 8,'#9ca3af', align=TA_RIGHT),
          ],
     ]], colWidths=[95*mm, 85*mm])
     top.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP')]))
@@ -565,7 +570,7 @@ def _build_modern(invoice, user, brand):
         Table([[
             [_label('Issue Date', TA_RIGHT), _p(_date(invoice.issue_date), 9, '#374151', True, TA_RIGHT),
              Spacer(1,2*mm),
-             _label('Due Date', TA_RIGHT), _p(_date(invoice.due_date), 9, brand, True, TA_RIGHT),
+             _label(labels['due'], TA_RIGHT), _p(_date(invoice.due_date), 9, brand, True, TA_RIGHT),
              Spacer(1,1*mm),
              _p(invoice.payment_terms_label, 8, '#9ca3af', align=TA_RIGHT)]
         ]], colWidths=[85*mm]),
@@ -575,7 +580,7 @@ def _build_modern(invoice, user, brand):
     story.append(Spacer(1,6*mm))
     story.append(_lines_table(invoice, brand, _lighten(brand)))
     story.append(Spacer(1,4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
     if invoice.notes or user.invoice_notes:
         story += [Spacer(1,4*mm), _p(invoice.notes or user.invoice_notes or '', 8, '#9ca3af', align=TA_CENTER)]
     if user.bank_account_number or user.bank_iban:
@@ -584,7 +589,7 @@ def _build_modern(invoice, user, brand):
 
 
 # ── Template 6: Branded ───────────────────────────────────────────────────────
-def _build_branded(invoice, user, brand):
+def _build_branded(invoice, user, brand, labels=_INVOICE_LABELS):
     """Full colour header AND footer, logo prominent"""
     story = []
     light = _lighten(brand, 0.92)
@@ -596,9 +601,9 @@ def _build_branded(invoice, user, brand):
          _p(user.trade_type.title() if user.trade_type else '', 10, '#bfdbfe'),
          Spacer(1,3*mm),
          _p(f'Issue Date: {_date(invoice.issue_date)}', 8, '#e0f2fe'),
-         _p(f'Due: {_date(invoice.due_date)}', 8, '#fbbf24', True)],
+         _p(f'{labels["due"]}: {_date(invoice.due_date)}', 8, '#fbbf24', True)],
         [_p(invoice.invoice_number, 28, 'white', True, TA_RIGHT),
-         _p('INVOICE', 9, '#bfdbfe', align=TA_RIGHT),
+         _p(labels['heading'], 9,'#bfdbfe', align=TA_RIGHT),
          Spacer(1,3*mm),
 
          _p(invoice.payment_terms_label, 8, '#bfdbfe', align=TA_RIGHT)],
@@ -629,7 +634,7 @@ def _build_branded(invoice, user, brand):
     story.append(Spacer(1,5*mm))
     story.append(_lines_table(invoice, brand, light))
     story.append(Spacer(1,4*mm))
-    story.append(_totals_block(invoice, user, brand))
+    story.append(_totals_block(invoice, user, brand, labels=labels))
 
     # Branded footer with bank details in colour band
     if user.bank_account_number or user.bank_iban:
