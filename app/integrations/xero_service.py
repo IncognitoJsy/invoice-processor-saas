@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from flask import url_for
 
-from app.utils.money import money
+from app.utils.money import money, to_decimal
 from app.utils.tax import effective_output_rate
 
 logger = logging.getLogger(__name__)
@@ -375,7 +375,23 @@ class XeroService:
             if rate is not None and abs(rate - expected) < 0.01:
                 return tr.get('TaxType')
         return None
-    
+
+    def list_sales_tax_codes(self, connection):
+        """Read-only listing of active, sales-applicable TaxTypes with their rate — the data
+        source for the Settings output-tax-code picker (Xero mirror of the QBO method). Makes
+        no writes. Returns [{'ref': TaxType, 'name': str, 'rate': Decimal|None, 'exempt': bool}]
+        (rate is a percent; None when absent)."""
+        out = []
+        for tr in self._active(self.get_tax_rates(connection)):
+            if not self._is_sales_applicable(tr):
+                continue
+            exempt = self._is_exempt_rate(tr)
+            val = self._tax_rate_value(tr)
+            rate = to_decimal(val) if val is not None else None
+            out.append({'ref': tr.get('TaxType'), 'name': tr.get('Name', ''),
+                        'rate': rate, 'exempt': exempt})
+        return out
+
     def get_default_purchase_tax_type(self, connection) -> str:
         """Get the appropriate purchase tax type for bills"""
         try:

@@ -745,7 +745,25 @@ class QuickBooksService:
             if r is not None and abs(r - expected) < Decimal('0.01'):
                 return {'value': tc['Id'], 'name': tc.get('Name', '')}
         return None
-    
+
+    def list_sales_tax_codes(self, qb_connection):
+        """Read-only listing of active, sales-applicable TaxCodes with their REAL rate — the
+        data source for the Settings output-tax-code picker. Reuses the same GET-only reads
+        the resolver does (_fetch_active_tax_codes / _fetch_active_tax_rates); makes no writes.
+
+        Returns [{'ref': str, 'name': str, 'rate': Decimal|None, 'exempt': bool}] — rate is a
+        percent (Decimal('0') for exempt/zero codes, None when it can't be resolved)."""
+        rate_map = self._fetch_active_tax_rates(qb_connection)
+        out = []
+        for tc in self._fetch_active_tax_codes(qb_connection):
+            if not self._is_sales_applicable(tc):
+                continue
+            exempt = self._is_exempt_code(tc)
+            rate = Decimal('0') if exempt else self._code_sales_rate(tc, rate_map)
+            out.append({'ref': str(tc.get('Id')), 'name': tc.get('Name', ''),
+                        'rate': rate, 'exempt': exempt})
+        return out
+
     # =========================================================================
     # PRODUCT/ITEM SYNC METHODS
     # =========================================================================

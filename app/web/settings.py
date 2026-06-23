@@ -2,11 +2,16 @@
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for, session
 from flask_login import login_required, current_user
 from app.extensions import db
+from app.models.quickbooks import QuickBooksConnection
+from app.models.xero import XeroConnection
 from app.utils.password_validation import validate_password
+from app.utils.tax import picked_output_code
 import io
 import base64
+import logging
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
+logger = logging.getLogger(__name__)
 
 
 @bp.route('/')
@@ -14,6 +19,48 @@ bp = Blueprint('settings', __name__, url_prefix='/settings')
 def index():
     """Settings page"""
     return render_template('settings/index.html')
+
+
+@bp.route('/tax-codes')
+@login_required
+def tax_codes():
+    """Read-only data source for the output-tax-code picker: list the sales tax codes from the
+    user's connected accounting software (QuickBooks preferred, else Xero). Makes only GET/query
+    reads — never a write. Returns JSON:
+        {success, provider, codes:[{ref,name,rate,exempt}], current:{ref,name,rate}|None}
+    or {success, provider:None, message} when nothing is connected."""
+    qb = QuickBooksConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    xero = XeroConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    provider, codes = None, []
+    try:
+        if qb and qb.access_token:
+            from app.integrations.quickbooks_service import QuickBooksService
+            provider, codes = 'quickbooks', QuickBooksService(current_user).list_sales_tax_codes(qb)
+        elif xero:
+            from app.integrations.xero_service import XeroService
+            provider, codes = 'xero', XeroService(current_user).list_sales_tax_codes(xero)
+    except Exception as e:
+        logger.error(f"tax-codes picker: error listing codes ({type(e).__name__})")
+        return jsonify({'success': False,
+                        'error': 'Could not load tax codes from your accounting software. '
+                                 'Please try again.'}), 502
+
+    if provider is None:
+        return jsonify({'success': True, 'provider': None, 'codes': [],
+                        'message': 'Connect QuickBooks or Xero to pick your output tax code.'})
+
+    def _rate(v):
+        return float(v) if v is not None else None
+
+    picked = picked_output_code(current_user)
+    return jsonify({
+        'success': True,
+        'provider': provider,
+        'codes': [{'ref': c['ref'], 'name': c['name'], 'rate': _rate(c['rate']),
+                   'exempt': c['exempt']} for c in codes],
+        'current': ({'ref': picked['ref'], 'name': picked['name'], 'rate': _rate(picked['rate'])}
+                    if picked else None),
+    })
 
 
 @bp.route('/update-profile', methods=['POST'])
