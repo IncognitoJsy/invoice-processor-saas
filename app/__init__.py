@@ -225,6 +225,18 @@ def create_app(config_name='default'):
     # Wrap with WhiteNoise for static files in production
     app.wsgi_app = WhiteNoise(app.wsgi_app, root='/app/app/static/', prefix='static/')
 
+    # Schema-drift guardrail (AUDIT risk #10): `flask schema-check` for CI/pre-deploy + a loud
+    # boot log if the live schema diverges from the models/migrations (never hard-fails unless
+    # SCHEMA_GUARD_STRICT=1, so the guard can't itself cause an outage).
+    try:
+        from app.schema_guard import register_cli, check_and_log
+        register_cli(app)
+        if not app.config.get('TESTING'):  # tests build via create_all (no migrations) — skip
+            with app.app_context():
+                check_and_log(app)
+    except Exception as e:
+        app.logger.warning(f"schema guard wiring skipped: {type(e).__name__}: {e}")
+
     return app
 
 def configure_logging(app):
