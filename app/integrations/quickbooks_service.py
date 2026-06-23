@@ -10,7 +10,7 @@ import time
 from decimal import Decimal
 
 from app.utils.money import money, to_decimal
-from app.utils.tax import effective_output_rate
+from app.utils.tax import picked_output_code
 
 
 class QuickBooksService:
@@ -602,17 +602,22 @@ class QuickBooksService:
         """Resolve how THIS user's synced lines/items should be taxed.
 
         Returns an (tax_code, status) tuple, cached for the request:
-          - (code, 'taxable')     registered user; attach `code` (carries output GST)
+          - (code, 'taxable')     registered user; attach `code` — the sales tax code the user
+                                  PICKED in Settings (output_tax_code_ref), attached directly
           - (code|None, 'exempt') unregistered user; push tax-exempt. `code` is an
                                   explicit exempt/zero code if the company file has
                                   one, else None (caller omits the ref + Taxable=False)
-          - (None, 'unresolved')  registered user but no valid taxable code could be
-                                  found — callers MUST block the sync (fail closed)
+          - (None, 'unresolved')  registered user but no QuickBooks output tax code is picked
+                                  — callers MUST block the sync (fail closed)
 
         Driven entirely by self.user.tax_registered so the sync can never disagree
         with the cost-base treatment in claude_parser._transform_items (which folds
         irrecoverable input GST into the markup base only for UNREGISTERED users) —
         making the "GST-in-base + output-GST-on-top" double charge impossible.
+
+        Registered users attach their PICKED code (chosen once from QuickBooks in Settings),
+        so the synced invoice carries exactly the code — and rate — the user selected and the
+        document shows. No per-sync TaxRate read or rate-match (that match-or-fail is gone).
         """
         if self._output_tax_cache is not None:
             return self._output_tax_cache
@@ -623,10 +628,10 @@ class QuickBooksService:
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        tax_codes = self._fetch_active_tax_codes(qb_connection)
-
         # Unregistered: never charge output GST (their cost base already absorbs it).
+        # Only this path needs the code list — to find an explicit exempt/zero code.
         if not self.user.tax_registered:
+            tax_codes = self._fetch_active_tax_codes(qb_connection)
             exempt = self._select_exempt_code(tax_codes)
             self._output_tax_cache = (exempt, 'exempt')
             current_app.logger.info(
@@ -635,24 +640,19 @@ class QuickBooksService:
             )
             return self._output_tax_cache
 
-        # Registered: lines MUST carry output GST.
-        if not tax_codes:
+        # Registered: attach the user's PICKED QuickBooks sales tax code directly.
+        picked = picked_output_code(self.user)
+        if not picked or picked.get('provider') != 'quickbooks':
             current_app.logger.error(
-                "Output tax: registered user but QB returned no active tax codes — blocking sync")
+                "Output tax: registered user but no QuickBooks output tax code is picked "
+                "(pick / re-pick it in Settings) — blocking sync")
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        code = self._select_taxable_code(qb_connection, tax_codes)
-        if code:
-            current_app.logger.info(
-                f"Output tax: registered -> taxable code '{code['name']}' (id {code['value']})")
-            self._output_tax_cache = (code, 'taxable')
-        else:
-            current_app.logger.error(
-                "Output tax: registered user but no sales tax code could be resolved "
-                f"(tax_rate={getattr(self.user, 'tax_rate', None)}, "
-                f"tax_type={getattr(self.user, 'tax_type', None)}) — blocking sync")
-            self._output_tax_cache = (None, 'unresolved')
+        code = {'value': str(picked['ref']), 'name': picked['name'] or str(picked['ref'])}
+        current_app.logger.info(
+            f"Output tax: registered -> picked code '{code['name']}' (id {code['value']})")
+        self._output_tax_cache = (code, 'taxable')
         return self._output_tax_cache
 
     def _fetch_active_tax_codes(self, qb_connection):
@@ -724,25 +724,6 @@ class QuickBooksService:
     def _select_exempt_code(self, tax_codes):
         for tc in tax_codes:
             if self._is_exempt_code(tc):
-                return {'value': tc['Id'], 'name': tc.get('Name', '')}
-        return None
-
-    def _select_taxable_code(self, qb_connection, tax_codes):
-        """Pick the sales TaxCode for a registered user — MATCH-OR-FAIL against the user's
-        configured output rate (`effective_output_rate`). The chosen code's REAL rate (from
-        its TaxRateRef detail) must equal the configured rate within tolerance, so the synced
-        invoice can never carry a rate the user didn't configure / the document didn't show.
-        Returns None (caller fails closed) when the rate is unconfigured or no code matches."""
-        expected = effective_output_rate(self.user)   # registered path -> user.tax_rate
-        if expected <= 0:
-            # Registered but no output rate configured -> cannot reconcile -> fail closed.
-            return None
-        candidates = [tc for tc in tax_codes
-                      if self._is_sales_applicable(tc) and not self._is_exempt_code(tc)]
-        rate_map = self._fetch_active_tax_rates(qb_connection)
-        for tc in candidates:
-            r = self._code_sales_rate(tc, rate_map)
-            if r is not None and abs(r - expected) < Decimal('0.01'):
                 return {'value': tc['Id'], 'name': tc.get('Name', '')}
         return None
 
