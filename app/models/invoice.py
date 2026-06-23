@@ -170,10 +170,19 @@ class InvoiceItem(db.Model):
     qb_selling_price = db.Column(db.Numeric(10, 4))  # Price from QuickBooks (if product exists)
     markup_percent = db.Column(db.Numeric(5, 2))  # Markup percentage applied
     profit_per_item = db.Column(db.Numeric(10, 4))  # selling - cost per item
-    
+
+    # Manual per-unit price override (single source of truth for feature 2's "manual" badge AND
+    # feature 3's override — they are ONE state). When True, selling_price was typed by the user
+    # and DELIBERATELY bypasses the auto-calc retail cap; markup_percent is recomputed from it.
+    # CONTRACT: any future "recalculate markup / re-price" action MUST skip rows where
+    # price_overridden is True, or it will silently destroy a deliberate manual price.
+    price_overridden = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     def __repr__(self):
         return f'<InvoiceItem {self.part_number}: {self.quantity} x £{self.cost_per_item}>'
-    
+
     def to_dict(self):
         """Convert to dictionary for JSON responses"""
         return {
@@ -182,11 +191,17 @@ class InvoiceItem(db.Model):
             'description': self.description,
             'quantity': float(self.quantity),
             'cost_per_item': float(self.cost_per_item),  # Numeric(10,4) unit rate — no 2dp re-round
+            'original_unit_price': float(money(self.original_unit_price)) if self.original_unit_price else None,
+            'discount_percent': float(self.discount_percent) if self.discount_percent is not None else None,
             'total_amount': float(money(self.total_amount)),
             'selling_price': float(money(self.selling_price)) if self.selling_price else 0,
             'calculated_selling_price': float(money(self.calculated_selling_price)) if self.calculated_selling_price else 0,
             'qb_selling_price': float(money(self.qb_selling_price)) if self.qb_selling_price else None,
-            'profit_per_item': float(money(self.profit_per_item)) if self.profit_per_item else 0
+            'markup_percent': float(self.markup_percent) if self.markup_percent is not None else None,
+            'profit_per_item': float(money(self.profit_per_item)) if self.profit_per_item else 0,
+            'price_overridden': bool(self.price_overridden),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

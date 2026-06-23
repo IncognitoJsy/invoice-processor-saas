@@ -70,6 +70,14 @@ treat anything touching extraction, validation, or money maths as critical-path 
   lines / retail≤cost (flags instead). On the registered path it binds at band edges (the
   unregistered GST-fold overage is gone). See AUDIT.md §2 / AUDIT_FINDINGS.md; tests
   `test_claude_parser_calc.py::test_retail_cap_*`.
+  **Manual per-line override (2026-06-23, branch `feature-invoice-line-ui`):** the invoices
+  view-modal shows per-unit cost/sell + per-line markup% and lets the user type a per-unit selling
+  price (`PUT /invoices/item/<id>/price`, `?reset=true` reverts). `InvoiceItem.price_overridden` is
+  the single state for both the "manual" badge and the override; a manual price **deliberately
+  bypasses the retail cap** (cap is parse-time only). 🔒 **CONTRACT:** any future recalculate/re-price
+  MUST skip `price_overridden` rows or it silently destroys a deliberate price. Migration
+  `add_invoice_item_override_stamps` adds `price_overridden`/`created_at`/`updated_at` to
+  `invoice_item`. Invoices modal only so far — quotes/upload views are a fast-follow.
 - **QuickBooks / Xero sync** — two-way customer sync design exists. Watch for duplicate
   creation, ID mapping, and token refresh handling.
 - **Compliance features** — VAT settings, VOID invoices, supply date. UK invoicing rules
