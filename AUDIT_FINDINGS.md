@@ -390,11 +390,16 @@ trims trailing zeros so `5.00` → `5`). Applies to all 6 invoice templates (all
 code *name* is read from the user's current pick (not snapshotted on the document) — same A2 class
 of edge as the stored rate. Tests: `tests/unit/test_pdf_tax_label.py`.
 
-> **Note (pre-existing, out of scope):** `app/web/customer_quotes.py` imports `generate_quote_pdf`
-> from `app/services/pdf_generator.py`, but that function is **not defined** there (only
-> `generate_invoice_pdf` is) — the customer-quote PDF path looks broken independently of this work.
-> Whenever a quote generator is (re)added it should reuse `_totals_block`, so it inherits this label
-> for free. Flagging for a separate fix.
+> **✅ FIXED (2026-06-23, own commit) — customer-quote PDF was a live 500.** `customer_quotes.py`
+> imported `generate_quote_pdf` from `pdf_generator.py`, which **never defined it** (only
+> `generate_invoice_pdf`) — broken since the feature shipped (`7b6ad29`), not a refactor drop. Both
+> user-reachable routes failed: GET `/customer-quotes/<id>/pdf` (Download PDF button) raw-500'd, and
+> POST `/customer-quotes/<id>/send` returned the raw ImportError to the UI. Fix adds
+> `generate_quote_pdf(quote, user)` reusing the invoice templates + `_totals_block` (so it inherits
+> this tax label) via a thin `_QuoteDoc` adapter (`quote_number`/`expiry_date`/no payment-terms);
+> builders aren't forked. Tests: `tests/unit/test_quote_pdf.py`, `tests/integration/test_quote_pdf_routes.py`.
+> **Cosmetic follow-up (not done):** the shared builders still print invoice wording ("INVOICE",
+> "TOTAL DUE", "Due Date") on quote PDFs — relabel needs per-builder `is_quote` branches.
 
 ### Sync block states
 - **`TAX_CODE_UNRESOLVED`** — registered user with **no pick** (or a transient/empty code list).

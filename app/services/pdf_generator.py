@@ -48,11 +48,35 @@ TEMPLATES = {
 }
 
 
-def generate_invoice_pdf(invoice, user):
-    """Generate PDF and return bytes. Template selected from user.invoice_template."""
-    template = getattr(user, 'invoice_template', 'classic') or 'classic'
-    brand = _brand(user)
+class _QuoteDoc:
+    """Adapts a CustomerQuote to the field names the PDF builders read off an invoice, so quotes
+    reuse the exact same templates (and the shared output-tax label) without forking the builders.
+    Only the differing fields are remapped; everything else (subtotal / tax_rate / tax_amount /
+    total / notes / customer / lines / issue_date) passes straight through to the quote."""
+    def __init__(self, quote):
+        self._quote = quote
 
+    def __getattr__(self, name):
+        # Reached only for attributes not defined on this class — delegate to the quote.
+        # object.__getattribute__ avoids recursing back through __getattr__ for `_quote`.
+        return getattr(object.__getattribute__(self, '_quote'), name)
+
+    @property
+    def invoice_number(self):
+        return self._quote.quote_number
+
+    @property
+    def due_date(self):
+        return self._quote.expiry_date          # "valid until" — a quote has no due date
+
+    @property
+    def payment_terms_label(self):
+        return ''                               # quotes carry no payment-terms label
+
+
+def _render(doc_obj, user, title):
+    """Build a PDF (bytes) for an invoice (or a quote via _QuoteDoc) using the template selected
+    by user.invoice_template. Both document types share the builders + _totals_block."""
     generators = {
         'classic':      _build_classic,
         'minimal':      _build_minimal,
@@ -61,18 +85,34 @@ def generate_invoice_pdf(invoice, user):
         'modern':       _build_modern,
         'branded':      _build_branded,
     }
+    template = getattr(user, 'invoice_template', 'classic') or 'classic'
     builder = generators.get(template, _build_classic)
+    brand = _brand(user)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=15*mm, leftMargin=15*mm,
                             topMargin=15*mm, bottomMargin=15*mm,
-                            title=f"Invoice {invoice.invoice_number}",
+                            title=title,
                             author=user.company_name or 'GoZappify')
-    story = builder(invoice, user, brand)
-    doc.build(story)
+    doc.build(builder(doc_obj, user, brand))
     buffer.seek(0)
     return buffer.read()
+
+
+def generate_invoice_pdf(invoice, user):
+    """Generate an invoice PDF and return bytes. Template selected from user.invoice_template."""
+    return _render(invoice, user, f"Invoice {invoice.invoice_number}")
+
+
+def generate_quote_pdf(quote, user):
+    """Generate a quote PDF and return bytes. Reuses the invoice templates via the _QuoteDoc
+    adapter, so layout, money formatting and the shared output-tax label all apply; only
+    quote_number / expiry_date / (no) payment-terms differ.
+
+    NOTE: the shared builders still print invoice wording ('INVOICE', 'TOTAL DUE', 'Due Date').
+    That's cosmetic — quote-specific wording is a separate follow-up; not forking the builders here."""
+    return _render(_QuoteDoc(quote), user, f"Quote {quote.quote_number}")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
