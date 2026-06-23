@@ -62,6 +62,28 @@ def clear_picked_output_code(user, provider=None):
     return True
 
 
+def picked_but_not_registered(user) -> bool:
+    """True when the user has PICKED an output tax code but isn't marked tax_registered — a
+    contradictory state: the pick won't apply (the resolver treats them as unregistered and syncs
+    exempt). Defense-in-depth signal for the Settings UI; deliberately DISTINCT from
+    output_rate_unconfigured (which is the registered-but-no-rate misconfig), so neither
+    overloads the other."""
+    return bool(getattr(user, 'output_tax_code_ref', None)) and not bool(getattr(user, 'tax_registered', False))
+
+
+def tax_noun(user) -> str:
+    """The output-tax noun for UI labels: the user's configured tax_type if set, else
+    region-derived — 'GST' for Jersey / Channel Islands, else 'VAT'. Keeps Settings labels
+    correct for a Jersey GST business instead of hardcoding 'VAT'."""
+    t = (getattr(user, 'tax_type', None) or '').strip()
+    if t:
+        return t
+    country = (getattr(user, 'country', None) or '').strip().lower()
+    if 'jersey' in country or 'channel island' in country or 'guernsey' in country:
+        return 'GST'
+    return 'VAT'
+
+
 OUTPUT_RATE_UNSET_MESSAGE = (
     "You're marked GST/VAT-registered but haven't set an output tax rate. "
     "Set it in Settings before creating or syncing invoices/quotes."

@@ -143,9 +143,12 @@ def api_pnl():
 @bp.route('/api/vat')
 @login_required
 def api_vat():
-    """VAT return summary for a quarter"""
-    if not current_user.vat_registered:
-        return jsonify({'error': 'Not VAT registered'}), 400
+    """VAT/GST return summary for a quarter"""
+    # Unified on tax_registered (the canonical 'registered' flag the resolver/parser use);
+    # legacy vat_registered is retired. NOTE: this /api/vat surface duplicates tax_reports.py —
+    # whether to retire it is a separate cleanup decision, out of scope here.
+    if not current_user.tax_registered:
+        return jsonify({'error': 'Not tax registered'}), 400
 
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
@@ -173,7 +176,8 @@ def api_vat():
     """), {'uid': current_user.id, 'df': df, 'dt': dt}).fetchone()
 
     output_vat = money(sales.vat or 0)
-    input_vat_estimate = money(to_decimal(purchases.net or 0) * to_decimal(current_user.vat_rate or 20) / 100)
+    # Input-tax estimate uses the canonical tax_rate (vat_rate retired with the vat_* unification).
+    input_vat_estimate = money(to_decimal(purchases.net or 0) * to_decimal(current_user.tax_rate or 0) / 100)
     vat_due = money(output_vat - input_vat_estimate)
 
     return jsonify({

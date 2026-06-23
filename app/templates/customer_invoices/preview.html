@@ -62,9 +62,7 @@
                     {% endif %}
                     {% if current_user.business_phone %}<p class="text-xs" style="color:rgba(255,255,255,0.75)">{{ current_user.business_phone }}</p>{% endif %}
                     {% if current_user.business_email %}<p class="text-xs" style="color:rgba(255,255,255,0.75)">{{ current_user.business_email }}</p>{% endif %}
-                    {% if current_user.vat_registered and current_user.vat_number %}
-                    <p class="text-xs mt-1" style="color:rgba(255,255,255,0.75)">VAT No: {{ current_user.vat_number }}</p>
-                    {% elif current_user.tax_registered and current_user.tax_number %}
+                    {% if current_user.tax_registered and current_user.tax_number %}
                     <p class="text-xs mt-1" style="color:rgba(255,255,255,0.75)">{{ current_user.tax_type or 'Tax' }} No: {{ current_user.tax_number }}</p>
                     {% endif %}
                     {% if current_user.company_registration_number %}

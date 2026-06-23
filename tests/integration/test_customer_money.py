@@ -98,8 +98,8 @@ def test_job_card_invoice_tax_is_rounded(app, db, user):
 
 # ── VAT-return boxes computed in Decimal (reports.api_vat) ────────────────────
 def test_vat_return_boxes_are_decimal(app, db, user):
-    user.vat_registered = True
-    user.vat_rate = Decimal('20')
+    user.tax_registered = True          # unified canonical flag (gates /api/vat)
+    user.tax_rate = Decimal('20')       # canonical rate (box4 input-tax estimate)
     # Get past the subscription wall (minimal fixture user defaults to expired trial).
     user.subscription_plan = 'pro'
     user.subscription_status = 'active'

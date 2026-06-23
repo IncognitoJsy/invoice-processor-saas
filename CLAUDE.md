@@ -77,6 +77,22 @@ treat anything touching extraction, validation, or money maths as critical-path 
   so changes can be verified against a production-like setup before reaching `master`/production.
   This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
   (AUDIT.md risk #4), which alters live financial data.
+- **DONE (2026-06-23) — vat_*→tax_* unification + Settings tax-registration UI** (branch
+  `fix-settings-tax-registered`; suite 196). Fixes two post-go-live bugs (Settings "VAT Registered"
+  toggle flipped off on save; picked GST showed/synced 0%). Root cause: two parallel flag sets and
+  the Settings page only exposed the legacy `vat_registered` (which `update_profile` never saved),
+  so `tax_registered` — the flag `effective_output_rate`/resolver/parser actually use — had no
+  working UI. New `POST /settings/tax` form persists `tax_registered`/`tax_type`/`tax_number`;
+  **tax_rate stays owned by the picker when connected** (handler must not zero it), manual+guard when
+  not. Migrated the 3 `vat_*` readers (`reports.py /api/vat` gate + box4, `reports/index.html`,
+  `customer_invoices/preview.html`) to `tax_*`; `vat_*` columns kept (no drop), `/api/vat`-vs-
+  `tax_reports.py` redundancy flagged for separate cleanup. `picked_but_not_registered` warning
+  (distinct from `output_rate_unconfigured`); `tax_noun` GST/VAT label (Jersey→GST).
+  - **🚨 RELEASE NOTE — changes live financial behaviour:** switching `tax_registered=True` flips the
+    **parser cost-base** (`claude_parser.py:1139`) — unregistered fold irrecoverable input GST into
+    the markup base; registered reclaim it (cost ex-tax). Correct for Proton.je, but **cost/markup/
+    selling on future imports changes** the moment an account becomes registered. Pinned by
+    `test_claude_parser_calc.py::test_cost_base_*`. (Same prominence as the picker re-pick note.)
 - **DONE (2026-06-23) — output tax-code PICKER** (branch `sprint-a-phase2-markup`,
   `126898e`→`fab37b0`; full suite 174). Registered users pick their output sales tax code **once**
   from a read-only dropdown sourced from their connected software (`GET /settings/tax-codes`);
