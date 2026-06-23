@@ -68,17 +68,18 @@ def make_parser(known_products=None, *, is_admin=True, default_markup=50.0,
     return p
 
 
-def make_item(part, qty, discount, amount, description=""):
+def make_item(part, qty, discount, amount, description="", original_unit_price=0):
     """Build one extracted-item dict in the shape _transform_items() expects.
     `amount` is the value the AI extracted into total_amount (net for YESSS,
-    gross for Wholesale)."""
+    gross for Wholesale). `original_unit_price` is the retail/list unit price
+    (before discount) — the figure the retail cap compares against."""
     return {
         "part_number": part,
         "description": description or part,
         "quantity": qty,
         "discount": str(discount),
         "total_amount": str(amount),
-        "original_unit_price": 0,
+        "original_unit_price": original_unit_price,
     }
 
 
@@ -345,3 +346,78 @@ def test_cost_base_registered_excludes_input_gst():
     # Registered: reclaims input GST -> cost stays ex-tax at 100 (NOT 105)
     assert round_half_up(out["cost_per_item"]) == Decimal("100.00")
     assert round_half_up(out["selling_price"]) == Decimal("100.00")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RETAIL CAP (claude_parser.py) — per-unit selling must never exceed the
+# supplier's list/counter price (original_unit_price, before discount). Applied
+# AFTER the markup band AND the QB-price override; no-ops when retail is
+# unknown, per-metre-converted, or <= cost (never sell below cost).
+# ═══════════════════════════════════════════════════════════════════════════
+def _cap_line(parser, part, qty, disc, net_amount, retail, *, supplier_tax_rate=5,
+             supplier="YESSS Electrical"):
+    out = parser._transform_items(
+        [make_item(part, qty, disc, net_amount, original_unit_price=retail)],
+        supplier=supplier, supplier_tax_rate=supplier_tax_rate)
+    return out[0] if out else None
+
+
+def test_retail_cap_160mat10_unregistered_capped_at_list():
+    # Unregistered (5% input GST folded): 296.06×1.05×1.50 = 466.29 > retail 455.48 -> capped.
+    p = make_parser(is_admin=True, tax_registered=False)
+    row = _cap_line(p, "160MAT10", 1, 35, "296.06", "455.48")
+    assert round_half_up(row["selling_price"]) == Decimal("455.48")
+    assert Decimal(str(row["selling_price"])) <= Decimal("455.48")
+
+
+def test_retail_cap_160mat8_unregistered_capped_at_list():
+    p = make_parser(is_admin=True, tax_registered=False)
+    row = _cap_line(p, "160MAT8", 1, 35, "221.49", "340.75")
+    assert round_half_up(row["selling_price"]) == Decimal("340.75")
+
+
+def test_retail_cap_160mat10_registered_stays_under_list():
+    # Registered (no fold): 296.06×1.50 = 444.09 — already under retail; cap no-ops, still <= retail.
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = _cap_line(p, "160MAT10", 1, 35, "296.06", "455.48")
+    assert round_half_up(row["selling_price"]) == Decimal("444.09")
+    assert Decimal(str(row["selling_price"])) <= Decimal("455.48")
+
+
+def test_retail_cap_band_edge_registered():
+    # 31% discount -> 50% band even registered: 69×1.50 = 103.50 > retail 100 -> capped to 100.
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = _cap_line(p, "EDGE", 1, 31, "69.00", "100.00")
+    assert round_half_up(row["selling_price"]) == Decimal("100.00")
+
+
+def test_retail_cap_noops_when_no_original_price():
+    # Best-effort extraction: retail missing (0) -> cap must NOT fire; price is the uncapped calc.
+    p = make_parser(is_admin=True, tax_registered=False)
+    row = _cap_line(p, "160MAT10", 1, 35, "296.06", 0)
+    assert round_half_up(row["selling_price"]) == Decimal("466.29")  # unchanged, not zeroed
+
+
+def test_retail_cap_beats_qb_override():
+    # QB catalog price (200) raises selling above retail (100); the cap is the ceiling -> 100.
+    p = make_parser(known_products=qb_product("QBX", 200), is_admin=True, tax_registered=True)
+    row = _cap_line(p, "QBX", 1, 31, "69.00", "100.00")
+    assert round_half_up(row["selling_price"]) == Decimal("100.00")
+
+
+def test_retail_cap_skipped_when_no_discount():
+    # NO-discount line (discount==0): list ≈ cost, so the 20% markup is allowed to exceed retail.
+    # The cap must NOT fire (deliberate exception) — this is the 482271 case.
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = _cap_line(p, "NODISC", 1, 0, "100.00", "100.00")   # disc 0, list == cost
+    assert round_half_up(row["selling_price"]) == Decimal("120.00")  # 100×1.20, NOT capped to 100
+    assert Decimal(str(row["selling_price"])) > Decimal("100.00")    # intentionally over retail
+
+
+def test_retail_cap_discounted_below_cost_noops():
+    # DISCOUNTED line whose (mis-extracted) list is below our cost: capping would sell at a loss,
+    # so the below-cost guard no-ops + flags. Keeps that guard covered now that the cap is
+    # discount-gated. disc 50 -> 50% band; cost 100, list 40 (< cost) -> stays 150, not 40.
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = _cap_line(p, "DLOSS", 1, 50, "100.00", "40.00")
+    assert round_half_up(row["selling_price"]) == Decimal("150.00")  # 100×1.50, NOT 40
