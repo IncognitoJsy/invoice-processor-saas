@@ -9,7 +9,7 @@ from typing import Dict, Optional, List
 from flask import url_for
 
 from app.utils.money import money, to_decimal
-from app.utils.tax import effective_output_rate
+from app.utils.tax import picked_output_code
 
 logger = logging.getLogger(__name__)
 
@@ -261,12 +261,13 @@ class XeroService:
         """Resolve the output-GST TaxType for THIS user's synced sales lines.
 
         Returns an (tax_type, status) tuple, cached for the request:
-          - (tax_type, 'taxable')  registered user; attach this Xero TaxType (output GST)
+          - (tax_type, 'taxable')  registered user; attach this Xero TaxType — the one the
+                                   user PICKED in Settings (output_tax_code_ref), attached directly
           - (tax_type, 'exempt')   unregistered user; a zero/exempt sales TaxType (Xero's
                                    built-in 'NONE' if the org has no named zero rate) ->
                                    no output GST
-          - (None, 'unresolved')   registered user but no sales TaxType matches the
-                                   expected rate -> callers MUST block (fail closed)
+          - (None, 'unresolved')   registered user but no Xero output tax code is picked ->
+                                   callers MUST block (fail closed)
 
         Mirrors QuickBooksService.resolve_output_tax and is driven by
         self.user.tax_registered so the sync can never disagree with the cost-base
@@ -274,10 +275,11 @@ class XeroService:
         GST into the markup base only for UNREGISTERED users), making the
         "GST-in-base + output-GST-on-top" double charge impossible.
 
-        Xero differences vs QBO: tax is a TaxType *string* (not a code object); the
-        no-tax case is the built-in 'NONE' type rather than an omitted field; and rates
-        come from the TaxRate object, so matching is by numeric rate (with a sales-only
-        guard so a purchase/input rate is never used on a customer invoice).
+        Registered users attach their PICKED TaxType (chosen once from Xero in Settings),
+        so the synced invoice carries exactly the TaxType — and rate — the user selected and
+        the document shows. No per-sync rate-match (that match-or-fail is gone). Xero
+        difference vs QBO: tax is a TaxType *string*, and the no-tax case is the built-in
+        'NONE' type rather than an omitted field.
         """
         if self._output_tax_cache is not None:
             return self._output_tax_cache
@@ -288,27 +290,27 @@ class XeroService:
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        tax_rates = self.get_tax_rates(connection)
-        logger.info(f"Available tax rates: {[tr.get('Name') for tr in tax_rates]}")
-
         # Unregistered: never charge output GST (their cost base already absorbs it).
+        # Only this path needs the rate list — to find a zero/exempt sales TaxType.
         if not self.user.tax_registered:
+            tax_rates = self.get_tax_rates(connection)
             exempt = self._select_exempt_tax_type(tax_rates)
             self._output_tax_cache = (exempt, 'exempt')
             logger.info(f"Output tax: user not GST/VAT-registered -> exempt ({exempt})")
             return self._output_tax_cache
 
-        # Registered: lines MUST carry output GST at the user's CONFIGURED rate.
-        tax_type = self._select_taxable_tax_type(tax_rates)
-        if tax_type:
-            logger.info(f"Output tax: registered -> TaxType '{tax_type}' "
-                        f"(target rate {effective_output_rate(self.user)}%)")
-            self._output_tax_cache = (tax_type, 'taxable')
-        else:
+        # Registered: attach the user's PICKED Xero TaxType directly.
+        picked = picked_output_code(self.user)
+        if not picked or picked.get('provider') != 'xero':
             logger.error(
-                "Output tax: registered user but no sales tax type matches the configured rate "
-                f"{effective_output_rate(self.user)}% — blocking sync")
+                "Output tax: registered user but no Xero output tax code is picked "
+                "(pick / re-pick it in Settings) — blocking sync")
             self._output_tax_cache = (None, 'unresolved')
+            return self._output_tax_cache
+
+        tax_type = str(picked['ref'])
+        logger.info(f"Output tax: registered -> picked TaxType '{tax_type}'")
+        self._output_tax_cache = (tax_type, 'taxable')
         return self._output_tax_cache
 
     @staticmethod
@@ -359,22 +361,6 @@ class XeroService:
             if self._is_sales_applicable(tr) and self._is_exempt_rate(tr):
                 return tr.get('TaxType') or 'NONE'
         return 'NONE'  # Xero's built-in no-tax type — always valid
-
-    def _select_taxable_tax_type(self, tax_rates):
-        """Active, sales-applicable, non-exempt TaxType — MATCH-OR-FAIL against the user's
-        configured output rate (`effective_output_rate`). The rate's real value must equal the
-        configured rate within tolerance, else None (caller fails closed) — so the synced
-        invoice never carries a rate the user didn't configure / the document didn't show."""
-        expected = float(effective_output_rate(self.user))
-        if expected <= 0:
-            return None
-        candidates = [tr for tr in self._active(tax_rates)
-                      if self._is_sales_applicable(tr) and not self._is_exempt_rate(tr)]
-        for tr in candidates:
-            rate = self._tax_rate_value(tr)
-            if rate is not None and abs(rate - expected) < 0.01:
-                return tr.get('TaxType')
-        return None
 
     def list_sales_tax_codes(self, connection):
         """Read-only listing of active, sales-applicable TaxTypes with their rate — the data
