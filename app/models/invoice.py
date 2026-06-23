@@ -154,7 +154,7 @@ class InvoiceItem(db.Model):
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False, index=True)
     
     # Product details
-    part_number = db.Column(db.String(100), index=True)
+    part_number = db.Column(db.String(255), index=True)  # widened 100->255 to match prod (risk #10)
     description = db.Column(db.Text)
     
     # Quantities and pricing

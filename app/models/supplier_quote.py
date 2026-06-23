@@ -1,6 +1,10 @@
 """Supplier Quote Comparison models"""
 from app.extensions import db
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import JSONB
+
+# JSONB on Postgres (matches prod — risk #10 reconciliation), plain JSON on SQLite (tests).
+_JSONB = db.JSON().with_variant(JSONB, 'postgresql')
 
 
 class SupplierQuoteSession(db.Model):
@@ -36,7 +40,7 @@ class SupplierQuote(db.Model):
     supplier_name = db.Column(db.String(255), nullable=False)
     original_filename = db.Column(db.String(255))
     raw_text = db.Column(db.Text)
-    parsed_items = db.Column(db.JSON)
+    parsed_items = db.Column(_JSONB)
     status = db.Column(db.String(20), default='processing')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -49,7 +53,7 @@ class SupplierQuoteItem(db.Model):
     generic_description = db.Column(db.Text, nullable=False)
     quantity = db.Column(db.Numeric(10, 2), default=1)
     unit = db.Column(db.String(50))
-    supplier_data = db.Column(db.JSON)  # {supplier_name: {price, part_no, description}}
+    supplier_data = db.Column(_JSONB)  # {supplier_name: {price, part_no, description}}
     best_price_supplier = db.Column(db.String(255))
     best_price = db.Column(db.Numeric(10, 2))
     highest_price = db.Column(db.Numeric(10, 2))

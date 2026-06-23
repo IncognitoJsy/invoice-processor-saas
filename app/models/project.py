@@ -2,7 +2,11 @@
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index
+from sqlalchemy.dialects.postgresql import JSONB
 import uuid
+
+# JSONB on Postgres (matches prod — risk #10 reconciliation), plain JSON on SQLite (tests).
+_JSONB = db.JSON().with_variant(JSONB, 'postgresql')
 
 
 class Project(db.Model):
@@ -136,7 +140,7 @@ class ProjectDocument(db.Model):
     # Parsing status
     parsed = db.Column(db.Boolean, default=False)
     # V8 takeoff canvas state (JSON blob)
-    takeoff_v8_state = db.Column(db.JSON, nullable=True)
+    takeoff_v8_state = db.Column(_JSONB, nullable=True)
     parsed_at = db.Column(db.DateTime)
     parse_error = db.Column(db.Text)
     

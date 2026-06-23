@@ -11,6 +11,7 @@ class CustomerQuote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
+    job_card_id = db.Column(db.Integer, db.ForeignKey('job_card.id'), nullable=True)  # adopted from prod (risk #10)
     quote_number = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined, expired, converted
     issue_date = db.Column(db.Date, default=datetime.utcnow)
