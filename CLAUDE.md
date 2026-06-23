@@ -62,7 +62,14 @@ treat anything touching extraction, validation, or money maths as critical-path 
   pipeline** — `save_invoice_to_db()` stores AI output unvalidated (AUDIT.md risk #1).
   Wiring it in is the top open fix; remove this note once done.
 - **Markup logic** — errors here directly cost users money. Test with edge cases
-  (zero-value lines, credits/refunds, mixed VAT rates).
+  (zero-value lines, credits/refunds, mixed VAT rates). **Retail cap (2026-06-23, branch
+  `fix-retail-price-cap`):** per-unit selling is capped at the supplier list price
+  (`original_unit_price`), applied AFTER the markup band AND the QB-price override — retail is the
+  absolute ceiling, the structural guarantee that selling never exceeds counter price (the bands
+  alone can't, e.g. a band-edge `0.69×1.50=1.035`). No-ops on missing retail / per-metre-converted
+  lines / retail≤cost (flags instead). On the registered path it binds at band edges (the
+  unregistered GST-fold overage is gone). See AUDIT.md §2 / AUDIT_FINDINGS.md; tests
+  `test_claude_parser_calc.py::test_retail_cap_*`.
 - **QuickBooks / Xero sync** — two-way customer sync design exists. Watch for duplicate
   creation, ID mapping, and token refresh handling.
 - **Compliance features** — VAT settings, VOID invoices, supply date. UK invoicing rules

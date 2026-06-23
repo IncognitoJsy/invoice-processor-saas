@@ -1106,7 +1106,9 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     '305m', '305 m', '305mtr', '305 mtr', 'box 305', '305 metre', '305 meter'
                 ])
                 
+                per_metre_converted = False
                 if is_305m_box and quantity <= 10:
+                    per_metre_converted = True  # cost is now per-metre; original_unit_price is per-box
                     original_box_cost = cost_per_item
                     cost_per_item = money(cost_per_item / 305, places=4)  # sub-penny unit rate
                     quantity = quantity * 305
@@ -1174,7 +1176,35 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                                     actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
                                 source = known_products[part_upper].get('source', 'accounting')
                                 self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
-                
+
+                # ── RETAIL CAP ───────────────────────────────────────────────
+                # Our per-unit selling must never exceed the supplier's list/counter price
+                # (original_unit_price = the unit price BEFORE discount) — the customer could
+                # otherwise buy at full retail for less than we charge. Applied AFTER the markup
+                # band AND the QB-price override, so retail is the ABSOLUTE ceiling (a stale-high
+                # catalog price can't push us above counter price). No-op when:
+                #   - retail is unknown (0 / not extracted — best-effort, no schema enforcement),
+                #   - the per-metre cable conversion ran (original_unit_price is per-box, not
+                #     per-unit, so not comparable), or
+                #   - retail <= our real cost (effective_cost) — capping there would sell at/below
+                #     cost, so we leave the price and flag the line for review instead.
+                retail_unit = to_decimal(item.get('original_unit_price', 0) or 0) or Decimal('0')
+                if retail_unit > 0 and not per_metre_converted and retail_unit < final_selling_price:
+                    if retail_unit > effective_cost:
+                        self.logger.info(
+                            f"🧢 Retail cap: {item.get('part_number', '?')} £{final_selling_price:.2f} "
+                            f"-> £{retail_unit:.2f} (supplier list-price ceiling)"
+                        )
+                        final_selling_price = money(retail_unit)
+                        if cost_per_item > 0:
+                            actual_markup = (final_selling_price - cost_per_item) / cost_per_item
+                    else:
+                        self.logger.warning(
+                            f"⚠️ Retail cap skipped for {item.get('part_number', '?')}: list "
+                            f"£{retail_unit:.2f} <= effective cost £{effective_cost:.2f} — review line "
+                            f"(possible bad list price / would sell at a loss)"
+                        )
+
                 profit_per_item = money(final_selling_price - effective_cost)
                 
                 # Track QB price if different from calculated

@@ -464,3 +464,37 @@ computed cost / markup / selling price on future imports** the moment registrati
 Both behaviours are now pinned by tests (`test_claude_parser_calc.py::test_cost_base_*`) so the
 unification can't silently shift them. Same prominence as the picker re-pick note: **expect cost/markup
 figures on newly-imported invoices to change when an account becomes registered.**
+
+---
+
+# Retail-price cap on markup (2026-06-23, branch fix-retail-price-cap)
+
+Live invoice `093IN1120571` (YESSS) surfaced selling prices ABOVE the supplier's retail/list price
+on heavily-discounted lines — the customer could buy at full counter price for less than we charged.
+`160MAT10`: list 455.48, cost 296.06 (35% disc), our selling **466.29**; `160MAT8`: list 340.75,
+cost 221.49, selling **348.84**.
+
+**Cause:** `selling = effective_cost × (1 + band markup)` with no ceiling. Two factors compounded:
+the 50% band on a 30–70% discount, and (on the **unregistered** path) the irrecoverable input-GST
+fold (`×1.05`) — `0.65 × 1.05 × 1.50 = 1.024×` retail. There was no comparison to the list price.
+
+**Fix:** cap per-unit selling at the supplier list price — `final = min(final, original_unit_price)`,
+applied AFTER the markup band AND the QB-price override (so retail is the **absolute ceiling**, even
+over a stale-high catalog price). No-ops when retail is unknown/0 (best-effort extraction, not
+schema-enforced), when the 305m per-metre conversion ran (list is per-box, not comparable), or when
+retail ≤ our real cost `effective_cost` (never sell below cost — flag the line for review instead).
+`original_unit_price` ("price before discount") was already captured per line — previously stored
+but unused; the cap now consumes it.
+
+### The cap is the STRUCTURAL guarantee (not the band tuning)
+The markup bands cannot themselves guarantee `selling ≤ retail`: at a band edge `0.69 × 1.50 = 1.035`
+exceeds retail. So the cap — not any band adjustment — is what enforces "never above counter price."
+- On the **unregistered** path the overage was GST-fold-driven (`×1.05`), which is what bit on
+  `093IN1120571` (processed while unregistered).
+- On the **registered** path the GST fold is gone, so the overage only appears at the
+  **band edges** (e.g. a ~31% discount → 50% band → `0.69 × 1.50 = 1.035 > retail`). Those are the
+  cases the cap actually binds on now that Proton.je is registered. Pinned by
+  `tests/unit/test_claude_parser_calc.py::test_retail_cap_band_edge_registered`.
+
+The cap only ever LOWERS an over-retail price; it can't raise anything. Both `093IN1120571` lines
+re-process to their list price (455.48 / 340.75). No DB migration; calc-path only.
