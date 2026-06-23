@@ -1,6 +1,7 @@
 """PDF Invoice Generator - 6 templates using ReportLab"""
 import io
 import logging
+from decimal import Decimal
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.colors import HexColor, white, black
@@ -102,6 +103,19 @@ def _esc(t):
 def _fmt_money(v):
     return f'£{float(v or 0):.2f}'
 
+def _fmt_rate(rate):
+    """Percent display without trailing zeros: 5.00 -> '5', 17.50 -> '17.5'."""
+    try:
+        return format(Decimal(str(rate)).normalize(), 'f')
+    except Exception:
+        return str(rate)
+
+def _tax_label(invoice, user):
+    """Tax-line label: the user's picked output tax-code name (e.g. 'GST'), falling back to the
+    generic tax_type, with the document's snapshot rate — e.g. 'GST (5%)'."""
+    name = (getattr(user, 'output_tax_code_name', None) or getattr(user, 'tax_type', None) or 'Tax')
+    return f'{name} ({_fmt_rate(invoice.tax_rate)}%)'
+
 def _date(d):
     return d.strftime('%d %b %Y') if d else '—'
 
@@ -165,7 +179,7 @@ def _totals_block(invoice, user, brand, align=TA_RIGHT):
         rows += [
             [_p('Subtotal', 9, '#6b7280', align=align),
              _p(_fmt_money(invoice.subtotal), 9, '#374151', True, align)],
-            [_p(f'{user.tax_type or "Tax"} ({invoice.tax_rate}%)', 9, '#6b7280', align=align),
+            [_p(_tax_label(invoice, user), 9, '#6b7280', align=align),
              _p(_fmt_money(invoice.tax_amount), 9, '#374151', True, align)],
         ]
     rows.append([

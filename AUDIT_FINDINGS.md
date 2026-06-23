@@ -382,9 +382,19 @@ ships, or their syncs will fail closed.** This is a **safe** regression: the syn
 it with an **amber "Pick your output tax code" prompt**. For Proton.je this is **absorbed into the
 go-live config step** (pick GST id 2 once). Unregistered users are unaffected (still pushed exempt).
 
-**Pending follow-up (not in this set):** surface the picked code name + rate + tax amount on the
-invoice/quote PDF (`pdf_generator.py`). The picked *rate* already flows onto documents via the
-`tax_rate` snapshot (the tax line renders); showing the picked code *name* is the outstanding bit.
+**✅ DONE (2026-06-23) — picked code surfaced on the PDF.** `pdf_generator._totals_block` now
+labels the tax line with the picked code name + the document's snapshot rate, with the tax amount
+in the adjacent column — e.g. `GST (5%)` | `£5.00` (helpers `_tax_label` / `_fmt_rate`; the latter
+trims trailing zeros so `5.00` → `5`). Applies to all 6 invoice templates (all share
+`_totals_block`); falls back to the generic `tax_type`, then `'Tax'`, when no pick is stored. The
+code *name* is read from the user's current pick (not snapshotted on the document) — same A2 class
+of edge as the stored rate. Tests: `tests/unit/test_pdf_tax_label.py`.
+
+> **Note (pre-existing, out of scope):** `app/web/customer_quotes.py` imports `generate_quote_pdf`
+> from `app/services/pdf_generator.py`, but that function is **not defined** there (only
+> `generate_invoice_pdf` is) — the customer-quote PDF path looks broken independently of this work.
+> Whenever a quote generator is (re)added it should reuse `_totals_block`, so it inherits this label
+> for free. Flagging for a separate fix.
 
 ### Sync block states
 - **`TAX_CODE_UNRESOLVED`** — registered user with **no pick** (or a transient/empty code list).
