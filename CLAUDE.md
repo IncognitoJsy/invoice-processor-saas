@@ -77,15 +77,66 @@ treat anything touching extraction, validation, or money maths as critical-path 
   so changes can be verified against a production-like setup before reaching `master`/production.
   This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
   (AUDIT.md risk #4), which alters live financial data.
-- **AUDIT risk #4 — Float→Decimal money: Phase 1 ✅ DONE, Phase 2 ⏳ OUTSTANDING.**
-  Phase 1 (2026-06-15) migrated all 28 Float money columns to Numeric in production
-  (`money_float_to_numeric`) — storage-only and behaviour-preserving (verified: checksum
-  and row counts unchanged). **Phase 2 is still to do and risk #4 is NOT closed until it
-  lands:** add the shared Decimal `money()` helper (the validator already has one) and
-  convert every float `round()` calculation/sync site to round-per-line-then-sum in Decimal,
-  plus build the missing money test corpus (markup, mixed VAT, discounts, credits, VAT
-  report, QB/Xero sync). Until then, storage is Numeric but the live arithmetic is still
-  binary float + banker's rounding. See AUDIT.md §2 and risk #4.
+- **DONE (2026-06-23) — output tax-code PICKER** (branch `sprint-a-phase2-markup`,
+  `126898e`→`fab37b0`; full suite 174). Registered users pick their output sales tax code **once**
+  from a read-only dropdown sourced from their connected software (`GET /settings/tax-codes`);
+  it's stored on `User` (`output_tax_code_ref`/`_name`/`_provider`; `tax_rate` snapshotted from the
+  code at pick, re-validated server-side on save). The QB/Xero resolver attaches the **picked ref
+  directly — no per-sync `TaxRate` read, no rate-match** (this **supersedes** the 2c/3c match-or-fail;
+  `_select_taxable_code`/`_select_taxable_tax_type` deleted, rate-discovery helpers kept for the
+  picker only, and the `814f7b8` retry+cache follow-up in `AUDIT_FINDINGS.md` is now **superseded**).
+  Provider-guarded; unregistered still exempt.
+  - **🚨 RELEASE NOTE (read before deploy):** existing **GST/VAT-registered users with QuickBooks or
+    Xero connected — including our own Proton.je — must open Settings → "Output tax code" and pick
+    once after this ships, or their syncs fail closed.** Safe regression: it **blocks**
+    (`TAX_CODE_UNRESOLVED`), never mis-rates / never silently syncs tax-free. The amber Settings
+    prompt surfaces it. For Proton.je: **fold this into the go-live config step** (pick GST id 2 once).
+  - Sync block states: `TAX_CODE_UNRESOLVED` (no pick / transient empty list) + the new
+    `TAX_CODE_INVALID` (picked code gone from a non-empty live list → "re-pick"; transient/empty list
+    stays `UNRESOLVED`). Disconnect clears the pick. **A2 edge (documented, not built):** picked rate
+    is a snapshot — if the provider changes the rate behind the same code id, document vs sync
+    diverge until re-pick; periodic re-validation is a later option. See AUDIT.md §2 / AUDIT_FINDINGS.md.
+- **DONE (2026-06-18) — Sprint A Phase 2** (branch `sprint-a-phase2-markup`; per-line diagnosis
+  in `AUDIT_FINDINGS.md`; full suite 147 passed). Closed:
+  - **AUDIT risk #4 — Float→Decimal money: ✅ CLOSED on the rounding/Decimal axis (both halves).**
+    Phase 1 (2026-06-15) migrated the 28 Float money columns to Numeric; Phase 2 (`fce9fd6`)
+    added the shared Decimal `money()` helper (`app/utils/money.py`, also used by
+    `invoice_validator`) and Decimalised the **supplier-invoice + QB/Xero sync** path (parser →
+    markup → `save_invoice_to_db` → sync payloads); Phase 2b (`ec98ba7`, diagnosis `d37f77b`)
+    Decimalised the **customer-document + report** path (`customer_invoice`/`customer_quote`
+    recalc + `calculate_total`, `job_cards` recalc/merge, `customer_invoices.py`
+    line/merge/summary/manual, and `tax_reports.py` + `reports.py` P&L/VAT boxes). All live money
+    arithmetic is now Decimal, ROUND_HALF_UP, line-authority, with float only at the
+    DB/JSON/CSV/API edges; also fixed 3 reachable `Decimal+float` merge crashes. See AUDIT.md §2.
+  - **Step 2c — ✅ DONE** (`7a7c284` document side, `87ac248` resolver side): the printed
+    customer-document tax line and the QB/Xero resolver both derive from one shared
+    `effective_output_rate(user)` = (registered ? tax_rate : 0) (`app/utils/tax.py`). Documents
+    snapshot it at create and never re-derive (immutable records); the resolver targets it with
+    **match-or-fail** (the matched code's real rate must equal the configured rate, else fail
+    closed — 3c's single-code/keyword/country fallbacks removed); registered-but-rate-unset is
+    blocked at document create, sync, and settings save. Production-verified read-only
+    (`scripts/check_output_tax.py`): registered → `(GST id 2, taxable)` at real 5%, unregistered →
+    exempt; no QBO writes. Residual edge (rare, documented): a PDF + a separately-synced supplier
+    invoice for one job can differ if the rate changes between — resolver fail-closed protects books.
+    ⚠️ **DEFERRED money path — Quote Builder:** `project.py` contingency + `project_material`/
+    `project_labour` maths are still float/unrounded. Quote Builder is flagged OFF so it isn't
+    live, but this **must be migrated to `money()` before the flag is turned on / Quote Builder
+    goes public** (AUDIT.md §2.3).
+  - **Markup** (`7da148b`): per-unit price-override no longer multiplies a line total by quantity
+    (the qty² overcharge); markup tier bands made continuous (no fractional-discount gap);
+    `avg_markup` cap kept in Decimal (F1).
+  - **Part-number OCR** (`0b3c7d5`): matcher no longer conflates distinct parts on a
+    digit-for-digit difference (SB20MWH↔SB25MWH); printed code wins unless glyph misread /
+    learned / exact match.
+  - **QuickBooks & Xero output GST** (`b357f33` QB, `cd54ffc` Xero): registration- & region-aware
+    — unregistered → tax-exempt, registered → rate-matched code/TaxType (Jersey 5% over UK 20%),
+    no resolvable code → fail closed (`TAX_CODE_UNRESOLVED`) instead of silently syncing tax-free.
+  - **QB resolver hardened (Step 3c)** (`16edb91`): reads each code's real rate from its
+    `TaxRateRef` detail (not the name) + single-code fallback; drops the UK-20%/address-country
+    default. Fixes the live GST-only company whose sole code is named just `"GST"` (5% in the
+    detail) — previously fail-closed the registered path. Verified read-only against production
+    via `scripts/check_output_tax.py` (`3b7071b`): registered → `(GST id 2, taxable)` at 5%.
+  - **Cleanup** (`fbee76a`): deleted the dead duplicate `app/services/quickbooks_service.py`.
 - Feature flags shipped to `staging`; production rollout pending verification.
 - QuickBooks App Store submission: submitted, review call requested — avoid breaking
   anything the QB review might exercise (OAuth flow, disconnect flow, sync accuracy).

@@ -5,6 +5,8 @@ from app.extensions import db
 from app.models.job_card import JobCard
 from app.models.customer_invoice import CustomerInvoiceLine
 from app.models.customer import Customer
+from app.utils.money import money, to_decimal
+from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime
 
 bp = Blueprint('job_cards', __name__, url_prefix='/jobs')
@@ -223,6 +225,9 @@ def api_attach_supplier_invoice():
     if not invoice_id:
         return jsonify({'error': 'No invoice ID'}), 400
 
+    if output_rate_unconfigured(current_user):
+        return jsonify({'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
+
     from app.models.invoice import Invoice, InvoiceItem
     from app.models.customer_invoice import CustomerInvoice, CustomerInvoiceLine
     from app.models.user import User
@@ -290,7 +295,7 @@ def api_attach_supplier_invoice():
             due_date=due,
             payment_terms=str(terms_days),
             subtotal=0,
-            tax_rate=0,
+            tax_rate=effective_output_rate(current_user),  # snapshot: 0 if unregistered
             tax_amount=0,
             total=0,
             notes='',
@@ -343,8 +348,8 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
             part_lookup[pn] = line
 
     for item in supplier_items:
-        sell_price = float(item.selling_price or item.calculated_selling_price or 0)
-        qty = float(item.quantity or 1)
+        sell_price = to_decimal(item.selling_price or item.calculated_selling_price or 0)
+        qty = to_decimal(item.quantity or 1)
         desc = item.description or 'Materials'
         part_num = (item.part_number or '').strip().upper()
 
@@ -368,11 +373,11 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
                             break
 
         if existing:
-            # Update quantity and use HIGHER price
-            existing.quantity = existing.quantity + qty
-            if sell_price > existing.unit_price:
+            # Update quantity and use HIGHER price (Decimal throughout)
+            existing.quantity = to_decimal(existing.quantity) + qty
+            if sell_price > to_decimal(existing.unit_price):
                 existing.unit_price = sell_price
-            existing.line_total = existing.quantity * existing.unit_price
+            existing.line_total = money(to_decimal(existing.quantity) * to_decimal(existing.unit_price))
         else:
             # Create new line - store part number in description as prefix
             line_desc = f"{part_num}|{desc}" if part_num else desc
@@ -382,7 +387,7 @@ def _merge_itemised(customer_inv, supplier_items, is_new):
                 description=line_desc,
                 quantity=qty,
                 unit_price=sell_price,
-                line_total=qty * sell_price,
+                line_total=money(qty * sell_price),
                 line_type='itemised',
                 sort_order=sort_order,
             )
@@ -395,7 +400,10 @@ def _merge_summary(customer_inv, supplier_items, is_new):
     """Merge supplier invoice items into customer invoice - summary mode"""
     from app.models.customer_invoice import CustomerInvoiceLine
 
-    new_total = sum(float(i.selling_price or i.calculated_selling_price or 0) * float(i.quantity or 1) for i in supplier_items)
+    new_total = money(sum(
+        (money(to_decimal(i.selling_price or i.calculated_selling_price or 0) * to_decimal(i.quantity or 1))
+         for i in supplier_items),
+        to_decimal(0)))
 
     # Find existing Materials line
     materials_line = None
@@ -405,8 +413,8 @@ def _merge_summary(customer_inv, supplier_items, is_new):
             break
 
     if materials_line:
-        # Add to existing total
-        materials_line.line_total = float(materials_line.line_total or 0) + new_total
+        # Add to existing total (Decimal)
+        materials_line.line_total = money(to_decimal(materials_line.line_total or 0) + new_total)
         materials_line.unit_price = materials_line.line_total
         materials_line.quantity = 1
     else:
@@ -426,11 +434,12 @@ def _recalculate_invoice(customer_inv):
     """Recalculate invoice subtotal, tax and total from lines"""
     db.session.flush()
     lines = CustomerInvoiceLine.query.filter_by(customer_invoice_id=customer_inv.id).all()
-    subtotal = sum(float(l.line_total or 0) for l in lines)
-    tax = subtotal * (float(customer_inv.tax_rate or 0) / 100)
+    # Line-authority, Decimal end-to-end (ROUND_HALF_UP) — was float with tax never rounded.
+    subtotal = money(sum((money(l.line_total or 0) for l in lines), to_decimal(0)))
+    tax = money(subtotal * to_decimal(customer_inv.tax_rate or 0) / 100)
     customer_inv.subtotal = subtotal
     customer_inv.tax_amount = tax
-    customer_inv.total = subtotal + tax
+    customer_inv.total = money(subtotal + tax)
     customer_inv.updated_at = datetime.utcnow()
 
 

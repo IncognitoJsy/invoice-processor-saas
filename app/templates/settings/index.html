@@ -286,16 +286,27 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tax Handling</label>
                     <div class="flex items-center px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
-                        <svg class="w-5 h-5 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {% if tax_code_needs_pick %}
+                        <svg class="w-5 h-5 text-amber-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        </svg>
+                        {% else %}
+                        <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
+                        {% endif %}
                         <div>
-                            {% if current_user.xero_tenant_id %}
-                            <p class="text-sm font-medium text-gray-900 dark:text-white">Using Xero tax settings</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">GST/VAT is automatically applied based on your Xero configuration</p>
-                            {% elif current_user.quickbooks_realm_id %}
-                            <p class="text-sm font-medium text-gray-900 dark:text-white">Using QuickBooks tax settings</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">GST/VAT is automatically applied based on your QuickBooks configuration</p>
+                            {% if accounting_connected %}
+                                {% if picked_tax_code %}
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Output tax code: {{ picked_tax_code.name }} ({{ picked_tax_code.rate }}%)</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Synced to {{ accounting_provider }}. Change it in the “Output tax code” card below.</p>
+                                {% elif tax_code_needs_pick %}
+                                <p class="text-sm font-medium text-amber-600 dark:text-amber-400">Pick your output tax code</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">You’re tax-registered but haven’t picked a sales tax code — invoices won’t sync until you do (card below).</p>
+                                {% else %}
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Connected to {{ accounting_provider }}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Pick your output tax code in the card below to control the GST/VAT applied on sync.</p>
+                                {% endif %}
                             {% else %}
                             <p class="text-sm font-medium text-gray-900 dark:text-white">No accounting software connected</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Connect QuickBooks or Xero to enable automatic tax handling</p>
@@ -303,7 +314,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="flex justify-end">
                     <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
                         Save Preferences
@@ -311,6 +322,77 @@
                 </div>
             </form>
         </div>
+
+        <!-- Output Tax Code Picker -->
+        {% if accounting_connected %}
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6" id="tax-code">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Output tax code</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    The sales tax code applied to invoices &amp; quotes synced to {{ accounting_provider }}.
+                    Choose from the codes in your accounting software — the rate comes straight from {{ accounting_provider }}.
+                </p>
+            </div>
+            <form method="POST" action="{{ url_for('settings.save_tax_code') }}" class="p-6 space-y-4" id="tax-code-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sales tax code</label>
+                    <select name="tax_code_ref" id="tax-code-select"
+                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        <option value="">Loading from {{ accounting_provider }}…</option>
+                    </select>
+                    <p id="tax-code-status" class="text-xs text-gray-400 mt-1">
+                        {% if picked_tax_code %}Current: {{ picked_tax_code.name }} ({{ picked_tax_code.rate }}%){% endif %}
+                    </p>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" id="tax-code-save" disabled
+                            class="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl transition">
+                        Save tax code
+                    </button>
+                </div>
+            </form>
+        </div>
+        <script>
+        (function () {
+            var sel = document.getElementById('tax-code-select');
+            var save = document.getElementById('tax-code-save');
+            var status = document.getElementById('tax-code-status');
+            var current = {{ picked_tax_code.ref|tojson if picked_tax_code else 'null' }};
+            fetch('{{ url_for("settings.tax_codes") }}', {headers: {'Accept': 'application/json'}})
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    sel.innerHTML = '';
+                    // Stale pick: a saved code that is no longer in the provider -> prompt re-pick.
+                    if (d.current && d.current.valid === false && status) {
+                        status.textContent = 'Your saved tax code "' + (d.current.name || d.current.ref)
+                            + '" is no longer in ' + ({{ accounting_provider|tojson }} || 'your accounting software')
+                            + ' — pick a current one below.';
+                        status.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
+                    }
+                    if (!d.success || !d.codes || !d.codes.length) {
+                        sel.innerHTML = '<option value="">No tax codes found in ' + ({{ accounting_provider|tojson }} || 'your accounting software') + '</option>';
+                        return;
+                    }
+                    var ph = document.createElement('option');
+                    ph.value = ''; ph.textContent = '— choose a tax code —';
+                    sel.appendChild(ph);
+                    d.codes.forEach(function (c) {
+                        var o = document.createElement('option');
+                        o.value = c.ref;
+                        var rate = (c.rate === null || c.rate === undefined) ? '?' : c.rate;
+                        o.textContent = c.name + ' (' + rate + '%)' + (c.exempt ? ' — exempt' : '');
+                        if (String(c.ref) === String(current)) { o.selected = true; }
+                        sel.appendChild(o);
+                    });
+                    save.disabled = false;
+                })
+                .catch(function () {
+                    sel.innerHTML = '<option value="">Could not load tax codes — try again</option>';
+                });
+        })();
+        </script>
+        {% endif %}
 
         <!-- Security Section -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
