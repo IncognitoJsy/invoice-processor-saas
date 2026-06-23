@@ -212,55 +212,7 @@
                     </div>
                 </div>
 
-                <!-- VAT Settings -->
-                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>
-                        VAT / Tax Settings
-                    </h3>
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                            <div>
-                                <p class="text-sm font-medium text-gray-900 dark:text-white">VAT Registered</p>
-                                <p class="text-xs text-gray-400">Adds VAT to invoices and unlocks VAT reporting</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" name="vat_registered" id="vat-registered-toggle"
-                                       {% if current_user.vat_registered %}checked{% endif %}
-                                       onchange="toggleVatFields(this.checked)"
-                                       class="sr-only peer">
-                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                            </label>
-                        </div>
-                        <div id="vat-fields" class="{% if not current_user.vat_registered %}hidden{% endif %} space-y-3">
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-500 mb-1">VAT Number</label>
-                                    <input type="text" name="vat_number"
-                                           value="{{ current_user.vat_number or '' }}"
-                                           placeholder="e.g. GB123456789"
-                                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-500 mb-1">VAT Rate %</label>
-                                    <select name="vat_rate" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
-                                        <option value="20" {% if current_user.vat_rate == 20 %}selected{% endif %}>20% Standard</option>
-                                        <option value="5" {% if current_user.vat_rate == 5 %}selected{% endif %}>5% Reduced</option>
-                                        <option value="0" {% if current_user.vat_rate == 0 %}selected{% endif %}>0% Zero rated</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-500 mb-1">VAT Scheme</label>
-                                <select name="vat_scheme" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
-                                    <option value="standard" {% if current_user.vat_scheme == 'standard' %}selected{% endif %}>Standard Accounting</option>
-                                    <option value="cash" {% if current_user.vat_scheme == 'cash' %}selected{% endif %}>Cash Accounting</option>
-                                    <option value="flat_rate" {% if current_user.vat_scheme == 'flat_rate' %}selected{% endif %}>Flat Rate Scheme</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Tax/GST registration moved to its own card below (posts to settings.save_tax) -->
 
                 <!-- Employer Contribution Rate - full platform only -->
                 {% if current_user.platform_mode in ['full', 'both'] %}
@@ -283,41 +235,81 @@
                 </div>
                 {% endif %}
                 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tax Handling</label>
-                    <div class="flex items-center px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
-                        {% if tax_code_needs_pick %}
-                        <svg class="w-5 h-5 text-amber-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                        </svg>
-                        {% else %}
-                        <svg class="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        {% endif %}
-                        <div>
-                            {% if accounting_connected %}
-                                {% if picked_tax_code %}
-                                <p class="text-sm font-medium text-gray-900 dark:text-white">Output tax code: {{ picked_tax_code.name }} ({{ picked_tax_code.rate }}%)</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Synced to {{ accounting_provider }}. Change it in the “Output tax code” card below.</p>
-                                {% elif tax_code_needs_pick %}
-                                <p class="text-sm font-medium text-amber-600 dark:text-amber-400">Pick your output tax code</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">You’re tax-registered but haven’t picked a sales tax code — invoices won’t sync until you do (card below).</p>
-                                {% else %}
-                                <p class="text-sm font-medium text-gray-900 dark:text-white">Connected to {{ accounting_provider }}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Pick your output tax code in the card below to control the GST/VAT applied on sync.</p>
-                                {% endif %}
-                            {% else %}
-                            <p class="text-sm font-medium text-gray-900 dark:text-white">No accounting software connected</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Connect QuickBooks or Xero to enable automatic tax handling</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
                 <div class="flex justify-end">
                     <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
                         Save Preferences
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tax / GST registration (its own form -> settings.save_tax) -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6" id="tax-registration">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ tax_noun }} registration</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Whether you charge output {{ tax_noun }} on sales. This drives the {{ tax_noun }} applied on sync,
+                    your cost/markup basis, and {{ tax_noun }} reporting.
+                </p>
+            </div>
+            {% if picked_but_not_registered %}
+            <div class="mx-6 mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <p class="text-sm text-amber-700 dark:text-amber-300">
+                    You’ve picked an output tax code{% if picked_tax_code %} ({{ picked_tax_code.name }}){% endif %} but aren’t marked
+                    {{ tax_noun }}-registered — it won’t apply on sync (lines push tax-exempt) until you switch this on.
+                </p>
+            </div>
+            {% endif %}
+            <form method="POST" action="{{ url_for('settings.save_tax') }}" class="p-6 space-y-4" id="tax-reg-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ tax_noun }} Registered</p>
+                        <p class="text-xs text-gray-400">Adds {{ tax_noun }} to invoices and unlocks {{ tax_noun }} reporting</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="tax_registered" id="tax-registered-toggle" value="true"
+                               {% if current_user.tax_registered %}checked{% endif %}
+                               onchange="document.getElementById('tax-reg-fields').classList.toggle('hidden', !this.checked)"
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                    </label>
+                </div>
+                <div id="tax-reg-fields" class="{% if not current_user.tax_registered %}hidden{% endif %} space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Tax type</label>
+                            <select name="tax_type" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                                <option value="GST" {% if current_user.tax_type == 'GST' %}selected{% endif %}>GST</option>
+                                <option value="VAT" {% if current_user.tax_type == 'VAT' %}selected{% endif %}>VAT</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">{{ tax_noun }} number</label>
+                            <input type="text" name="tax_number" value="{{ current_user.tax_number or '' }}"
+                                   placeholder="your registration number"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        </div>
+                    </div>
+                    {% if accounting_connected %}
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        Your output {{ tax_noun }} rate comes from the code you pick in “Output tax code” below{% if picked_tax_code %}
+                        (currently {{ picked_tax_code.name }} {{ picked_tax_code.rate }}%){% endif %}. Saving here won’t change it.
+                    </p>
+                    {% else %}
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Output {{ tax_noun }} rate %</label>
+                        <input type="number" name="tax_rate" step="0.01" min="0"
+                               value="{{ current_user.tax_rate or '' }}"
+                               placeholder="e.g. 5 for GST, 20 for VAT"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
+                        <p class="text-xs text-gray-400 mt-1">Connect QuickBooks or Xero to pick the rate automatically from a tax code.</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition">
+                        Save {{ tax_noun }} settings
                     </button>
                 </div>
             </form>
@@ -333,6 +325,12 @@
                     Choose from the codes in your accounting software — the rate comes straight from {{ accounting_provider }}.
                 </p>
             </div>
+            {% if tax_code_needs_pick %}
+            <div class="mx-6 mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <p class="text-sm font-medium text-amber-700 dark:text-amber-300">Pick your output tax code</p>
+                <p class="text-xs text-amber-700/80 dark:text-amber-300/80">You’re {{ tax_noun }}-registered but haven’t picked a sales tax code — invoices won’t sync until you do.</p>
+            </div>
+            {% endif %}
             <form method="POST" action="{{ url_for('settings.save_tax_code') }}" class="p-6 space-y-4" id="tax-code-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div>

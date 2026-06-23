@@ -320,3 +320,28 @@ def test_print_line_breakdown(capsys):
                 print(f"{part:<13}{qty:>5}{disc:>6}{row['cost_per_item']:>9.2f}"
                       f"{row['markup_percent']:>7}{row['selling_price']:>9.2f}"
                       f"{row['profit_per_item']:>10.2f}{line_sell:>11.2f}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COST-BASE PIN (claude_parser.py:1139) — the biggest real-world consequence of
+# flipping tax_registered. Registered users reclaim input GST (cost ex-tax);
+# unregistered users cannot, so irrecoverable supplier GST is folded into the
+# markup base. The vat_*/tax_* unification MUST NOT silently shift this — these
+# two tests pin both behaviours. (markup=0 so selling == effective cost.)
+# ═══════════════════════════════════════════════════════════════════════════
+def test_cost_base_unregistered_folds_irrecoverable_input_gst():
+    parser = make_parser(is_admin=False, default_markup=0.0, tax_registered=False)
+    out = parser._transform_items([make_item("WID1", 1, 0, "100.00")],
+                                  supplier="X", supplier_tax_rate=5)[0]
+    # 100 cost + 5% irrecoverable supplier GST = 105 effective cost (markup base)
+    assert round_half_up(out["cost_per_item"]) == Decimal("105.00")
+    assert round_half_up(out["selling_price"]) == Decimal("105.00")
+
+
+def test_cost_base_registered_excludes_input_gst():
+    parser = make_parser(is_admin=False, default_markup=0.0, tax_registered=True)
+    out = parser._transform_items([make_item("WID1", 1, 0, "100.00")],
+                                  supplier="X", supplier_tax_rate=5)[0]
+    # Registered: reclaims input GST -> cost stays ex-tax at 100 (NOT 105)
+    assert round_half_up(out["cost_per_item"]) == Decimal("100.00")
+    assert round_half_up(out["selling_price"]) == Decimal("100.00")

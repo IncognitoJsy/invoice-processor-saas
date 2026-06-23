@@ -430,3 +430,37 @@ are unusual), and the code id is still correct so the books aren't *wrong*, just
 between the two artifacts. **Periodic re-validation** (background re-read of the picked code's rate,
 flagging drift) is noted as a **later option — not built.** This sits next to the Step 2c residual
 edge (PDF vs separately-synced supplier invoice when the rate changes between).
+
+---
+
+# vat_* → tax_* unification + Settings tax-registration UI (2026-06-23, branch fix-settings-tax-registered)
+
+Fixes two live bugs found after go-live: the Settings "VAT Registered" toggle flipped back off on
+save, and a picked GST code displayed/synced at 0%. **Root cause:** the app had two parallel flag
+sets — `tax_*` (the canonical set the resolver, parser cost-base, picker, tax_reports, PDF all use)
+and a legacy `vat_*` set — and the Settings page only exposed `vat_registered`, which `update_profile`
+didn't even persist. So `tax_registered` (the flag `effective_output_rate` gates on) had no working UI.
+
+**Change:** unify on `tax_*`.
+- New **`POST /settings/tax`** handler + its own form persists `tax_registered` / `tax_type` /
+  `tax_number`. **tax_rate ownership:** provider CONNECTED → the picker owns the rate, the handler
+  does NOT touch `tax_rate` (a bare Save can't zero it); NOT connected → manual rate with the
+  `registered ⇒ rate>0` guard.
+- Migrated the 3 `vat_*` readers to `tax_*`: `reports.py /api/vat` gate, `reports/index.html`,
+  `customer_invoices/preview.html`. Also switched `/api/vat` box4 input-tax estimate from the now-
+  orphaned `vat_rate` to the canonical `tax_rate`. The `vat_*` columns are left in place (no drop
+  migration); retiring them + deciding whether `/api/vat` is redundant with `tax_reports.py` is a
+  separate cleanup, deliberately NOT folded in here.
+- `picked_but_not_registered(user)` — defense-in-depth Settings warning when a code is picked but
+  the user isn't registered (kept DISTINCT from `output_rate_unconfigured`, not overloaded).
+- `tax_noun(user)` — GST/VAT label from `tax_type` else region (Jersey → GST).
+
+### 🚨 RELEASE NOTE — this changes live financial behaviour (parser cost-base)
+Setting **`tax_registered = True`** does more than charge output GST: it flips the **parser cost-base**
+(`claude_parser.py:1139`). **Unregistered** users cannot reclaim input GST, so irrecoverable supplier
+GST is folded into the markup base (cost inflated); **registered** users reclaim it, so cost stays
+ex-tax. For Proton.je (Jersey GST-registered) this is the **correct** accounting, but it **changes
+computed cost / markup / selling price on future imports** the moment registration is switched on.
+Both behaviours are now pinned by tests (`test_claude_parser_calc.py::test_cost_base_*`) so the
+unification can't silently shift them. Same prominence as the picker re-pick note: **expect cost/markup
+figures on newly-imported invoices to change when an account becomes registered.**

@@ -5,7 +5,7 @@ from app.extensions import db
 from app.models.quickbooks import QuickBooksConnection
 from app.models.xero import XeroConnection
 from app.utils.password_validation import validate_password
-from app.utils.tax import picked_output_code
+from app.utils.tax import picked_output_code, picked_but_not_registered, tax_noun
 import io
 import base64
 import logging
@@ -32,7 +32,51 @@ def index():
         accounting_provider=('QuickBooks' if qb_connected else 'Xero' if xero_connected else None),
         picked_tax_code=picked,
         tax_code_needs_pick=needs_pick,
+        picked_but_not_registered=picked_but_not_registered(current_user),
+        tax_noun=tax_noun(current_user),
     )
+
+
+@bp.route('/tax', methods=['POST'])
+@login_required
+def save_tax():
+    """Persist the output-tax registration the resolver + parser actually use: tax_registered,
+    tax_type, tax_number. This is the canonical 'registered' flag (the legacy vat_* fields are
+    retired). tax_rate ownership:
+      - provider CONNECTED -> the picker owns tax_rate; this handler must NOT touch it (so a bare
+        'Save' can't zero the picked rate). The user picks the rate in the Output tax code card.
+      - NOT connected -> a manual tax_rate is taken, with the 'registered => rate > 0' guard.
+
+    NOTE: flipping tax_registered also changes the parser cost-base (registered users reclaim
+    input GST, so cost is ex-tax; unregistered fold irrecoverable input GST into the markup base)."""
+    registered = (request.form.get('tax_registered') in ('true', 'on', '1', 'yes'))
+    current_user.tax_registered = registered
+    if registered:
+        tax_type = (request.form.get('tax_type') or '').strip()
+        if tax_type:
+            current_user.tax_type = tax_type
+        current_user.tax_number = (request.form.get('tax_number') or '').strip() or None
+
+        qb = QuickBooksConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+        xero = XeroConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+        connected = bool((qb and qb.access_token) or xero)
+
+        if not connected:
+            # No provider to pick a rate from -> take a manual rate, and a registered user MUST
+            # have a positive rate (else the document shows no tax while claiming registration).
+            try:
+                rate = float(request.form.get('tax_rate', 0) or 0)
+            except (ValueError, TypeError):
+                rate = 0.0
+            if rate <= 0:
+                db.session.rollback()
+                flash(f'Enter your output {tax_type or "tax"} rate (e.g. 5 for GST, 20 for VAT) to register.', 'error')
+                return redirect(url_for('settings.index'))
+            current_user.tax_rate = rate
+        # connected: leave tax_rate untouched — it is owned by the picked code (Output tax code card).
+    db.session.commit()
+    flash('Tax settings saved.', 'success')
+    return redirect(url_for('settings.index'))
 
 
 @bp.route('/tax-codes')
