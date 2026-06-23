@@ -20,7 +20,8 @@ class JobCard(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     customer = db.relationship('Customer', backref='job_cards', lazy='select')
-    quote = db.relationship('CustomerQuote', backref='job_card', lazy='select')
+    # Pin to quote_id: customer_quote.job_card_id (adopted from prod, risk #10) adds a 2nd FK path.
+    quote = db.relationship('CustomerQuote', backref='job_card', lazy='select', foreign_keys=[quote_id])
 
     STATUSES = {
         'new': 'New',
