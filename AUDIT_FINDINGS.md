@@ -498,3 +498,36 @@ exceeds retail. So the cap — not any band adjustment — is what enforces "nev
 
 The cap only ever LOWERS an over-retail price; it can't raise anything. Both `093IN1120571` lines
 re-process to their list price (455.48 / 340.75). No DB migration; calc-path only.
+
+---
+
+# Invoice-line UI: per-unit display, per-line markup, manual price override, line stamps (2026-06-23, branch feature-invoice-line-ui)
+
+Four features on the invoices view-modal (invoices/index.html), built together (shared line display):
+1. **Per-1 display** — each money cell shows the per-unit figure (primary) with the line total
+   (muted) beneath when qty>1; for qty 1 the per-unit IS the line total (no redundant second figure).
+   Cost/unit = `cost_per_item` (the markup basis, so cost/u + profit/u = sell/u reconciles).
+2. **Per-line markup %** — `markup_percent`, with a prominent amber **⚑ MANUAL** pill when overridden.
+3. **Editable per-unit selling price** — inline ✎ edit → `PUT /invoices/item/<id>/price`.
+4. **Per-line stamps** — `created_at` / `updated_at` (relative "edited 2m ago" shown on overridden lines).
+
+**One shared state — `price_overridden`** (new bool on InvoiceItem) drives BOTH feature 2's badge and
+feature 3's override. A manual price is DELIBERATE and **bypasses the auto retail cap** (the cap only
+runs at parse time in `_transform_items`; the PUT path never re-runs it). `update_item_price` was
+hardened: `?reset=true` clears the override back to `calculated_selling_price` (explicit, not inferred
+from value equality); the override routes through `money()` (ROUND_HALF_UP) and recomputes
+`markup_percent` (clamped to Numeric(5,2)) + `profit_per_item` + invoice totals.
+
+### 🔒 CONTRACT (do not break)
+`price_overridden=True` means the user typed that price on purpose. **Any future "recalculate markup /
+re-price" action MUST skip rows where `price_overridden` is True** — written into the InvoiceItem model
+comment and the endpoint docstring. Overrides also survive re-import by construction: each upload
+creates a NEW invoice + items; nothing recomputes existing items in place except the user's own PUT.
+
+**Migration** `add_invoice_item_override_stamps` (off `add_output_tax_code_picker`): adds
+`price_overridden` (bool, default false), `created_at`, `updated_at` to `invoice_item` — additive,
+single head. The override VALUE reuses `selling_price`; `markup_percent` already existed.
+
+**Scope:** invoices modal only this cycle (get the pattern right in one place). `quotes/index.html`
+and `upload/index.html` render lines too — **fast-follow** to fold them in once proven.
+Tests: `tests/integration/test_invoice_line_override.py`. Suite 210.

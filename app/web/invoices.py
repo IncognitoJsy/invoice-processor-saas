@@ -202,45 +202,71 @@ def get_stats():
 @bp.route('/invoices/item/<int:item_id>/price', methods=['PUT'])
 @login_required
 def update_item_price(item_id):
-    """Update the selling price for an invoice item"""
+    """Set or clear a line's MANUAL per-unit selling price.
+
+      body {"selling_price": <num>}  -> manual override: price_overridden=True, selling = money(num)
+      query ?reset=true              -> clear the override: revert to calculated_selling_price
+
+    A manual override is DELIBERATE and BYPASSES the auto-calc retail cap (the cap only runs at
+    parse time, in claude_parser._transform_items — it never re-runs here). markup_percent is
+    recomputed from the new price so feature 2's "manual" badge shows the real manual markup.
+
+    CONTRACT: any future "recalculate markup / re-price" action MUST skip rows where
+    price_overridden is True (see InvoiceItem) — otherwise it silently destroys a deliberate price.
+    """
     from app.models.invoice import Invoice, InvoiceItem
     from app.extensions import db
+    from app.utils.money import money, to_decimal
     from decimal import Decimal
-    
-    data = request.get_json()
-    new_price = data.get('selling_price')
-    
-    if new_price is None:
-        return jsonify({'success': False, 'error': 'Missing selling_price'}), 400
-    
-    # Find the item and verify ownership
+
     item = InvoiceItem.query.get(item_id)
     if not item:
         return jsonify({'success': False, 'error': 'Item not found'}), 404
-    
+
     invoice = Invoice.query.get(item.invoice_id)
     if not invoice or invoice.user_id != current_user.id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-    
-    # Update the item
-    old_price = float(item.selling_price or 0)
-    item.selling_price = Decimal(str(new_price))
-    item.profit_per_item = item.selling_price - item.cost_per_item
-    
-    # Recalculate invoice totals
+
+    reset = request.args.get('reset', '').lower() in ('1', 'true', 'yes')
+    if reset:
+        # Revert to the auto-calculated price (which honoured the retail cap at parse time).
+        item.selling_price = item.calculated_selling_price or item.selling_price
+        item.price_overridden = False
+    else:
+        new_price = (request.get_json(silent=True) or {}).get('selling_price')
+        if new_price is None:
+            return jsonify({'success': False, 'error': 'Missing selling_price'}), 400
+        price = money(to_decimal(new_price)) if to_decimal(new_price) is not None else None
+        if price is None or price <= 0:
+            return jsonify({'success': False, 'error': 'selling_price must be a number greater than 0'}), 400
+        item.selling_price = price
+        item.price_overridden = True
+
+    # Recompute derived fields on the money-path standard (Decimal + money(), ROUND_HALF_UP).
+    cost = to_decimal(item.cost_per_item) or Decimal('0')
+    sell = to_decimal(item.selling_price) or Decimal('0')
+    item.profit_per_item = money(sell - cost)
+    if cost > 0:
+        markup = money((sell - cost) / cost * 100)
+        item.markup_percent = max(Decimal('-999.99'), min(markup, Decimal('999.99')))  # fit Numeric(5,2)
+    else:
+        item.markup_percent = Decimal('0')
+
+    # Recalculate invoice totals (Decimal, line-authority).
     items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
-    invoice.total_selling = sum(Decimal(str(i.selling_price or 0)) * Decimal(str(i.quantity or 0)) for i in items)
-    invoice.total_profit = sum(Decimal(str(i.profit_per_item or 0)) * Decimal(str(i.quantity or 0)) for i in items)
-    
+    invoice.total_selling = money(sum((to_decimal(i.selling_price or 0) * to_decimal(i.quantity or 0)
+                                       for i in items), Decimal('0')))
+    invoice.total_profit = money(sum((to_decimal(i.profit_per_item or 0) * to_decimal(i.quantity or 0)
+                                      for i in items), Decimal('0')))
+
     db.session.commit()
-    
     return jsonify({
         'success': True,
         'item': item.to_dict(),
         'invoice_totals': {
             'total_selling': float(invoice.total_selling),
-            'total_profit': float(invoice.total_profit)
-        }
+            'total_profit': float(invoice.total_profit),
+        },
     })
 
 
