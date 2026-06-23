@@ -318,3 +318,115 @@ PDF never syncs; the supplier invoice carries no output-rate snapshot). It's rar
 resolver's **fail-closed** still prevents a genuine code mismatch from silently producing wrong
 books — it blocks the sync instead. Threading a single per-object snapshot through both would be
 Option B (over-coupling), explicitly not taken.
+
+---
+
+# Tracked follow-up — transient TaxRate-read failure → false fail-closed (reliability)
+
+> **✅ SUPERSEDED (2026-06-23) by the output tax-code PICKER** (commits `126898e`→`fab37b0`; see
+> "Output tax-code picker" below). The per-sync **`TaxRate` rate read + match-or-fail** this
+> follow-up was going to harden **no longer exists** — registered syncs attach the user's
+> *picked* code by stored ref, so there is no per-line rate read to rate-limit. The only
+> remaining provider read on the registered path is a **transient-safe existence check** (is the
+> picked ref still in the live code list? empty/unavailable list → `unresolved`, never a false
+> "stale"), which cannot produce the false fail-closed described here. No retry+cache built.
+
+**Tag:** pre-go-live reliability — **NOT money-correctness** (no wrong amounts, no writes at risk).
+**Surfaced by:** `scripts/dryrun_customer_invoice_sync.py` against production (2026-06-22). The same
+registered-5% dry run resolved `taxable (GST id 2)` on one execution but **fail-closed
+(`TAX_CODE_UNRESOLVED`, sync blocked)** on a back-to-back execution, with identical config/data.
+
+**Root cause:** the QB resolver's match-or-fail reads each code's real rate from its
+`TaxRateRef → TaxRate.RateValue`. `_fetch_active_tax_rates` issues `SELECT * FROM TaxRate` and
+**swallows any error → returns `{}`**; `_code_sales_rate` then falls back to parsing the rate from
+the code's *name* ("GST" has no `%`) → `None` → no rate matches the configured rate →
+fail-closed. The rate read is **re-fetched per line** (single dry run did ~30 QBO GETs across
+3 scenarios × 7 items + tax-code/rate queries), which tripped QBO **rate-limiting**; a 429/transient
+failure then empties `rate_map` and blocks an otherwise-valid registered sync.
+
+**Fix direction (when addressed):** make the TaxRate read resilient —
+1. **retry-with-backoff** on the `TaxRate` query (the service already has backoff for the data
+   API; apply it here), and
+2. **cache the TaxRate read once per sync** (fetch `rate_map` a single time, not per line/per
+   `resolve_output_tax` call).
+
+**Explicitly NOT the fix:** do **not** "trust the sole code's rate on read error" / re-introduce a
+single-code-regardless leniency — that re-opens the silent-rate assumption Step 2c deliberately
+removed (the document could show one rate while QBO applies another). Fail-closed on a genuine
+unknown is correct; the goal is only to stop *transient read failures* from masquerading as
+"unknown rate". The Xero resolver (`_tax_rate_value`) has the same shape — apply the same
+retry + per-sync cache there.
+
+---
+
+# Output tax-code PICKER (2026-06-23) — durable replacement for the match-or-fail rate read
+
+Commits `126898e` (storage) · `43a8a38` (read-only picker endpoint) · `d415eee` (Settings UI +
+save) · `6349c01` (QB resolver) · `247447b` (Xero resolver) · `fab37b0` (stale-ref + disconnect).
+Branch `sprint-a-phase2-markup`. Full suite **174 green**.
+
+**What it does.** A registered user picks their output sales tax code **once**, from a read-only
+dropdown populated from their connected accounting software (`GET /settings/tax-codes`). The pick
+is stored on `User` (`output_tax_code_ref` / `output_tax_code_name` / `output_tax_provider`, with
+`tax_rate` = that code's rate captured at pick time, re-validated server-side at save). At sync the
+resolver attaches the **picked ref directly** — no per-sync `TaxRate` read, no rate-match. This
+supersedes the Step 2c/3c match-or-fail entirely (`_select_taxable_code` / `_select_taxable_tax_type`
+deleted; the rate-discovery helpers remain, now used only by the picker's `list_sales_tax_codes`).
+
+### 🚨 RELEASE NOTE — registered + connected users MUST re-pick once after deploy
+
+Existing **GST/VAT-registered users with QuickBooks or Xero connected — including our own
+Proton.je account — must visit Settings → "Output tax code" and pick their code once after this
+ships, or their syncs will fail closed.** This is a **safe** regression: the sync **blocks**
+(`TAX_CODE_UNRESOLVED`), it never mis-rates or silently syncs tax-free. The Settings page surfaces
+it with an **amber "Pick your output tax code" prompt**. For Proton.je this is **absorbed into the
+go-live config step** (pick GST id 2 once). Unregistered users are unaffected (still pushed exempt).
+
+**✅ DONE (2026-06-23) — picked code surfaced on the PDF.** `pdf_generator._totals_block` now
+labels the tax line with the picked code name + the document's snapshot rate, with the tax amount
+in the adjacent column — e.g. `GST (5%)` | `£5.00` (helpers `_tax_label` / `_fmt_rate`; the latter
+trims trailing zeros so `5.00` → `5`). Applies to all 6 invoice templates (all share
+`_totals_block`); falls back to the generic `tax_type`, then `'Tax'`, when no pick is stored. The
+code *name* is read from the user's current pick (not snapshotted on the document) — same A2 class
+of edge as the stored rate. Tests: `tests/unit/test_pdf_tax_label.py`.
+
+> **✅ FIXED (2026-06-23, own commit) — customer-quote PDF was a live 500.** `customer_quotes.py`
+> imported `generate_quote_pdf` from `pdf_generator.py`, which **never defined it** (only
+> `generate_invoice_pdf`) — broken since the feature shipped (`7b6ad29`), not a refactor drop. Both
+> user-reachable routes failed: GET `/customer-quotes/<id>/pdf` (Download PDF button) raw-500'd, and
+> POST `/customer-quotes/<id>/send` returned the raw ImportError to the UI. Fix adds
+> `generate_quote_pdf(quote, user)` reusing the invoice templates + `_totals_block` (so it inherits
+> this tax label) via a thin `_QuoteDoc` adapter (`quote_number`/`expiry_date`/no payment-terms);
+> builders aren't forked. Tests: `tests/unit/test_quote_pdf.py`, `tests/integration/test_quote_pdf_routes.py`.
+> **✅ FOLLOW-UP DONE (2026-06-23, own commit) — quote wording.** A doc-type label dict
+> (`_INVOICE_LABELS` / `_QUOTE_LABELS`) is threaded `_render → builders → _totals_block`, so quote
+> PDFs read **'QUOTE' / 'TOTAL' / 'Valid Until'** (matching `expiry_date`) instead of
+> 'INVOICE' / 'TOTAL DUE' / 'Due Date'. The same dict also carries `show_reference` (True for
+> invoices, False for quotes), threaded into `_bank_block` + the branded footer so quotes omit the
+> "use <number> as your payment reference" / "Reference: <number>" line entirely (you don't pay a
+> quote). Builders take a `labels=` param (default = invoice labels), so nothing was forked and
+> invoices are unchanged. Asserted on the real rendered PDF text (pdfminer) in
+> `tests/unit/test_quote_pdf.py`, including the reference line present on invoices / absent on
+> quotes even with bank details set.
+
+### Sync block states
+- **`TAX_CODE_UNRESOLVED`** — registered user with **no pick** (or a transient/empty code list).
+  → "pick it in Settings".
+- **`TAX_CODE_INVALID`** *(new, commit `fab37b0`)* — registered user whose **picked code is no
+  longer in the provider** (deleted/archived since picking; confirmed by a non-empty live list that
+  lacks the ref). → "re-pick it in Settings". A transient/empty list is treated as `UNRESOLVED`,
+  never `INVALID`, so a read blip can't masquerade as a stale pick. The Settings picker also flags a
+  stale pick proactively (`current.valid = false` → amber re-pick prompt) before any sync.
+- **Disconnect clears the pick** (`clear_picked_output_code`, provider-scoped) on QB/Xero
+  disconnect + the Intuit-side disconnect webhook, so a stale ref can't survive a reconnect/switch.
+
+### A2 — stored-rate staleness (accepted edge, documented; sibling of the 2c residual edge)
+The picked **rate is a snapshot** taken at pick time (and the resolver attaches the code by ref,
+not by rate). If the provider later **changes the rate behind the same code id** (e.g. a "GST" code
+goes 5% → 7% in QBO while keeping its id), the printed document (snapshot rate) and the synced
+invoice (provider re-computes from the code) **diverge until the user re-picks** — re-picking
+re-reads and re-snapshots the current rate. Rare and low-stakes (rate changes behind a stable id
+are unusual), and the code id is still correct so the books aren't *wrong*, just differently-rated
+between the two artifacts. **Periodic re-validation** (background re-read of the picked code's rate,
+flagging drift) is noted as a **later option — not built.** This sits next to the Step 2c residual
+edge (PDF vs separately-synced supplier invoice when the rate changes between).

@@ -67,8 +67,14 @@ class User(db.Model, UserMixin):
     tax_registered = db.Column(db.Boolean, default=False)
     tax_number = db.Column(db.String(100))
     tax_type = db.Column(db.String(10))
-    tax_rate = db.Column(db.Numeric(5, 2), default=0)
+    tax_rate = db.Column(db.Numeric(5, 2), default=0)  # the picked code's rate (set at pick time)
     tax_registered_from = db.Column(db.DateTime)
+    # Picked output sales tax code — the durable picker (see app/utils/tax.py). Chosen once,
+    # read-only, from the connected accounting software; the resolver attaches this ref directly
+    # (no per-sync TaxRate read), and tax_rate above is its rate captured at pick time.
+    output_tax_code_ref = db.Column(db.String(255))    # QBO TaxCode Id (e.g. '2') or Xero TaxType
+    output_tax_code_name = db.Column(db.String(255))   # display label captured at pick time
+    output_tax_provider = db.Column(db.String(20))     # 'quickbooks' | 'xero'
 
 
     

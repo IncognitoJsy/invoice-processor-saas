@@ -77,6 +77,25 @@ treat anything touching extraction, validation, or money maths as critical-path 
   so changes can be verified against a production-like setup before reaching `master`/production.
   This unblocked the Sprint A fixes — including the **Float→Decimal money migration**
   (AUDIT.md risk #4), which alters live financial data.
+- **DONE (2026-06-23) — output tax-code PICKER** (branch `sprint-a-phase2-markup`,
+  `126898e`→`fab37b0`; full suite 174). Registered users pick their output sales tax code **once**
+  from a read-only dropdown sourced from their connected software (`GET /settings/tax-codes`);
+  it's stored on `User` (`output_tax_code_ref`/`_name`/`_provider`; `tax_rate` snapshotted from the
+  code at pick, re-validated server-side on save). The QB/Xero resolver attaches the **picked ref
+  directly — no per-sync `TaxRate` read, no rate-match** (this **supersedes** the 2c/3c match-or-fail;
+  `_select_taxable_code`/`_select_taxable_tax_type` deleted, rate-discovery helpers kept for the
+  picker only, and the `814f7b8` retry+cache follow-up in `AUDIT_FINDINGS.md` is now **superseded**).
+  Provider-guarded; unregistered still exempt.
+  - **🚨 RELEASE NOTE (read before deploy):** existing **GST/VAT-registered users with QuickBooks or
+    Xero connected — including our own Proton.je — must open Settings → "Output tax code" and pick
+    once after this ships, or their syncs fail closed.** Safe regression: it **blocks**
+    (`TAX_CODE_UNRESOLVED`), never mis-rates / never silently syncs tax-free. The amber Settings
+    prompt surfaces it. For Proton.je: **fold this into the go-live config step** (pick GST id 2 once).
+  - Sync block states: `TAX_CODE_UNRESOLVED` (no pick / transient empty list) + the new
+    `TAX_CODE_INVALID` (picked code gone from a non-empty live list → "re-pick"; transient/empty list
+    stays `UNRESOLVED`). Disconnect clears the pick. **A2 edge (documented, not built):** picked rate
+    is a snapshot — if the provider changes the rate behind the same code id, document vs sync
+    diverge until re-pick; periodic re-validation is a later option. See AUDIT.md §2 / AUDIT_FINDINGS.md.
 - **DONE (2026-06-18) — Sprint A Phase 2** (branch `sprint-a-phase2-markup`; per-line diagnosis
   in `AUDIT_FINDINGS.md`; full suite 147 passed). Closed:
   - **AUDIT risk #4 — Float→Decimal money: ✅ CLOSED on the rounding/Decimal axis (both halves).**

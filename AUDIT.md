@@ -235,6 +235,27 @@ shared `money()` quantize helper (the validator already has it), round per line 
     in between, can see the two artifacts differ (they're separate objects — the PDF never syncs,
     the supplier invoice carries no output-rate snapshot). Rare; the resolver's fail-closed prevents
     a genuine code mismatch from producing wrong books.
+- **✅ DONE — output tax-code PICKER (`126898e`→`fab37b0`, 2026-06-23): supersedes the 2c/3c
+  match-or-fail.** A registered user picks their output sales tax code **once** from a read-only
+  dropdown sourced from their connected software (`GET /settings/tax-codes`); the pick is stored on
+  `User` (`output_tax_code_ref`/`_name`/`_provider`, `tax_rate` = the code's rate snapshotted at
+  pick, re-validated server-side on save). At sync the resolver attaches the **picked ref directly**
+  — **no per-sync `TaxRate` read, no rate-match** (`_select_taxable_code`/`_select_taxable_tax_type`
+  deleted; rate-discovery helpers retained for the picker only). Provider-guarded (a QB pick can't
+  satisfy the Xero resolver, and vice-versa); unregistered still pushed exempt. Tests:
+  `test_tax_code_picker.py` + rewritten `test_quickbooks_output_tax.py` / `test_xero_output_tax.py`.
+  - **🚨 RELEASE NOTE — re-pick required once after deploy.** Existing **registered + QB/Xero-connected
+    users (incl. Proton.je)** must visit Settings → "Output tax code" and pick once after this ships,
+    or syncs **fail closed** (safe — blocks, never mis-rates). The amber Settings prompt surfaces it;
+    for Proton.je this is **absorbed into the go-live config step** (pick GST id 2 once).
+  - **Sync block states:** `TAX_CODE_UNRESOLVED` (no pick / transient empty list) and the new
+    `TAX_CODE_INVALID` (`fab37b0` — picked code no longer in a non-empty live list → "re-pick";
+    a transient/empty list stays `UNRESOLVED`, never `INVALID`). Disconnect clears the pick.
+  - **A2 — stored-rate staleness (accepted edge, documented):** the picked rate is a **snapshot**;
+    if the provider changes the rate behind the **same code id**, the printed document (snapshot)
+    and the synced invoice (provider re-computes) **diverge until re-pick** (which re-snapshots).
+    Rare; the id is still correct so books aren't wrong, just differently-rated between artifacts.
+    **Periodic re-validation noted as a later option — not built.** Sibling of the 2c residual edge.
 - **⏳ DEFERRED (gated on a flag, not risk #4) — Quote Builder money path:** `project.py`
   contingency and the `project_material`/`project_labour` maths are still float and unrounded.
   Quote Builder is flagged OFF so this isn't live — but it **must be migrated to `money()` before

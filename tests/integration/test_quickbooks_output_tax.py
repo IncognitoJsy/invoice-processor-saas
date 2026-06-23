@@ -1,18 +1,19 @@
 """
 Tests for QuickBooks output-GST handling: QuickBooksService.resolve_output_tax
-and the sync payloads it drives (Step 3).
+and the sync payloads it drives.
 
-Covers the four behaviours from the plan:
+Behaviour (post tax-code PICKER, commit 4/7):
   1. Unregistered user -> lines/items push tax-exempt (no output GST).
-  2. Registered user -> lines/items carry the GST tax code.
-  3. Registered user + no resolvable tax code -> sync BLOCKS (TAX_CODE_UNRESOLVED)
-     and nothing is POSTed (fail closed, not the old silent fail-open).
-  4. Region/rate selection -> a Jersey 5% GST code is picked over a 20% VAT code
-     that is also present (by rate, not list order).
+  2. Registered user with a PICKED QuickBooks tax code -> lines/items carry that code,
+     attached DIRECTLY by its stored ref (no per-sync TaxRate read, no rate match).
+  3. Registered user with NO pick -> sync BLOCKS (TAX_CODE_UNRESOLVED) and nothing is
+     POSTed (fail closed).
+  4. The pick is authoritative: the code attached is exactly the picked ref regardless of
+     what other codes exist in the company file, and a pick made for a different provider
+     (e.g. Xero) does NOT satisfy the QuickBooks resolver.
 
-Uses the integration `app` fixture (real testing app + context) so current_app /
-config work; make_api_request is replaced with a recording fake so no network or
-DB rows are needed.
+Uses the integration `app` fixture so current_app / config work; make_api_request is
+replaced with a recording fake so no network or DB rows are needed.
 """
 import types
 
@@ -20,7 +21,7 @@ import pytest
 
 from app.integrations.quickbooks_service import QuickBooksService
 
-# Canned QB TaxCode rows (as the TaxCode query returns them).
+# Canned QB TaxCode rows (as the TaxCode query returns them) — used by the exempt path.
 GST5 = {'Id': 'G5', 'Name': 'GST 5%'}
 VAT20 = {'Id': 'V20', 'Name': 'Standard 20% (VAT on Sales)'}
 EXEMPT = {'Id': 'EX', 'Name': 'No GST (0%)'}
@@ -68,7 +69,8 @@ class FakeAPI:
 
 
 def make_service(tax_codes, *, tax_registered=True, tax_type='GST', tax_rate=5,
-                 country='Jersey', tax_rates=()):
+                 country='Jersey', tax_rates=(), picked=None, picked_provider='quickbooks'):
+    """`picked` is (ref, name) for a stored QuickBooks tax-code pick, or None."""
     user = types.SimpleNamespace(
         id=1,
         tax_registered=tax_registered,
@@ -76,6 +78,9 @@ def make_service(tax_codes, *, tax_registered=True, tax_type='GST', tax_rate=5,
         tax_rate=tax_rate,
         country=country,
         business_address_country=country,
+        output_tax_code_ref=(picked[0] if picked else None),
+        output_tax_code_name=(picked[1] if picked else None),
+        output_tax_provider=(picked_provider if picked else None),
     )
     svc = QuickBooksService(user)
     api = FakeAPI(tax_codes, tax_rates=tax_rates)
@@ -111,32 +116,32 @@ def test_unregistered_invoice_line_has_no_gst_code(app):
     assert 'TaxCodeRef' not in line['SalesItemLineDetail']
 
 
-# ── 2. Registered: lines/items carry the GST code ────────────────────────────
-def test_registered_invoice_line_carries_gst_code(app):
-    svc, api = make_service([VAT20, GST5], tax_registered=True, tax_type='GST', tax_rate=5)
+# ── 2. Registered + picked code: lines/items carry the PICKED ref ────────────
+def test_registered_invoice_line_carries_picked_code(app):
+    svc, api = make_service([VAT20, GST5], tax_registered=True, picked=('G5', 'GST 5%'))
     svc.create_invoice(CONN, 'CUST1', list(LINE_ITEMS))
     line = api.invoice_posts()[0]['Line'][0]
     assert line['SalesItemLineDetail']['TaxCodeRef'] == {'value': 'G5'}
 
 
-def test_registered_item_carries_gst_code(app):
-    svc, api = make_service([VAT20, GST5], tax_registered=True, tax_type='GST', tax_rate=5)
+def test_registered_item_carries_picked_code(app):
+    svc, api = make_service([VAT20, GST5], tax_registered=True, picked=('G5', 'GST 5%'))
     svc.create_or_update_item(CONN, dict(ITEM_DATA))
     payload = api.item_posts()[0]
     assert payload['Taxable'] is True
     assert payload['SalesTaxCodeRef'] == {'value': 'G5'}
 
 
-# ── 3. Registered + no resolvable code: fail closed, no POST ─────────────────
-def test_registered_no_taxcode_blocks_invoice_with_no_post(app):
-    svc, api = make_service([], tax_registered=True, tax_type='GST', tax_rate=5)
+# ── 3. Registered + NO pick: fail closed, no POST ────────────────────────────
+def test_registered_no_pick_blocks_invoice_with_no_post(app):
+    svc, api = make_service([GST5], tax_registered=True, picked=None)
     result = svc.create_invoice(CONN, 'CUST1', list(LINE_ITEMS))
     assert result.get('code') == 'TAX_CODE_UNRESOLVED'
     assert api.posts == []   # nothing was POSTed
 
 
-def test_registered_no_taxcode_blocks_product_sync_with_no_post(app):
-    svc, api = make_service([], tax_registered=True, tax_type='GST', tax_rate=5)
+def test_registered_no_pick_blocks_product_sync_with_no_post(app):
+    svc, api = make_service([GST5], tax_registered=True, picked=None)
     invoice = types.SimpleNamespace(id=1)
     result = svc.sync_invoice_items_as_products(CONN, invoice)
     assert result['success'] is False
@@ -144,68 +149,46 @@ def test_registered_no_taxcode_blocks_product_sync_with_no_post(app):
     assert api.posts == []
 
 
-# ── 4. Region/rate selection: Jersey 5% wins over a 20% VAT code present ──────
-def test_jersey_gst_picked_over_vat_by_rate(app):
-    # VAT listed FIRST to prove it is rate-matched, not first-wins.
-    svc, _ = make_service([VAT20, GST5], tax_registered=True, tax_type='GST', tax_rate=5)
+# ── 4. The pick is authoritative (no rate-match), but must still exist ───────
+def test_picked_code_attached_directly_no_rate_match(app):
+    # The user's configured rate is 5, but they picked the 20% code 'V20'. The resolver
+    # attaches it verbatim (it still exists in the file) — proving it does NOT rate-match.
+    svc, _ = make_service([VAT20], tax_registered=True, tax_rate=5, picked=('V20', 'Standard 20%'))
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'taxable'
-    assert code['value'] == 'G5'
+    assert code == {'value': 'V20', 'name': 'Standard 20%'}
 
 
-def test_unset_config_with_multiple_codes_is_unresolved(app):
-    # No tax_rate/tax_type set AND multiple sales codes -> genuine ambiguity -> fail
-    # closed. We deliberately do NOT guess from address country (Step 3c req 4): an
-    # address of 'United Kingdom' for a Jersey GST business would wrongly pick 20%.
-    svc, _ = make_service([VAT20, GST5], tax_registered=True, tax_type='', tax_rate=0,
-                          country=None)
+def test_pick_for_other_provider_is_unresolved(app):
+    # A pick made for Xero must not satisfy the QuickBooks resolver -> fail closed.
+    svc, _ = make_service([GST5], tax_registered=True, picked=('OUTPUT', 'GST'),
+                          picked_provider='xero')
+    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
+
+
+def test_registered_no_pick_is_unresolved(app):
+    svc, _ = make_service([VAT20, GST5], tax_registered=True, picked=None)
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'unresolved'
     assert code is None
 
 
-# ── 5. Real-world shapes + Step 2c match-or-fail ─────────────────────────────────
-# Live company shape: one sales code named just "GST" (id 2), rate in its TaxRateRef
-# detail (not the name).
-GST_REAL = {'Id': '2', 'Name': 'GST',
-            'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '5'}}]}}
+# ── 5. Stale pick (A1): the picked code is no longer in the file ─────────────
+def test_stale_pick_nonempty_list_is_invalid(app):
+    # Picked id 'GONE', but the file lists other codes -> genuinely stale -> invalid (re-pick).
+    svc, _ = make_service([GST5], tax_registered=True, picked=('GONE', 'Old code'))
+    assert svc.resolve_output_tax(CONN) == (None, 'invalid')
 
 
-def test_single_gst_code_with_configured_rate_is_taxable(app):
-    # Proton.je shape once configured: sole "GST" code (5% in detail), user tax_rate=5 ->
-    # match-or-fail succeeds and attaches it.
-    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='GST', tax_rate=5,
-                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
-    assert svc.resolve_output_tax(CONN) == ({'value': '2', 'name': 'GST'}, 'taxable')
-
-
-def test_registered_rate_unset_is_unresolved(app):
-    # 2c: a registered user with NO configured output rate cannot reconcile doc vs sync
-    # — the 3c single-code fallback is gone; match-or-fail needs a configured rate.
-    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=0,
-                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
+def test_stale_pick_empty_list_is_unresolved_not_invalid(app):
+    # Picked id 'GONE' and the list is empty/unavailable -> transient-safe -> unresolved,
+    # NOT invalid (a transient read failure must not masquerade as a stale ref).
+    svc, _ = make_service([], tax_registered=True, picked=('GONE', 'Old code'))
     assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
 
 
-def test_registered_rate_mismatch_fails_closed(app):
-    # 2c: configured 20% but the only code is 5% -> no match -> fail closed (never
-    # silently attach a rate the user didn't configure / the document didn't show).
-    svc, _ = make_service([GST_REAL], tax_registered=True, tax_type='', tax_rate=20,
-                          country=None, tax_rates=[{'Id': '5', 'RateValue': 5}])
-    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
-
-
-def test_registered_matches_by_real_rate_from_detail(app):
-    # Two codes named just "GST"/"VAT" (no % in either name) — rate lives only in the
-    # TaxRateRef detail. With tax_rate=5 the resolver must pick the one whose REAL
-    # rate is 5, proving it no longer trusts the name for the rate.
-    gst = {'Id': '2', 'Name': 'GST',
-           'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '5'}}]}}
-    vat = {'Id': '3', 'Name': 'VAT',
-           'SalesTaxRateList': {'TaxRateDetail': [{'TaxRateRef': {'value': '9'}}]}}
-    svc, _ = make_service([vat, gst], tax_registered=True, tax_type='', tax_rate=5,
-                          country=None,
-                          tax_rates=[{'Id': '5', 'RateValue': 5}, {'Id': '9', 'RateValue': 20}])
-    code, status = svc.resolve_output_tax(CONN)
-    assert status == 'taxable'
-    assert code['value'] == '2'
+def test_stale_pick_blocks_invoice_with_invalid_code(app):
+    svc, api = make_service([GST5], tax_registered=True, picked=('GONE', 'Old code'))
+    result = svc.create_invoice(CONN, 'CUST1', list(LINE_ITEMS))
+    assert result.get('code') == 'TAX_CODE_INVALID'
+    assert api.posts == []   # nothing POSTed

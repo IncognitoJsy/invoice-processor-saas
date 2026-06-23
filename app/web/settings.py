@@ -2,18 +2,131 @@
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for, session
 from flask_login import login_required, current_user
 from app.extensions import db
+from app.models.quickbooks import QuickBooksConnection
+from app.models.xero import XeroConnection
 from app.utils.password_validation import validate_password
+from app.utils.tax import picked_output_code
 import io
 import base64
+import logging
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
+logger = logging.getLogger(__name__)
 
 
 @bp.route('/')
 @login_required
 def index():
     """Settings page"""
-    return render_template('settings/index.html')
+    qb = QuickBooksConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    xero = XeroConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    qb_connected = bool(qb and qb.access_token)
+    xero_connected = bool(xero)
+    accounting_connected = qb_connected or xero_connected
+    picked = picked_output_code(current_user)
+    # Registered + connected + no valid pick -> the user must pick before documents will sync.
+    needs_pick = bool(current_user.tax_registered and accounting_connected and not picked)
+    return render_template(
+        'settings/index.html',
+        accounting_connected=accounting_connected,
+        accounting_provider=('QuickBooks' if qb_connected else 'Xero' if xero_connected else None),
+        picked_tax_code=picked,
+        tax_code_needs_pick=needs_pick,
+    )
+
+
+@bp.route('/tax-codes')
+@login_required
+def tax_codes():
+    """Read-only data source for the output-tax-code picker: list the sales tax codes from the
+    user's connected accounting software (QuickBooks preferred, else Xero). Makes only GET/query
+    reads — never a write. Returns JSON:
+        {success, provider, codes:[{ref,name,rate,exempt}], current:{ref,name,rate}|None}
+    or {success, provider:None, message} when nothing is connected."""
+    qb = QuickBooksConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    xero = XeroConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    provider, codes = None, []
+    try:
+        if qb and qb.access_token:
+            from app.integrations.quickbooks_service import QuickBooksService
+            provider, codes = 'quickbooks', QuickBooksService(current_user).list_sales_tax_codes(qb)
+        elif xero:
+            from app.integrations.xero_service import XeroService
+            provider, codes = 'xero', XeroService(current_user).list_sales_tax_codes(xero)
+    except Exception as e:
+        logger.error(f"tax-codes picker: error listing codes ({type(e).__name__})")
+        return jsonify({'success': False,
+                        'error': 'Could not load tax codes from your accounting software. '
+                                 'Please try again.'}), 502
+
+    if provider is None:
+        return jsonify({'success': True, 'provider': None, 'codes': [],
+                        'message': 'Connect QuickBooks or Xero to pick your output tax code.'})
+
+    def _rate(v):
+        return float(v) if v is not None else None
+
+    picked = picked_output_code(current_user)
+    current = None
+    if picked:
+        # `valid` is False when the stored pick is no longer in the live list (stale ref) —
+        # the page uses it to prompt a re-pick before a sync fails closed.
+        valid = any(str(c['ref']) == str(picked['ref']) for c in codes)
+        current = {'ref': picked['ref'], 'name': picked['name'],
+                   'rate': _rate(picked['rate']), 'valid': valid}
+    return jsonify({
+        'success': True,
+        'provider': provider,
+        'codes': [{'ref': c['ref'], 'name': c['name'], 'rate': _rate(c['rate']),
+                   'exempt': c['exempt']} for c in codes],
+        'current': current,
+    })
+
+
+@bp.route('/tax-code', methods=['POST'])
+@login_required
+def save_tax_code():
+    """Save the user's picked output sales tax code. The ref is re-validated server-side against
+    the live list from the connected accounting software, and the authoritative name + rate are
+    taken from that listing — never a client-supplied rate. Sets output_tax_code_* + tax_rate
+    (the picked code's rate, captured at pick time)."""
+    ref = (request.form.get('tax_code_ref') or '').strip()
+    qb = QuickBooksConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    xero = XeroConnection.query.filter_by(user_id=current_user.id, is_active=True).first()
+    if not ((qb and qb.access_token) or xero):
+        flash('Connect QuickBooks or Xero before picking a tax code.', 'error')
+        return redirect(url_for('settings.index'))
+    if not ref:
+        flash('Please choose a tax code.', 'error')
+        return redirect(url_for('settings.index'))
+
+    try:
+        if qb and qb.access_token:
+            from app.integrations.quickbooks_service import QuickBooksService
+            provider, codes = 'quickbooks', QuickBooksService(current_user).list_sales_tax_codes(qb)
+        else:
+            from app.integrations.xero_service import XeroService
+            provider, codes = 'xero', XeroService(current_user).list_sales_tax_codes(xero)
+    except Exception as e:
+        logger.error(f"save_tax_code: error listing codes ({type(e).__name__})")
+        flash('Could not reach your accounting software. Please try again.', 'error')
+        return redirect(url_for('settings.index'))
+
+    match = next((c for c in codes if str(c['ref']) == ref), None)
+    if match is None:
+        flash('That tax code is no longer available — please pick again.', 'error')
+        return redirect(url_for('settings.index'))
+    if match['rate'] is None:
+        flash("Could not determine that code's rate. Please pick a different code.", 'error')
+        return redirect(url_for('settings.index'))
+
+    current_user.output_tax_code_ref = str(match['ref'])
+    current_user.output_tax_code_name = match['name']
+    current_user.output_tax_provider = provider
+    current_user.tax_rate = match['rate']  # Decimal percent — the rate the resolver/document use
+    db.session.commit()
+    flash(f"Output tax code set to {match['name']} ({match['rate']}%).", 'success')
+    return redirect(url_for('settings.index'))
 
 
 @bp.route('/update-profile', methods=['POST'])
