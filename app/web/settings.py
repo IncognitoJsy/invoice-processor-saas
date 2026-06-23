@@ -67,13 +67,19 @@ def tax_codes():
         return float(v) if v is not None else None
 
     picked = picked_output_code(current_user)
+    current = None
+    if picked:
+        # `valid` is False when the stored pick is no longer in the live list (stale ref) —
+        # the page uses it to prompt a re-pick before a sync fails closed.
+        valid = any(str(c['ref']) == str(picked['ref']) for c in codes)
+        current = {'ref': picked['ref'], 'name': picked['name'],
+                   'rate': _rate(picked['rate']), 'valid': valid}
     return jsonify({
         'success': True,
         'provider': provider,
         'codes': [{'ref': c['ref'], 'name': c['name'], 'rate': _rate(c['rate']),
                    'exempt': c['exempt']} for c in codes],
-        'current': ({'ref': picked['ref'], 'name': picked['name'], 'rate': _rate(picked['rate'])}
-                    if picked else None),
+        'current': current,
     })
 
 

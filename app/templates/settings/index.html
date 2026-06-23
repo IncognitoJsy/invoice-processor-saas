@@ -357,11 +357,19 @@
         (function () {
             var sel = document.getElementById('tax-code-select');
             var save = document.getElementById('tax-code-save');
+            var status = document.getElementById('tax-code-status');
             var current = {{ picked_tax_code.ref|tojson if picked_tax_code else 'null' }};
             fetch('{{ url_for("settings.tax_codes") }}', {headers: {'Accept': 'application/json'}})
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     sel.innerHTML = '';
+                    // Stale pick: a saved code that is no longer in the provider -> prompt re-pick.
+                    if (d.current && d.current.valid === false && status) {
+                        status.textContent = 'Your saved tax code "' + (d.current.name || d.current.ref)
+                            + '" is no longer in ' + ({{ accounting_provider|tojson }} || 'your accounting software')
+                            + ' — pick a current one below.';
+                        status.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
+                    }
                     if (!d.success || !d.codes || !d.codes.length) {
                         sel.innerHTML = '<option value="">No tax codes found in ' + ({{ accounting_provider|tojson }} || 'your accounting software') + '</option>';
                         return;

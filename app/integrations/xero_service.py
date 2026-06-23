@@ -308,10 +308,33 @@ class XeroService:
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        tax_type = str(picked['ref'])
-        logger.info(f"Output tax: registered -> picked TaxType '{tax_type}'")
-        self._output_tax_cache = (tax_type, 'taxable')
+        # Confirm the picked TaxType still exists in Xero (it may have been deleted/archived
+        # since it was picked). Transient-safe: only INVALID when the list comes back non-empty
+        # and the ref is absent; an empty/unavailable list -> generic 'unresolved' (try later).
+        ref = str(picked['ref'])
+        rates = self.get_tax_rates(connection)
+        if not any((tr.get('TaxType') or '') == ref for tr in rates):
+            status = 'invalid' if rates else 'unresolved'
+            logger.error(f"Output tax: picked TaxType {ref} not found in Xero -> {status}")
+            self._output_tax_cache = (None, status)
+            return self._output_tax_cache
+
+        logger.info(f"Output tax: registered -> picked TaxType '{ref}'")
+        self._output_tax_cache = (ref, 'taxable')
         return self._output_tax_cache
+
+    def _output_tax_block(self, what):
+        """Blocked-sync error for a non-usable output-tax status (read from the cached resolve
+        result). Distinguishes a STALE pick (TAX_CODE_INVALID -> re-pick in Settings) from an
+        unpicked / unresolvable one (TAX_CODE_UNRESOLVED). `what` names what wasn't synced."""
+        status = self._output_tax_cache[1] if self._output_tax_cache else 'unresolved'
+        if status == 'invalid':
+            return {'error': f'Your saved output tax code no longer exists in Xero — '
+                             f're-pick it in Settings ({what} not synced)',
+                    'code': 'TAX_CODE_INVALID'}
+        return {'error': f'No valid output tax type for your tax-registered business — '
+                         f'pick it in Settings ({what} not synced)',
+                'code': 'TAX_CODE_UNRESOLVED'}
 
     @staticmethod
     def _active(tax_rates):
@@ -618,10 +641,9 @@ class XeroService:
         
         # Resolve output-GST treatment; fail closed for a registered user with no rate.
         sales_tax_type, tax_status = self.resolve_output_tax(connection)
-        if tax_status == 'unresolved':
-            logger.error("Blocking Xero invoice creation: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax type could be resolved — invoice not synced',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            logger.error(f"Blocking Xero invoice creation: {tax_status}")
+            return self._output_tax_block('invoice')
 
         # Format line items for Xero
         xero_line_items = []
@@ -721,10 +743,9 @@ class XeroService:
 
             # Resolve output-GST treatment; fail closed for a registered user with no rate.
             sales_tax_type, tax_status = self.resolve_output_tax(connection)
-            if tax_status == 'unresolved':
-                logger.error("Blocking Xero invoice update: TAX_CODE_UNRESOLVED")
-                return {'error': 'No valid GST tax type could be resolved — invoice not updated',
-                        'code': 'TAX_CODE_UNRESOLVED'}
+            if tax_status in ('unresolved', 'invalid'):
+                logger.error(f"Blocking Xero invoice update: {tax_status}")
+                return self._output_tax_block('invoice')
 
             # Build a map of existing items by ItemCode
             # Structure: {item_code: {'line_index': idx, 'quantity': qty, 'line': line_obj}}
@@ -851,10 +872,9 @@ class XeroService:
         
         # Resolve output-GST treatment; fail closed for a registered user with no rate.
         sales_tax_type, tax_status = self.resolve_output_tax(connection)
-        if tax_status == 'unresolved':
-            logger.error("Blocking Xero quote creation: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax type could be resolved — quote not synced',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            logger.error(f"Blocking Xero quote creation: {tax_status}")
+            return self._output_tax_block('quote')
 
         # Format line items for Xero
         xero_line_items = []

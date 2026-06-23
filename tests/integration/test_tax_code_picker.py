@@ -137,7 +137,7 @@ def test_endpoint_lists_qb_codes_and_current_pick(app, db, user, monkeypatch):
     data = client.get('/settings/tax-codes', headers=_HTTPS).get_json()
     assert data['provider'] == 'quickbooks'
     assert data['codes'] == [{'ref': '2', 'name': 'GST', 'rate': 5.0, 'exempt': False}]
-    assert data['current'] == {'ref': '2', 'name': 'GST', 'rate': 5.0}
+    assert data['current'] == {'ref': '2', 'name': 'GST', 'rate': 5.0, 'valid': True}
 
 
 def test_endpoint_listing_error_returns_502(app, db, user, monkeypatch):
@@ -221,3 +221,92 @@ def test_settings_page_prompts_registered_user_to_pick(app, db, user):
     html = client.get('/settings/', headers=_HTTPS).get_data(as_text=True)
     assert 'Pick your output tax code' in html
     assert 'Output tax code' in html  # the picker card is rendered
+
+
+# ── A1: endpoint flags a stale pick (current.valid) ──────────────────────────
+def test_endpoint_marks_stale_pick_invalid(app, db, user, monkeypatch):
+    _connect_qb(db, user)
+    user.output_tax_code_ref = 'GONE'   # picked a code that no longer exists
+    user.output_tax_code_name = 'Old code'
+    user.output_tax_provider = 'quickbooks'
+    user.tax_registered = True
+    user.tax_rate = 5
+    _active_plan(db, user)
+    _patch_qb_codes(monkeypatch, [{'ref': '2', 'name': 'GST', 'rate': Decimal('5'), 'exempt': False}])
+
+    client = app.test_client()
+    _login(client, user)
+    data = client.get('/settings/tax-codes', headers=_HTTPS).get_json()
+    assert data['current']['ref'] == 'GONE'
+    assert data['current']['valid'] is False   # stale -> page prompts a re-pick
+
+
+def test_endpoint_marks_present_pick_valid(app, db, user, monkeypatch):
+    _connect_qb(db, user)
+    user.output_tax_code_ref = '2'
+    user.output_tax_code_name = 'GST'
+    user.output_tax_provider = 'quickbooks'
+    user.tax_registered = True
+    user.tax_rate = 5
+    _active_plan(db, user)
+    _patch_qb_codes(monkeypatch, [{'ref': '2', 'name': 'GST', 'rate': Decimal('5'), 'exempt': False}])
+
+    client = app.test_client()
+    _login(client, user)
+    data = client.get('/settings/tax-codes', headers=_HTTPS).get_json()
+    assert data['current']['valid'] is True
+
+
+# ── A3: disconnect clears the pick ───────────────────────────────────────────
+def test_clear_picked_output_code_helper():
+    from app.utils.tax import clear_picked_output_code
+    u = types.SimpleNamespace(output_tax_code_ref='2', output_tax_code_name='GST',
+                              output_tax_provider='quickbooks')
+    # Different provider -> no-op.
+    assert clear_picked_output_code(u, 'xero') is False
+    assert u.output_tax_code_ref == '2'
+    # Matching provider -> cleared.
+    assert clear_picked_output_code(u, 'quickbooks') is True
+    assert u.output_tax_code_ref is None and u.output_tax_provider is None
+    # No pick -> no-op.
+    assert clear_picked_output_code(u, 'quickbooks') is False
+
+
+def test_qb_disconnect_clears_pick(app, db, user, monkeypatch):
+    _connect_qb(db, user)
+    user.output_tax_code_ref = '2'
+    user.output_tax_code_name = 'GST'
+    user.output_tax_provider = 'quickbooks'
+    _active_plan(db, user)  # past the subscription gate so the route actually runs
+    # revoke_token hits the network — stub it (best-effort in the route anyway).
+    monkeypatch.setattr(
+        'app.integrations.quickbooks_service.QuickBooksService.revoke_token',
+        lambda self, token: True)
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.post('/integrations/quickbooks/disconnect', headers=_HTTPS)
+    assert resp.status_code in (302, 303)
+    assert '/auth/login' not in (resp.headers.get('Location') or '')  # actually authenticated
+    db.session.expire_all()
+    assert db.session.get(User, user.id).output_tax_code_ref is None
+
+
+def test_xero_disconnect_clears_pick(app, db, user):
+    from datetime import datetime
+    from app.models.xero import XeroConnection
+    db.session.add(XeroConnection(user_id=user.id, tenant_id='T1', is_active=True,
+                                  access_token='t', refresh_token='r',
+                                  token_expires_at=datetime.utcnow()))
+    user.output_tax_code_ref = 'OUTPUT'
+    user.output_tax_code_name = 'GST on Income'
+    user.output_tax_provider = 'xero'
+    _active_plan(db, user)  # past the subscription gate so the route actually runs
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.post('/integrations/xero/disconnect', headers=_HTTPS)
+    assert resp.status_code in (302, 303)
+    assert '/auth/login' not in (resp.headers.get('Location') or '')
+    db.session.expire_all()
+    assert db.session.get(User, user.id).output_tax_code_ref is None

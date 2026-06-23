@@ -350,8 +350,11 @@ def quickbooks_disconnect():
         connection.refresh_token = ''
         connection.token_expires_at = None
         connection.is_active = False
+        # Clear any QuickBooks output-tax-code pick so a stale ref can't be attached on reconnect.
+        from app.utils.tax import clear_picked_output_code
+        clear_picked_output_code(current_user, 'quickbooks')
         db.session.commit()
-        
+
         current_app.logger.info(f"QuickBooks disconnected for user {current_user.id}")
         flash('QuickBooks disconnected successfully.', 'success')
     
@@ -443,6 +446,10 @@ def quickbooks_app_disconnect():
         connection.refresh_token = ''
         connection.token_expires_at = None
         connection.is_active = False
+        # Clear that user's QuickBooks output-tax-code pick (stale ref guard on reconnect).
+        from app.models.user import User
+        from app.utils.tax import clear_picked_output_code
+        clear_picked_output_code(User.query.get(connection.user_id), 'quickbooks')
         db.session.commit()
         current_app.logger.info(f"App-side disconnect processed for realm {realm_id}, user {connection.user_id}")
     else:
@@ -1012,9 +1019,12 @@ def xero_disconnect():
     from app.extensions import db
     
     connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
-    
+
     if connection:
         db.session.delete(connection)
+        # Clear any Xero output-tax-code pick so a stale TaxType can't be attached on reconnect.
+        from app.utils.tax import clear_picked_output_code
+        clear_picked_output_code(current_user, 'xero')
         db.session.commit()
         flash('Xero disconnected successfully.', 'success')
     

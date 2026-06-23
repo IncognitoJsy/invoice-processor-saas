@@ -149,14 +149,14 @@ def test_registered_no_pick_blocks_product_sync_with_no_post(app):
     assert api.posts == []
 
 
-# ── 4. The pick is authoritative ─────────────────────────────────────────────
-def test_picked_code_attached_directly(app):
-    # The company file lists only a 20% VAT code, but the user picked id '2' / 'GST'.
-    # The resolver attaches the picked ref verbatim — it does NOT match against the file.
-    svc, _ = make_service([VAT20], tax_registered=True, picked=('2', 'GST'))
+# ── 4. The pick is authoritative (no rate-match), but must still exist ───────
+def test_picked_code_attached_directly_no_rate_match(app):
+    # The user's configured rate is 5, but they picked the 20% code 'V20'. The resolver
+    # attaches it verbatim (it still exists in the file) — proving it does NOT rate-match.
+    svc, _ = make_service([VAT20], tax_registered=True, tax_rate=5, picked=('V20', 'Standard 20%'))
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'taxable'
-    assert code == {'value': '2', 'name': 'GST'}
+    assert code == {'value': 'V20', 'name': 'Standard 20%'}
 
 
 def test_pick_for_other_provider_is_unresolved(app):
@@ -171,3 +171,24 @@ def test_registered_no_pick_is_unresolved(app):
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'unresolved'
     assert code is None
+
+
+# ── 5. Stale pick (A1): the picked code is no longer in the file ─────────────
+def test_stale_pick_nonempty_list_is_invalid(app):
+    # Picked id 'GONE', but the file lists other codes -> genuinely stale -> invalid (re-pick).
+    svc, _ = make_service([GST5], tax_registered=True, picked=('GONE', 'Old code'))
+    assert svc.resolve_output_tax(CONN) == (None, 'invalid')
+
+
+def test_stale_pick_empty_list_is_unresolved_not_invalid(app):
+    # Picked id 'GONE' and the list is empty/unavailable -> transient-safe -> unresolved,
+    # NOT invalid (a transient read failure must not masquerade as a stale ref).
+    svc, _ = make_service([], tax_registered=True, picked=('GONE', 'Old code'))
+    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
+
+
+def test_stale_pick_blocks_invoice_with_invalid_code(app):
+    svc, api = make_service([GST5], tax_registered=True, picked=('GONE', 'Old code'))
+    result = svc.create_invoice(CONN, 'CUST1', list(LINE_ITEMS))
+    assert result.get('code') == 'TAX_CODE_INVALID'
+    assert api.posts == []   # nothing POSTed

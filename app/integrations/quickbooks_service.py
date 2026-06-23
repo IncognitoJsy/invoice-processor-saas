@@ -649,11 +649,47 @@ class QuickBooksService:
             self._output_tax_cache = (None, 'unresolved')
             return self._output_tax_cache
 
-        code = {'value': str(picked['ref']), 'name': picked['name'] or str(picked['ref'])}
+        # Confirm the picked code still exists in QuickBooks (it may have been deleted since
+        # it was picked). A transient read failure must NOT masquerade as a stale ref, so we
+        # only declare it INVALID when the list comes back NON-EMPTY and the ref is genuinely
+        # absent; an empty/unavailable list -> generic 'unresolved' block (try again later).
+        ref = str(picked['ref'])
+        codes = self._fetch_active_tax_codes(qb_connection)
+        if not any(str(tc.get('Id')) == ref for tc in codes):
+            status = 'invalid' if codes else 'unresolved'
+            current_app.logger.error(
+                f"Output tax: picked code id {ref} not found in QuickBooks -> {status} "
+                "(re-pick in Settings)" if status == 'invalid' else
+                f"Output tax: picked code id {ref} unconfirmed (no codes returned) -> unresolved")
+            self._output_tax_cache = (None, status)
+            return self._output_tax_cache
+
+        code = {'value': ref, 'name': picked['name'] or ref}
         current_app.logger.info(
             f"Output tax: registered -> picked code '{code['name']}' (id {code['value']})")
         self._output_tax_cache = (code, 'taxable')
         return self._output_tax_cache
+
+    def _output_tax_block(self, what, *, results=None):
+        """Blocked-sync error for a non-usable output-tax status (read from the cached resolve
+        result). Distinguishes a STALE pick (TAX_CODE_INVALID -> re-pick in Settings) from an
+        unpicked / unresolvable one (TAX_CODE_UNRESOLVED). `what` names what wasn't synced; pass
+        `results` to augment that dict in place, else returns a fresh {'error','code'} dict."""
+        status = self._output_tax_cache[1] if self._output_tax_cache else 'unresolved'
+        if status == 'invalid':
+            code = 'TAX_CODE_INVALID'
+            msg = (f'Your saved output tax code no longer exists in QuickBooks — '
+                   f're-pick it in Settings ({what} not synced)')
+        else:
+            code = 'TAX_CODE_UNRESOLVED'
+            msg = (f'No valid output tax code for your tax-registered business — '
+                   f'pick it in Settings ({what} not synced)')
+        if results is not None:
+            results['success'] = False
+            results['code'] = code
+            results.setdefault('errors', []).append(msg)
+            return results
+        return {'error': msg, 'code': code}
 
     def _fetch_active_tax_codes(self, qb_connection):
         """Active QB TaxCodes (list); [] on any error."""
@@ -818,11 +854,9 @@ class QuickBooksService:
 
         # Resolve output-GST treatment for this user (registration + region aware)
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error(
-                f"Blocking QB item sync for '{name}': no valid output tax code for a tax-registered business")
-            return {'error': 'Could not resolve a GST tax code for a tax-registered business — item not synced',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking QB item sync for '{name}': {tax_status}")
+            return self._output_tax_block('item')
 
         # Build item payload. Taxable only when an output code applies (a taxable
         # code, or an explicit exempt/zero code for an unregistered user); when an
@@ -900,12 +934,9 @@ class QuickBooksService:
 
         # Fail closed BEFORE any API write if a registered user has no tax code.
         _, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error("Blocking QB product sync: TAX_CODE_UNRESOLVED")
-            results['success'] = False
-            results['code'] = 'TAX_CODE_UNRESOLVED'
-            results['errors'].append('No valid GST tax code could be resolved — products not synced')
-            return results
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking QB product sync: {tax_status}")
+            return self._output_tax_block('products', results=results)
 
         items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
 
@@ -1165,10 +1196,9 @@ Rules:
         """
         # Resolve output-GST treatment; fail closed for a registered user with no code.
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error("Blocking QB invoice creation: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax code could be resolved — invoice not synced',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking QB invoice creation: {tax_status}")
+            return self._output_tax_block('invoice')
 
         # Build line items with GST
         lines = []
@@ -1244,10 +1274,9 @@ Rules:
 
         # Resolve output-GST treatment; fail closed for a registered user with no code.
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error("Blocking QB invoice update: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax code could be resolved — invoice not updated',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking QB invoice update: {tax_status}")
+            return self._output_tax_block('invoice')
 
         # Build a map of existing items by ItemRef ID
         existing_items_map = {}
@@ -1506,8 +1535,8 @@ Rules:
             connection = QuickBooksConnection.query.filter_by(user_id=self.user.id).first()
             
             tax_code, tax_status = self.resolve_output_tax(qb_connection)
-            if tax_status == 'unresolved':
-                current_app.logger.error("Blocking 'Materials Used' item creation: TAX_CODE_UNRESOLVED")
+            if tax_status in ('unresolved', 'invalid'):
+                current_app.logger.error(f"Blocking 'Materials Used' item creation: {tax_status}")
                 return None
 
             item_data = {
@@ -1541,10 +1570,9 @@ Rules:
 
         # Resolve output-GST treatment; fail closed for a registered user with no code.
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error("Blocking Materials Used summary line: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax code could be resolved — invoice not updated',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking Materials Used summary line: {tax_status}")
+            return self._output_tax_block('invoice')
 
         invoice = existing['Invoice']
         existing_lines = invoice.get('Line', [])
@@ -1610,10 +1638,9 @@ Rules:
 
         # Resolve output-GST treatment; fail closed for a registered user with no code.
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
-        if tax_status == 'unresolved':
-            current_app.logger.error("Blocking QB estimate creation: TAX_CODE_UNRESOLVED")
-            return {'error': 'No valid GST tax code could be resolved — estimate not synced',
-                    'code': 'TAX_CODE_UNRESOLVED'}
+        if tax_status in ('unresolved', 'invalid'):
+            current_app.logger.error(f"Blocking QB estimate creation: {tax_status}")
+            return self._output_tax_block('estimate')
 
         # Build line items with GST
         lines = []

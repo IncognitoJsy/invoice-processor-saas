@@ -46,6 +46,22 @@ def picked_output_code(user):
     }
 
 
+def clear_picked_output_code(user, provider=None):
+    """Clear the stored output tax-code pick so a stale ref can't be attached after the
+    provider it came from is disconnected. When `provider` is given, only clears a pick that
+    belongs to that provider (so disconnecting QB doesn't wipe a Xero pick); None clears any.
+    Returns True if a pick was cleared. Leaves tax_rate alone (the document keeps working; the
+    resolver fails closed without a ref until the user re-picks)."""
+    if user is None or not getattr(user, 'output_tax_code_ref', None):
+        return False
+    if provider is not None and getattr(user, 'output_tax_provider', None) != provider:
+        return False
+    user.output_tax_code_ref = None
+    user.output_tax_code_name = None
+    user.output_tax_provider = None
+    return True
+
+
 OUTPUT_RATE_UNSET_MESSAGE = (
     "You're marked GST/VAT-registered but haven't set an output tax rate. "
     "Set it in Settings before creating or syncing invoices/quotes."

@@ -135,14 +135,14 @@ def test_registered_no_pick_blocks_quote_with_no_post(app):
     assert http.posts == []
 
 
-# ── 4. The pick is authoritative ─────────────────────────────────────────────
-def test_picked_tax_type_attached_directly(app):
-    # The org lists only a 20% VAT rate, but the user picked 'GSTONINCOME'. The resolver
-    # attaches the picked TaxType verbatim — it does NOT match against the org's rates.
-    svc, _ = make_service([VAT20], tax_registered=True, picked=('GSTONINCOME', 'GST on Income'))
+# ── 4. The pick is authoritative (no rate-match), but must still exist ───────
+def test_picked_tax_type_attached_directly_no_rate_match(app):
+    # The user's configured rate is 5, but they picked the 20% TaxType 'OUTPUT2'. The resolver
+    # attaches it verbatim (it still exists in the org) — proving it does NOT rate-match.
+    svc, _ = make_service([VAT20], tax_registered=True, tax_rate=5, picked=('OUTPUT2', '20% VAT'))
     tax_type, status = svc.resolve_output_tax(CONN)
     assert status == 'taxable'
-    assert tax_type == 'GSTONINCOME'
+    assert tax_type == 'OUTPUT2'
 
 
 def test_pick_for_other_provider_is_unresolved(app):
@@ -157,3 +157,23 @@ def test_registered_no_pick_is_unresolved(app):
     code, status = svc.resolve_output_tax(CONN)
     assert status == 'unresolved'
     assert code is None
+
+
+# ── 5. Stale pick (A1): the picked TaxType is no longer in the org ───────────
+def test_stale_pick_nonempty_list_is_invalid(app):
+    # Picked 'GONE', but the org lists other rates -> genuinely stale -> invalid (re-pick).
+    svc, _ = make_service([GST5], tax_registered=True, picked=('GONE', 'Old type'))
+    assert svc.resolve_output_tax(CONN) == (None, 'invalid')
+
+
+def test_stale_pick_empty_list_is_unresolved_not_invalid(app):
+    # Picked 'GONE' and the list is empty/unavailable -> transient-safe -> unresolved, NOT invalid.
+    svc, _ = make_service([], tax_registered=True, picked=('GONE', 'Old type'))
+    assert svc.resolve_output_tax(CONN) == (None, 'unresolved')
+
+
+def test_stale_pick_blocks_invoice_with_invalid_code(app):
+    svc, http = make_service([GST5], tax_registered=True, picked=('GONE', 'Old type'))
+    result = svc.create_invoice(CONN, 'CUST1', list(LINE_ITEMS))
+    assert result.get('code') == 'TAX_CODE_INVALID'
+    assert http.posts == []
