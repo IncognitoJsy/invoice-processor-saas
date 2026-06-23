@@ -13,11 +13,11 @@ class TakeoffRoom(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
-    document_id = db.Column(db.Integer, db.ForeignKey('project_document.id'))
+    document_id = db.Column(db.Integer, db.ForeignKey('project_document.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     floor_level = db.Column(db.String(50))
     room_type = db.Column(db.String(50))
-    color = db.Column(db.String(20), default='#6366f1')
+    color = db.Column(db.String(7), default='#6366f1')
     sort_order = db.Column(db.Integer, default=0)
     
     # Boundary
@@ -28,8 +28,8 @@ class TakeoffRoom(db.Model):
     bbox_h = db.Column(db.Integer)
     
     # Area
-    area_pixels = db.Column(db.Float)
-    area_sqm = db.Column(db.Float)
+    area_pixels = db.Column(db.Numeric(12, 2))
+    area_sqm = db.Column(db.Numeric(10, 2))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -70,12 +70,12 @@ class TakeoffSymbolTemplate(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
-    document_id = db.Column(db.Integer, db.ForeignKey('project_document.id'))
+    document_id = db.Column(db.Integer, db.ForeignKey('project_document.id'), nullable=False)
     
-    symbol_type_id = db.Column(db.String(50))
-    label = db.Column(db.String(200))
-    color = db.Column(db.String(20), default='#3b82f6')
-    icon = db.Column(db.String(50))
+    symbol_type_id = db.Column(db.String(50), nullable=False)
+    label = db.Column(db.String(100), nullable=False)
+    color = db.Column(db.String(7), default='#3b82f6')
+    icon = db.Column(db.String(10))
     
     # Crop region
     crop_x = db.Column(db.Integer)
@@ -86,9 +86,9 @@ class TakeoffSymbolTemplate(db.Model):
     
     # Product linking
     default_part_number = db.Column(db.String(100))
-    default_product_description = db.Column(db.String(500))
-    default_unit_cost = db.Column(db.Numeric(10, 2))
-    default_unit_sell = db.Column(db.Numeric(10, 2))
+    default_product_description = db.Column(db.String(255))
+    default_unit_cost = db.Column(db.Numeric(10, 4))
+    default_unit_sell = db.Column(db.Numeric(10, 4))
     qb_item_id = db.Column(db.String(50))
     
     # Stats
@@ -128,8 +128,8 @@ class TakeoffSymbolDetection(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey('takeoff_room.id'))
     
     
-    symbol_type_id = db.Column(db.String(50))
-    symbol_label = db.Column(db.String(200))
+    symbol_type_id = db.Column(db.String(50), nullable=False)
+    symbol_label = db.Column(db.String(100))
     
     x = db.Column(db.Integer, nullable=False)
     y = db.Column(db.Integer, nullable=False)
@@ -140,7 +140,7 @@ class TakeoffSymbolDetection(db.Model):
     source = db.Column(db.String(20), default='opencv')
     
     part_number = db.Column(db.String(100))
-    product_description = db.Column(db.String(500))
+    product_description = db.Column(db.String(255))
     material_id = db.Column(db.Integer, db.ForeignKey('project_material.id'))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -176,10 +176,10 @@ class TakeoffCableRun(db.Model):
     cable_type = db.Column(db.String(50), nullable=False)
     cable_label = db.Column(db.String(100))
     
-    route_points = db.Column(db.Text)  # JSON
-    length_pixels = db.Column(db.Float)
+    route_points = db.Column(db.Text, nullable=False)  # JSON
+    length_pixels = db.Column(db.Numeric(12, 2))
     length_metres = db.Column(db.Numeric(10, 2))
-    waste_percent = db.Column(db.Integer, default=10)
+    waste_percent = db.Column(db.Numeric(5, 2), default=10)
     total_metres = db.Column(db.Numeric(10, 2))
     
     circuit_ref = db.Column(db.String(50))
@@ -242,9 +242,9 @@ class TakeoffArea(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey('takeoff_room.id'))
     
     label = db.Column(db.String(100))
-    points = db.Column(db.Text)  # JSON
-    area_pixels = db.Column(db.Float)
-    area_sqm = db.Column(db.Float)
+    points = db.Column(db.Text, nullable=False)  # JSON
+    area_pixels = db.Column(db.Numeric(12, 2))
+    area_sqm = db.Column(db.Numeric(10, 2))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     

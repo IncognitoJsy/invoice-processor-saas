@@ -28,6 +28,11 @@ class CustomerInvoice(db.Model):
     notes = db.Column(db.Text)
     sent_at = db.Column(db.DateTime)
     paid_at = db.Column(db.DateTime)
+    # VOID / compliance fields (adopted from prod schema — risk #10 reconciliation; used via raw SQL).
+    supply_date = db.Column(db.Date)
+    void_reason = db.Column(db.String(100))
+    void_notes = db.Column(db.Text)
+    voided_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
