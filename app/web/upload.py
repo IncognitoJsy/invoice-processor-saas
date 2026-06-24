@@ -496,7 +496,36 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
             f"(supplier={invoice_data.get('supplier')}, "
             f"number={invoice_data.get('invoice_number')}): {validation.errors}"
         )
-    
+
+    # ── Selling-side plausibility (#3): an implausibly high markup AND a price above the
+    # supplier counter price = a bad catalog read-back / override slipped through. Block
+    # (clearable via mark-reviewed, like the arithmetic gate) so it can't sync silently.
+    # The AND with "above counter" deliberately spares legit high-margin-at-counter pricing.
+    SELL_MARKUP_BLOCK = Decimal('5.0')  # > 500% over cost
+    sell_flags = []
+    for it in items:
+        cost = to_decimal(it.get('cost_per_item'))
+        sell = to_decimal(it.get('selling_price'))
+        listp = to_decimal(it.get('original_unit_price'))
+        if cost and sell and cost > 0 and (sell - cost) / cost > SELL_MARKUP_BLOCK:
+            above_counter = (not listp) or listp <= 0 or sell > listp * Decimal('1.2')
+            if above_counter:
+                pct = (sell - cost) / cost * 100
+                sell_flags.append(
+                    f"{it.get('part_number') or 'line'}: selling £{money(sell)} is {pct:.0f}% over cost "
+                    f"£{money(cost)} and above counter price — verify (possible bad catalog read-back)"
+                )
+    if sell_flags:
+        existing = json.loads(validation_errors) if validation_errors else []
+        validation_errors = json.dumps(existing + sell_flags)
+        needs_review = True
+        confidence = 'low'
+        current_app.logger.warning(
+            f"⚠️ Invoice failed selling-side plausibility "
+            f"(supplier={invoice_data.get('supplier')}, "
+            f"number={invoice_data.get('invoice_number')}): {sell_flags}"
+        )
+
     # Calculate totals
     # Totals reconcile to the penny — the LINE is the authority:
     #   line_cost    = total_amount (what was actually paid for the line)
