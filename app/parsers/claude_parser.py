@@ -1172,7 +1172,13 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 # PRICE COMPARISON: Check if accounting software has higher price
                 final_selling_price = calculated_selling_price
                 actual_markup = markup
-                
+
+                # Supplier list/counter price (per-unit, pre-discount): the ceiling a read-back
+                # catalog price may not exceed (retail-cap philosophy). Defined here so the QB
+                # override below can clip to it — not only the discounted-line cap further down.
+                retail_unit = to_decimal(item.get('original_unit_price', 0) or 0) or Decimal('0')
+                QB_NOLIST_MARKUP_CEIL = Decimal('5.0')  # no-list fallback: reject read-back >400% over cost
+
                 if known_products:
                     part_upper = item.get('part_number', '').upper().strip() if item.get('part_number') else ''
                     if part_upper and part_upper in known_products:
@@ -1181,15 +1187,28 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                         existing_unit_price = to_decimal(known_products[part_upper].get('sales_price', 0)) or Decimal('0')
                         calculated_unit_price = calculated_selling_price
                         if existing_unit_price and existing_unit_price > calculated_unit_price:
-                            # Sanity check: if QB price is >10x calculated, it's stale/wrong data
-                            price_ratio = existing_unit_price / calculated_unit_price if calculated_unit_price > 0 else 999
-                            if price_ratio > 10:
-                                self.logger.warning(f"⚠️ Ignoring QB price for {part_upper} - {price_ratio:.0f}x higher than calculated (QB: £{existing_unit_price:.2f} vs calc: £{calculated_unit_price:.4f}) - likely stale QB data")
+                            # A read-back catalog price may not exceed the supplier COUNTER price
+                            # (retail-cap philosophy). Ceiling = max(list, calc): calc preserves
+                            # margin when list <= cost (e.g. GST-folded cost > per-metre list) and
+                            # on zero-discount lines. No usable list (missing / per-metre-box
+                            # converted, where original_unit_price is per-box) -> coarse fallback.
+                            has_list = retail_unit > 0 and not per_metre_converted
+                            ceiling = max(retail_unit, calculated_unit_price) if has_list else None
+                            if ceiling is not None and existing_unit_price > ceiling:
+                                self.logger.warning(
+                                    f"⚠️ QB price £{existing_unit_price:.2f} for {part_upper} exceeds counter "
+                                    f"ceiling £{ceiling:.2f} (list £{retail_unit:.2f}, calc £{calculated_unit_price:.2f}) "
+                                    f"— clipping to ceiling (likely contaminated catalog price)")
+                                final_selling_price = money(ceiling)
+                            elif ceiling is None and existing_unit_price > calculated_unit_price * QB_NOLIST_MARKUP_CEIL:
+                                self.logger.warning(
+                                    f"⚠️ QB price £{existing_unit_price:.2f} for {part_upper} implausible vs calc "
+                                    f"£{calculated_unit_price:.2f} and no list price — using calculated price")
                             else:
-                                # Use the higher existing per-unit price (per-unit, not a line total)
+                                # At/below counter (or modest, no-list): adopt the higher QB price.
                                 final_selling_price = money(existing_unit_price)
-                                if cost_per_item > 0:
-                                    actual_markup = (existing_unit_price - cost_per_item) / cost_per_item
+                            if cost_per_item > 0:
+                                actual_markup = (final_selling_price - cost_per_item) / cost_per_item
                                 source = known_products[part_upper].get('source', 'accounting')
                                 self.logger.info(f"📈 Using higher {source} price for {part_upper}: £{existing_unit_price:.2f}/unit = £{final_selling_price:.2f} vs calculated £{calculated_selling_price:.2f}")
 
@@ -1207,7 +1226,7 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                 #     per-unit, so not comparable), or
                 #   - retail <= our real cost (effective_cost) on a discounted line — capping
                 #     there would sell at/below cost, so we leave the price and flag for review.
-                retail_unit = to_decimal(item.get('original_unit_price', 0) or 0) or Decimal('0')
+                # retail_unit computed above (before the QB-price override)
                 if (discount_val > 0 and retail_unit > 0 and not per_metre_converted
                         and retail_unit < final_selling_price):
                     if retail_unit > effective_cost:
