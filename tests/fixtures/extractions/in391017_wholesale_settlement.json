@@ -1,0 +1,20 @@
+{
+  "_note": "Real shape of Wholesale Electrics IN391017 as it reaches save_invoice_to_db (post-transform, pre-reconcile). total_ex_tax holds the GOODS VALUE (the mislabel); goods_value/item_settlement captured separately. Lines sum to the true post-discount net 1078.66. Must tie out and, after the canonical net is applied, pass the validator.",
+  "supplier": "Wholesale Electrics (Jersey) Ltd",
+  "invoice_number": "IN391017",
+  "tax_rate": 5.0,
+  "tax_amount": 53.94,
+  "goods_value": 1551.31,
+  "item_settlement": 472.66,
+  "total_ex_tax": 1551.31,
+  "total_inc_tax": 1132.60,
+  "items": [
+    {"part_number": "JK112BG",  "description": "HAGER 125A PN 12WAY FUSE BOARD", "quantity": 1.0, "original_unit_price": 389.12, "discount": "50", "total_amount": 194.56},
+    {"part_number": "JK11003S", "description": "HAGER 3P 100A SW INCOMER",        "quantity": 1.0, "original_unit_price": 85.09,  "discount": "50", "total_amount": 42.55},
+    {"part_number": "JK102SPD", "description": "HAGER SURGE PROTECTION TYPE 2",   "quantity": 1.0, "original_unit_price": 471.10, "discount": "50", "total_amount": 235.55},
+    {"part_number": "ADB132",   "description": "HAGER 30MA 32A B RCBO ADB432U",   "quantity": 7.0, "original_unit_price": 27.00,  "discount": "0",  "total_amount": 189.00},
+    {"part_number": "ADB106",   "description": "HAGER RCBO B 6A 30MA ADA106U",    "quantity": 7.0, "original_unit_price": 27.00,  "discount": "0",  "total_amount": 189.00},
+    {"part_number": "ADB116",   "description": "HAGER 30MA 16A B RCBO ADA116U",   "quantity": 7.0, "original_unit_price": 27.00,  "discount": "0",  "total_amount": 189.00},
+    {"part_number": "NCN363A",  "description": "HAGER MCB 10KA TP 63A TYPE C",    "quantity": 1.0, "original_unit_price": 39.00,  "discount": "0",  "total_amount": 39.00}
+  ]
+}

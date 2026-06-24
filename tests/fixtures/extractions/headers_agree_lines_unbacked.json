@@ -1,0 +1,16 @@
+{
+  "_note": "The tightening case: TWO header anchors agree with EACH OTHER (gross_minus_tax = 1050-50 = 1000; goods_minus_settlement = 1200-200 = 1000) but the line-sum (800.00) does NOT back them. Headers confirming each other without the lines must NOT tie — the lines are the authority. Reconciler must fail closed; validator must still block.",
+  "supplier": "Header Mirage Ltd",
+  "invoice_number": "MIRAGE-001",
+  "tax_rate": 5.0,
+  "tax_amount": 50.00,
+  "goods_value": 1200.00,
+  "item_settlement": 200.00,
+  "total_ex_tax": 1000.00,
+  "total_inc_tax": 1050.00,
+  "items": [
+    {"part_number": "M1", "description": "Item One", "quantity": 2.0, "original_unit_price": 200.00, "discount": "0", "total_amount": 400.00},
+    {"part_number": "M2", "description": "Item Two", "quantity": 1.0, "original_unit_price": 250.00, "discount": "0", "total_amount": 250.00},
+    {"part_number": "M3", "description": "Item Three", "quantity": 3.0, "original_unit_price": 50.00, "discount": "0", "total_amount": 150.00}
+  ]
+}
