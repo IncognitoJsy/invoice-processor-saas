@@ -559,7 +559,11 @@ class QuickBooksService:
         from app.models.invoice import InvoiceItem
         
         items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
-        
+
+        # Fail closed BEFORE any API write if the invoice failed arithmetic validation.
+        if getattr(invoice, 'validation_errors', None):
+            return self._validation_block(invoice, 'invoice')
+
         invoice_data = {
             'supplier_name': invoice.supplier_name,
             'invoice_number': invoice.invoice_number,
@@ -690,6 +694,28 @@ class QuickBooksService:
             results.setdefault('errors', []).append(msg)
             return results
         return {'error': msg, 'code': code}
+
+    def _validation_block(self, invoice, what, *, results=None):
+        """Blocked-sync error when the invoice failed arithmetic validation. Fail closed
+        BEFORE any QB write, mirroring _output_tax_block. `what` names what wasn't synced.
+        This is the structural guard: it is the all-or-nothing gate that stops catalog
+        writes (create_or_update_item) as well as the bill/estimate, on every caller."""
+        import json
+        raw = getattr(invoice, 'validation_errors', None)
+        try:
+            reasons = json.loads(raw) if raw else []
+        except (ValueError, TypeError):
+            reasons = [raw]
+        msg = (f'Invoice failed arithmetic validation — review and clear the block '
+               f'before syncing ({what} not synced)')
+        if results is not None:
+            results['success'] = False
+            results['code'] = 'VALIDATION_BLOCKED'
+            results.setdefault('errors', []).append(msg)
+            results['validation_errors'] = reasons
+            return results
+        return {'success': False, 'error': msg, 'code': 'VALIDATION_BLOCKED',
+                'validation_errors': reasons}
 
     def _fetch_active_tax_codes(self, qb_connection):
         """Active QB TaxCodes (list); [] on any error."""
@@ -831,10 +857,10 @@ class QuickBooksService:
         
         return None, None
     
-    def create_or_update_item(self, qb_connection, item_data):
+    def create_or_update_item(self, qb_connection, item_data, invoice=None):
         """
         Create or update a product/service item in QuickBooks
-        
+
         item_data should contain:
         - name: str (part number or product name)
         - sku: str (optional, defaults to name)
@@ -846,9 +872,13 @@ class QuickBooksService:
         
         Note: Prices are GST EXCLUSIVE - QuickBooks will add GST on top
         """
+        # Last-line guard: never write a catalog item for an unvalidated invoice.
+        if invoice is not None and getattr(invoice, 'validation_errors', None):
+            return self._validation_block(invoice, 'item')
+
         name = item_data['name'][:100]
         sku = item_data.get('sku', name)[:100]
-        
+
         # Check if item exists by SKU or name
         existing, match_type = self.find_item_by_sku_or_name(qb_connection, sku, name)
 
@@ -932,6 +962,14 @@ class QuickBooksService:
             'products': []
         }
 
+        # Fail closed BEFORE any API write (incl. the tax-code query) if the invoice
+        # failed arithmetic validation. This is the structural all-or-nothing gate —
+        # it covers all callers (products route, customer-sync, estimate flow).
+        if getattr(invoice, 'validation_errors', None):
+            current_app.logger.error(
+                f"Blocking QB product sync (invoice {invoice.id}): failed arithmetic validation")
+            return self._validation_block(invoice, 'products', results=results)
+
         # Fail closed BEFORE any API write if a registered user has no tax code.
         _, tax_status = self.resolve_output_tax(qb_connection)
         if tax_status in ('unresolved', 'invalid'):
@@ -956,7 +994,7 @@ class QuickBooksService:
                 'expense_account_id': qb_connection.default_expense_account_id
             }
             
-            result = self.create_or_update_item(qb_connection, item_data)
+            result = self.create_or_update_item(qb_connection, item_data, invoice=invoice)
             
             if result.get('Item'):
                 results['synced'] += 1
