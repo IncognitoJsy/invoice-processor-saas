@@ -1,0 +1,14 @@
+{
+  "_note": "YESSS-style invoice: per-line amounts are ALREADY discounted, so total_ex_tax (net) already equals the line-sum. Only the gross_minus_tax header anchor is available (no invoice-level settlement line). Must tie via lines+gross_minus_tax with NO correction (the stated net was already right), and pass the validator unchanged.",
+  "supplier": "YESSS Electrical",
+  "invoice_number": "0931234567",
+  "tax_rate": 20.0,
+  "tax_amount": 100.00,
+  "total_ex_tax": 500.00,
+  "total_inc_tax": 600.00,
+  "items": [
+    {"part_number": "WMSS82", "description": "BACK BOX 35MM", "quantity": 2.0, "original_unit_price": 100.00, "discount": "0", "total_amount": 200.00},
+    {"part_number": "MMT2SFWH", "description": "MINI TRUNKING 2M", "quantity": 1.0, "original_unit_price": 150.00, "discount": "0", "total_amount": 150.00},
+    {"part_number": "221-415", "description": "WAGO CONNECTOR 5-WAY", "quantity": 5.0, "original_unit_price": 30.00, "discount": "0", "total_amount": 150.00}
+  ]
+}

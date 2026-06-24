@@ -466,6 +466,22 @@ def save_invoice_to_db(invoice_data, filename, user_id, document_type='invoice')
 
     items = invoice_data.get('items', [])
 
+    # ── Cross-reconcile invoice-level totals BEFORE validating (fail-closed) ──
+    # The line-sum is the authority; if an independent stated total confirms it,
+    # adopt it as the canonical net (fixes the Wholesale "Goods Value vs Net
+    # Total" mislabel). If nothing confirms the lines, this is a no-op and the
+    # validator below blocks exactly as before. Validator logic is unchanged.
+    from app.services.invoice_reconciler import reconcile_totals
+    recon = reconcile_totals(invoice_data)
+    if recon.tied:
+        invoice_data['total_ex_tax'] = float(recon.canonical_net)
+        if recon.corrected_from is not None:
+            current_app.logger.info(
+                f"🔁 Reconciled net {recon.corrected_from}→{recon.canonical_net} "
+                f"(anchors={recon.anchors}, supplier={invoice_data.get('supplier')}, "
+                f"number={invoice_data.get('invoice_number')})"
+            )
+
     # ── Arithmetic validation (critical-path: accuracy is the product) ────────
     validation = validate_invoice(invoice_data)
     validation_errors = None

@@ -607,6 +607,8 @@ Extract all documents and return ONLY valid JSON with no markdown formatting, no
             "supplier": "name of supplier (e.g. YESSS Electrical, CEF, Wholesale Electrics)",
             "invoice_number": "EXACT invoice/quote/order number as shown on document - THIS IS CRITICAL",
             "job_reference": "customer reference or job number (e.g. TLC, LA MAISON DE ST JEAN, DAVID HAZZARD, SARAH HOLT, MATT NORIS)",
+            "goods_value": 0,
+            "item_settlement": 0,
             "total_net_amount": 2788.74,
             "tax_rate": 5.0,
             "tax_amount": 139.44,
@@ -653,7 +655,12 @@ CRITICAL RULES FOR CONSOLIDATED DOCUMENTS:
 19. **DETECT MULTIPLE ORDERS**: Look for job reference changes
 20. **SEPARATE EACH ORDER**: Create a separate entry in "invoices" array for each job reference
 21. **GROUP ITEMS CORRECTLY**: Each entry should only contain items for that specific job reference
-22. **CALCULATE TOTALS PER DOCUMENT**: total_net_amount should be the sum of all items for that specific job
+22. **TOTALS PER DOCUMENT — NET IS AFTER DISCOUNT**: total_net_amount is the supplier's NET TOTAL
+    *after* any settlement/discount — NOT the pre-discount goods value. It must equal the sum of the
+    per-line DISCOUNTED amounts for that job. If the invoice shows a separate "Goods Value" (full,
+    pre-discount) and an "Item Settlement"/discount line (e.g. Wholesale Electrics), capture them as
+    goods_value and item_settlement, with total_net_amount = goods_value − item_settlement. If there
+    is no settlement line, set goods_value = total_net_amount and item_settlement = 0.
 23. **ACCOUNT NUMBER IS SAME**: The supplier_account_number is the same for all invoices in a consolidated PDF
 
 CRITICAL PRICING RULES FOR WHOLESALE ELECTRICS:
@@ -689,9 +696,14 @@ HANDLING UNKNOWN/NEW SUPPLIERS:
 41. Customer account number may be labeled: Account, A/C, Customer No, Account Code, etc.
 42. Job reference may be labeled: Your Ref, Customer Ref, Order Ref, Job Ref, PO Number, Your Order, Reference, etc.
 43. For line items, map columns by their headers - do NOT assume a fixed column order
-44. If there is a subtotal/net total at the bottom, use it to verify your extraction (sum of line amounts should match)
+44. Use the bottom totals to verify your extraction. The NET TOTAL is the figure AFTER any
+    discount/settlement, and the sum of the per-line DISCOUNTED amounts should match it. If the
+    invoice shows a pre-discount "Goods Value" and a discount/"Item Settlement" line, do NOT use the
+    Goods Value as the net — capture goods_value and item_settlement separately (see rule 22).
 45. If you see VAT/GST/Tax amounts on the invoice:
-    - Extract the NET amount (before tax) as total_net_amount
+    - Extract the NET amount AFTER discount (before tax) as total_net_amount
+    - Extract goods_value (full, pre-discount) and item_settlement (total discount) if shown, else
+      goods_value = total_net_amount and item_settlement = 0
     - Extract the tax RATE as tax_rate (e.g. 5.0 for 5% GST, 20.0 for 20% VAT)
     - Extract the tax AMOUNT as tax_amount (the actual £ amount of tax charged)
     - Extract the GROSS total (inc tax) as total_inc_tax
@@ -843,6 +855,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     'total_orders': len(invoices),
                     'tax_rate': float(invoice_data.get('tax_rate') or 0),
                     'tax_amount': float(invoice_data.get('tax_amount') or 0),
+                    'goods_value': float(invoice_data.get('goods_value') or 0),
+                    'item_settlement': float(invoice_data.get('item_settlement') or 0),
                     'total_ex_tax': float(invoice_data.get('total_net_amount') or 0),
                     'total_inc_tax': float(invoice_data.get('total_inc_tax') or 0),
                 })
@@ -911,6 +925,8 @@ Double-check your work - missing items, wrong document type, wrong account numbe
             'consolidated': False,
             'tax_rate': float(data.get('tax_rate') or 0),
             'tax_amount': float(data.get('tax_amount') or 0),
+            'goods_value': float(data.get('goods_value') or 0),
+            'item_settlement': float(data.get('item_settlement') or 0),
             'total_ex_tax': float(data.get('total_net_amount') or 0),
             'total_inc_tax': float(data.get('total_inc_tax') or 0),
         }
