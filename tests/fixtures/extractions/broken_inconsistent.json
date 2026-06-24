@@ -1,0 +1,14 @@
+{
+  "_note": "Genuinely inconsistent invoice: the line-sum (900.00) matches NOTHING. gross_minus_tax = 1300-200 = 1100, stated net = 1000. No anchor confirms the lines. Reconciler must NOT tie; validator must still block.",
+  "supplier": "Unknown Supplier Ltd",
+  "invoice_number": "BROKEN-001",
+  "tax_rate": 20.0,
+  "tax_amount": 200.00,
+  "total_ex_tax": 1000.00,
+  "total_inc_tax": 1300.00,
+  "items": [
+    {"part_number": "X1", "description": "Widget A", "quantity": 3.0, "original_unit_price": 100.00, "discount": "0", "total_amount": 300.00},
+    {"part_number": "X2", "description": "Widget B", "quantity": 2.0, "original_unit_price": 150.00, "discount": "0", "total_amount": 300.00},
+    {"part_number": "X3", "description": "Widget C", "quantity": 1.0, "original_unit_price": 300.00, "discount": "0", "total_amount": 300.00}
+  ]
+}
