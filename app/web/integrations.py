@@ -648,7 +648,12 @@ def quickbooks_sync_products(invoice_id):
     
     if not connection.default_expense_account_id or not connection.default_income_account_id:
         return jsonify({'success': False, 'error': 'Please configure income and expense accounts in QuickBooks settings'}), 400
-    
+
+    # Block ALL writes (catalog included) if the invoice failed arithmetic validation.
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Sync products
     qb = QuickBooksService(current_user)
     result = qb.sync_invoice_items_as_products(connection, invoice)
@@ -891,6 +896,11 @@ def quickbooks_create_estimate(quote_id):
     if not connection.default_income_account_id or not connection.default_expense_account_id:
         return jsonify({'success': False, 'error': 'Please configure income and expense accounts in QuickBooks settings'}), 400
     
+    # Block ALL writes (catalog included) if the quote failed arithmetic validation.
+    block = _sync_validation_block(quote)
+    if block:
+        return block
+
     # Create estimate in QuickBooks
     qb = QuickBooksService(current_user)
     result = qb.sync_quote_to_estimate(connection, quote, customer_id)
@@ -1140,6 +1150,11 @@ def xero_sync_products(invoice_id):
     if not connection.default_expense_account_code or not connection.default_sales_account_code:
         return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
     
+    # Block ALL writes (catalog included) if the invoice failed arithmetic validation.
+    block = _sync_validation_block(invoice)
+    if block:
+        return block
+
     # Sync products
     xero = XeroService(current_user)
     result = xero.sync_products_to_items(connection, invoice)
@@ -1306,6 +1321,11 @@ def xero_create_quote(quote_id):
     if not connection.default_sales_account_code or not connection.default_expense_account_code:
         return jsonify({'success': False, 'error': 'Please configure expense and sales accounts in Xero settings'}), 400
     
+    # Block ALL writes (catalog included) if the quote failed arithmetic validation.
+    block = _sync_validation_block(quote)
+    if block:
+        return block
+
     # Create quote in Xero
     xero = XeroService(current_user)
     result = xero.sync_quote_to_xero(connection, quote, customer_id)
