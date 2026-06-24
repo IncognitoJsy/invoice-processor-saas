@@ -336,6 +336,20 @@ class XeroService:
                          f'pick it in Settings ({what} not synced)',
                 'code': 'TAX_CODE_UNRESOLVED'}
 
+    def _validation_block(self, invoice, what):
+        """Blocked-sync error when the invoice failed arithmetic validation. Fail closed
+        BEFORE any Xero write, mirroring _output_tax_block. NOTE: Xero's product path has
+        no tax fail-closed, so this is its primary all-or-nothing write guard."""
+        import json
+        raw = getattr(invoice, 'validation_errors', None)
+        try:
+            reasons = json.loads(raw) if raw else []
+        except (ValueError, TypeError):
+            reasons = [raw]
+        return {'error': f'Invoice failed arithmetic validation — review and clear the block '
+                         f'before syncing ({what} not synced)',
+                'code': 'VALIDATION_BLOCKED', 'validation_errors': reasons}
+
     @staticmethod
     def _active(tax_rates):
         return [tr for tr in tax_rates if (tr.get('Status') or 'ACTIVE').upper() == 'ACTIVE']
@@ -540,15 +554,22 @@ class XeroService:
     
     def find_or_create_item(self, connection, code: str, name: str, description: str,
                            purchase_price: float, sale_price: float,
-                           purchase_account_code: str, sales_account_code: str) -> Optional[Dict]:
+                           purchase_account_code: str, sales_account_code: str,
+                           invoice=None) -> Optional[Dict]:
         """
         Find existing item by code, update prices if higher, or create new one.
-        
+
         Price update logic:
         - If new sale_price is HIGHER than existing, update the item
         - This ensures we never sell at an old lower price when costs go up
         - Purchase price is also updated to reflect current cost
         """
+        # Last-line guard: never read/write a catalog item for an unvalidated invoice.
+        # Return None (no write) — the caller's method-level guard normally prevents reaching here.
+        if invoice is not None and getattr(invoice, 'validation_errors', None):
+            logger.error("Blocking Xero item write: invoice failed arithmetic validation")
+            return None
+
         items = self.get_items(connection)
         
         for item in items:
@@ -916,7 +937,12 @@ class XeroService:
         from app.extensions import db
         
         errors = []
-        
+
+        # Fail closed BEFORE any API write if the invoice failed arithmetic validation.
+        if getattr(invoice, 'validation_errors', None):
+            return {'success': False, 'errors': [self._validation_block(invoice, 'invoice')['error']],
+                    'code': 'VALIDATION_BLOCKED'}
+
         try:
             # Find or create supplier
             supplier = self.find_or_create_supplier(connection, invoice.supplier)
@@ -973,7 +999,15 @@ class XeroService:
     def sync_products_to_items(self, connection, invoice) -> Dict:
         """Sync invoice line items as Xero Items"""
         results = {'synced': 0, 'failed': 0, 'errors': []}
-        
+
+        # Fail closed BEFORE any API write if the invoice failed arithmetic validation.
+        # Xero's product path has NO tax fail-closed, so this is its all-or-nothing guard.
+        if getattr(invoice, 'validation_errors', None):
+            logger.error(
+                f"Blocking Xero product sync (invoice {invoice.id}): failed arithmetic validation")
+            block = self._validation_block(invoice, 'products')
+            return {'synced': 0, 'failed': 0, 'errors': [block['error']], 'code': block['code']}
+
         if not connection.default_expense_account_code or not connection.default_sales_account_code:
             return {'synced': 0, 'failed': 0, 'errors': ['Please configure expense and sales accounts in Xero settings']}
         
@@ -995,7 +1029,8 @@ class XeroService:
                     purchase_price=purchase_price,
                     sale_price=sale_price,
                     purchase_account_code=connection.default_expense_account_code,
-                    sales_account_code=connection.default_sales_account_code
+                    sales_account_code=connection.default_sales_account_code,
+                    invoice=invoice
                 )
                 
                 if result:
