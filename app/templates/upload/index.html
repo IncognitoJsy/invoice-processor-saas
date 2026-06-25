@@ -417,33 +417,44 @@
                 </button>
                 
                 <template x-if="result.expanded">
-                    <div class="mt-4 space-y-3">
-                        <template x-for="(item, idx) in result.all_items" :key="idx">
-                            <div class="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-                                <div class="grid grid-cols-6 gap-4 items-center text-sm">
-                                    <div class="col-span-2">
-                                        <p class="font-mono font-bold text-blue-600 dark:text-blue-400" x-text="item.part_number"></p>
-                                        <p class="text-gray-600 dark:text-gray-400 text-xs truncate" x-text="item.description"></p>
-                                    </div>
-                                    <div class="text-center">
-                                        <p class="text-gray-500 dark:text-gray-400 text-xs">Qty</p>
-                                        <p class="font-bold text-gray-900 dark:text-white" x-text="item.quantity"></p>
-                                    </div>
-                                    <div class="text-center">
-                                        <p class="text-gray-500 dark:text-gray-400 text-xs">Cost</p>
-                                        <p class="font-bold text-gray-900 dark:text-white">£<span x-text="item.cost_per_item?.toFixed(2)"></span></p>
-                                    </div>
-                                    <div class="text-center">
-                                        <p class="text-gray-500 dark:text-gray-400 text-xs">Sell</p>
-                                        <p class="font-bold text-green-600 dark:text-green-400">£<span x-text="item.selling_price?.toFixed(2)"></span></p>
-                                    </div>
-                                    <div class="text-center">
-                                        <p class="text-gray-500 dark:text-gray-400 text-xs">Profit</p>
-                                        <p class="font-bold text-green-600 dark:text-green-400">£<span x-text="item.profit_per_item?.toFixed(2)"></span></p>
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-900"><tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Part #</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qty</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cost</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Selling</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Markup</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Profit</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Updated</th>
+                            </tr></thead>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                <!-- Display-only (Phase 4): same cells/formatting as the shared LineItems module via
+                                     LineItems.fmtMoney/relTime; override edit (Phase 5) not wired yet. -->
+                                <template x-for="(item, idx) in result.all_items" :key="idx">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm align-top"><span class="font-mono text-gray-900 dark:text-white" x-text="item.part_number || '-'"></span></td>
+                                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 align-top" x-text="item.description || '-'"></td>
+                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center align-top" x-text="item.quantity"></td>
+                                        <td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top">
+                                            <div><span x-text="LineItems.fmtMoney(item.cost_per_item)"></span><span x-show="item.quantity > 1" class="text-gray-400 text-xs"> /u</span></div>
+                                            <div x-show="item.quantity > 1" class="text-xs text-gray-400"><span x-text="LineItems.fmtMoney(item.cost_per_item * item.quantity)"></span> line</div>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top">
+                                            <div><span class="font-medium" x-text="LineItems.fmtMoney(item.selling_price)"></span><span x-show="item.quantity > 1" class="text-gray-400 text-xs"> /u</span></div>
+                                            <div x-show="item.quantity > 1" class="text-xs text-gray-400"><span x-text="LineItems.fmtMoney(item.selling_price * item.quantity)"></span> line</div>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-700 dark:text-gray-300" x-text="item.markup_percent != null ? Number(item.markup_percent).toFixed(1) + '%' : '—'"></span></td>
+                                        <td class="px-4 py-3 text-sm text-right font-medium align-top" :class="(item.profit_per_item * item.quantity) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                                            <span x-text="LineItems.fmtMoney(item.profit_per_item * item.quantity)"></span>
+                                            <div x-show="item.quantity > 1" class="text-xs text-gray-400 font-normal"><span x-text="LineItems.fmtMoney(item.profit_per_item)"></span>/u</div>
+                                        </td>
+                                        <td class="px-4 py-3 text-xs text-gray-400 text-center align-top" :title="item.updated_at || ''" x-text="item.price_overridden ? LineItems.relTime(item.updated_at) : '—'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
                     </div>
                 </template>
             </div>
@@ -451,6 +462,7 @@
     </template>
 </div>
 
+<script src="{{ url_for('static', filename='js/line_items.js') }}"></script>
 <script>
 function uploadPage() {
     return {
