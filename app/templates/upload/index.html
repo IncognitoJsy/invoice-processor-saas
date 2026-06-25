@@ -441,11 +441,27 @@
                                             <div><span x-text="LineItems.fmtMoney(item.cost_per_item)"></span><span x-show="item.quantity > 1" class="text-gray-400 text-xs"> /u</span></div>
                                             <div x-show="item.quantity > 1" class="text-xs text-gray-400"><span x-text="LineItems.fmtMoney(item.cost_per_item * item.quantity)"></span> line</div>
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top">
-                                            <div><span class="font-medium" x-text="LineItems.fmtMoney(item.selling_price)"></span><span x-show="item.quantity > 1" class="text-gray-400 text-xs"> /u</span></div>
+                                        <td class="px-4 py-3 text-sm text-right align-top" :class="item.price_overridden ? 'bg-amber-50 dark:bg-amber-900/10' : ''">
+                                            <div x-show="!item._editing">
+                                                <span class="font-medium text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 hover:underline" @click="startEditPrice(item)" title="Click to edit selling price" x-text="LineItems.fmtMoney(item.selling_price)"></span><span x-show="item.quantity > 1" class="text-gray-400 text-xs"> /u</span>
+                                                <svg class="inline w-3.5 h-3.5 text-gray-400 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                            </div>
+                                            <div x-show="item._editing" class="flex items-center justify-end space-x-1">
+                                                <span class="text-xs text-gray-400">£</span>
+                                                <input type="number" step="0.01" min="0" class="w-20 px-2 py-1 text-sm text-right border border-blue-500 rounded dark:bg-gray-700 dark:text-white" x-model="item._editValue" @keydown.enter.prevent="saveItemPrice(item)" @keydown.escape="cancelEditPrice(item)">
+                                                <button @click="saveItemPrice(item)" class="p-1 text-green-600 hover:bg-green-50 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></button>
+                                                <button @click="cancelEditPrice(item)" class="p-1 text-red-600 hover:bg-red-50 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                                            </div>
                                             <div x-show="item.quantity > 1" class="text-xs text-gray-400"><span x-text="LineItems.fmtMoney(item.selling_price * item.quantity)"></span> line</div>
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-700 dark:text-gray-300" x-text="item.markup_percent != null ? Number(item.markup_percent).toFixed(1) + '%' : '—'"></span></td>
+                                        <td class="px-4 py-3 text-sm text-right align-top">
+                                            <template x-if="item.price_overridden">
+                                                <div><span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white whitespace-nowrap">⚑ MANUAL</span><div class="text-xs text-gray-500 mt-1"><span x-text="item.markup_percent != null ? Number(item.markup_percent).toFixed(1) + '%' : ''"></span> · <a class="text-blue-600 cursor-pointer hover:underline" @click="resetItemPrice(item)">reset</a></div></div>
+                                            </template>
+                                            <template x-if="!item.price_overridden">
+                                                <span class="text-gray-700 dark:text-gray-300" x-text="item.markup_percent != null ? Number(item.markup_percent).toFixed(1) + '%' : '—'"></span>
+                                            </template>
+                                        </td>
                                         <td class="px-4 py-3 text-sm text-right font-medium align-top" :class="(item.profit_per_item * item.quantity) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
                                             <span x-text="LineItems.fmtMoney(item.profit_per_item * item.quantity)"></span>
                                             <div x-show="item.quantity > 1" class="text-xs text-gray-400 font-normal"><span x-text="LineItems.fmtMoney(item.profit_per_item)"></span>/u</div>
@@ -481,6 +497,31 @@ function uploadPage() {
         remaining: 0,
         isUnlimited: false,
         quotaExceeded: false,
+
+        // ── Manual selling-price override (Phase 5) — Alpine-native; Alpine owns the row.
+        // Calls the shared PUT /invoices/item/<id>/price route (rows are saved InvoiceItem with
+        // ids), then Object.assigns the returned to_dict() onto the reactive item. The result
+        // summary (Selling/Profit/Markup) reduces over all_items, so it recomputes reactively —
+        // no full re-fetch like the invoice/quote modals.
+        startEditPrice(item) { item._editValue = (parseFloat(item.selling_price) || 0).toFixed(2); item._editing = true; },
+        cancelEditPrice(item) { item._editing = false; },
+        async saveItemPrice(item) {
+            const v = parseFloat(item._editValue);
+            if (isNaN(v) || v <= 0) { alert('Enter a selling price greater than 0'); return; }
+            try {
+                const r = await fetch('/invoices/item/' + item.id + '/price', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selling_price: v }) });
+                const d = await r.json();
+                if (d.success) { Object.assign(item, d.item); item._editing = false; } else { alert('Failed to update price: ' + (d.error || 'Unknown error')); }
+            } catch (e) { console.error(e); alert('Error updating price'); }
+        },
+        async resetItemPrice(item) {
+            if (!confirm('Reset to the calculated price? This removes the manual override.')) return;
+            try {
+                const r = await fetch('/invoices/item/' + item.id + '/price?reset=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
+                const d = await r.json();
+                if (d.success) { Object.assign(item, d.item); } else { alert('Failed to reset price: ' + (d.error || 'Unknown error')); }
+            } catch (e) { console.error(e); alert('Error resetting price'); }
+        },
         
         async checkQuota() {
             try {
