@@ -35,9 +35,12 @@
   }
 
   // One active view at a time (a single open modal / result), so a single current context is safe.
-  let ctx = { endpoint: '/invoices/item', refetch: null, partEditable: false };
+  // overrideEnabled=true → interactive selling-price edit + ⚑ MANUAL badge + reset (invoices, and
+  // quotes once Phase 2 lands). false → display-only: plain selling price, markup % only, NO edit
+  // affordances or onclicks (quotes Phase 1, so override is genuinely inert until wired).
+  let ctx = { endpoint: '/invoices/item', refetch: null, partEditable: false, overrideEnabled: true };
   function setContext(c) {
-    ctx = Object.assign({ endpoint: '/invoices/item', refetch: null, partEditable: false }, c || {});
+    ctx = Object.assign({ endpoint: '/invoices/item', refetch: null, partEditable: false, overrideEnabled: true }, c || {});
   }
 
   function renderRow(item) {
@@ -59,8 +62,12 @@
     const descCell = `<td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 align-top">${_esc(item.description || '-')}</td>`;
     const qtyCell = `<td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center align-top">${qty}</td>`;
     const costCell = `<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top"><div>${fmtMoney(costU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(costU * qty)} line</div>` : ''}</td>`;
-    const sellCell = `<td class="px-4 py-3 text-sm text-right align-top ${manual ? 'bg-amber-50 dark:bg-amber-900/10' : ''}"><div id="sell-display-${id}"><span class="font-medium text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 hover:underline" onclick="LineItems.editSellPrice(${id}, ${sellU})" title="Click to edit selling price">${fmtMoney(sellU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</span>${pencil}</div><div id="sell-edit-${id}" class="hidden flex items-center justify-end space-x-1"><span class="text-xs text-gray-400">£</span><input type="number" step="0.01" min="0" id="sell-input-${id}" class="w-20 px-2 py-1 text-sm text-right border border-blue-500 rounded dark:bg-gray-700 dark:text-white" onkeydown="LineItems.handleSellKeydown(event, ${id})"><button onclick="LineItems.saveSellPrice(${id})" class="p-1 text-green-600 hover:bg-green-50 rounded">${ok}</button><button onclick="LineItems.cancelSellEdit(${id})" class="p-1 text-red-600 hover:bg-red-50 rounded">${x}</button></div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(sellU * qty)} line</div>` : ''}</td>`;
-    const markupCell = `<td class="px-4 py-3 text-sm text-right align-top">${manual ? `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white whitespace-nowrap">⚑ MANUAL</span><div class="text-xs text-gray-500 mt-1">${markup != null ? markup.toFixed(1) + '%' : ''} · <a class="text-blue-600 cursor-pointer hover:underline" onclick="LineItems.resetPrice(${id})">reset</a></div>` : `<span class="text-gray-700 dark:text-gray-300">${markup != null ? markup.toFixed(1) + '%' : '—'}</span>`}</td>`;
+    const sellCell = ctx.overrideEnabled
+      ? `<td class="px-4 py-3 text-sm text-right align-top ${manual ? 'bg-amber-50 dark:bg-amber-900/10' : ''}"><div id="sell-display-${id}"><span class="font-medium text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 hover:underline" onclick="LineItems.editSellPrice(${id}, ${sellU})" title="Click to edit selling price">${fmtMoney(sellU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</span>${pencil}</div><div id="sell-edit-${id}" class="hidden flex items-center justify-end space-x-1"><span class="text-xs text-gray-400">£</span><input type="number" step="0.01" min="0" id="sell-input-${id}" class="w-20 px-2 py-1 text-sm text-right border border-blue-500 rounded dark:bg-gray-700 dark:text-white" onkeydown="LineItems.handleSellKeydown(event, ${id})"><button onclick="LineItems.saveSellPrice(${id})" class="p-1 text-green-600 hover:bg-green-50 rounded">${ok}</button><button onclick="LineItems.cancelSellEdit(${id})" class="p-1 text-red-600 hover:bg-red-50 rounded">${x}</button></div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(sellU * qty)} line</div>` : ''}</td>`
+      : `<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top"><div>${fmtMoney(sellU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(sellU * qty)} line</div>` : ''}</td>`;
+    const markupCell = ctx.overrideEnabled
+      ? `<td class="px-4 py-3 text-sm text-right align-top">${manual ? `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white whitespace-nowrap">⚑ MANUAL</span><div class="text-xs text-gray-500 mt-1">${markup != null ? markup.toFixed(1) + '%' : ''} · <a class="text-blue-600 cursor-pointer hover:underline" onclick="LineItems.resetPrice(${id})">reset</a></div>` : `<span class="text-gray-700 dark:text-gray-300">${markup != null ? markup.toFixed(1) + '%' : '—'}</span>`}</td>`
+      : `<td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-700 dark:text-gray-300">${markup != null ? markup.toFixed(1) + '%' : '—'}</span></td>`;
     const lineProfit = profitU * qty;
     const profitCell = `<td class="px-4 py-3 text-sm text-right font-medium align-top ${lineProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${fmtMoney(lineProfit)}${multi ? `<div class="text-xs text-gray-400 font-normal">${fmtMoney(profitU)}/u</div>` : ''}</td>`;
     const updCell = `<td class="px-4 py-3 text-xs text-gray-400 text-center align-top" title="${item.updated_at || ''}">${manual ? relTime(item.updated_at) : '—'}</td>`;
