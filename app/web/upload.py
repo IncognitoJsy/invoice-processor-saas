@@ -208,8 +208,11 @@ def api_upload_single():
                     db.session.commit()
                     
                     # Prepare result for frontend
-                    items = invoice_data.get('items', [])
-                    total = sum(item.get('total_amount', 0) for item in items)
+                    # Serialize the SAVED rows via the same InvoiceItem.to_dict() the invoice/quote
+                    # views use, so the upload result carries row ids + markup_percent /
+                    # price_overridden / created_at / updated_at (parser dicts omit these).
+                    items = sorted((it.to_dict() for it in saved_invoice.items), key=lambda d: d['id'])
+                    total = sum(it.get('total_amount', 0) for it in items)
                     
                     result = {
                         'id': saved_invoice.id,
@@ -391,8 +394,11 @@ def api_upload():
                             db.session.commit()
                             
                             # Prepare result for frontend
-                            items = invoice_data.get('items', [])
-                            total = sum(item.get('total_amount', 0) for item in items)
+                            # Serialize the SAVED rows via the same InvoiceItem.to_dict() the invoice/quote
+                            # views use, so the upload result carries row ids + markup_percent /
+                            # price_overridden / created_at / updated_at (parser dicts omit these).
+                            items = sorted((it.to_dict() for it in saved_invoice.items), key=lambda d: d['id'])
+                            total = sum(it.get('total_amount', 0) for it in items)
                             
                             result = {
                                 'id': saved_invoice.id,
