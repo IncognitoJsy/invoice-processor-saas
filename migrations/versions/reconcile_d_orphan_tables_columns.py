@@ -81,7 +81,24 @@ def upgrade():
         tbl = md.tables[tname]
         for cname in cols:
             if cname not in have:
-                op.add_column(tname, tbl.c[cname]._copy())
+                col = tbl.c[cname]._copy()
+                if not col.nullable and col.server_default is None and col.default is None:
+                    # NOT-NULL orphan column onto a possibly-populated table. A bare
+                    # `ADD COLUMN ... NOT NULL` fails (NotNullViolation) on any env whose table
+                    # predates the column and already has rows — the latent cross-env create_all
+                    # drift that crash-looped Postgres-ot-n on supplier_account.email. Add WITH a
+                    # temporary server_default so existing rows satisfy NOT NULL, then DROP the
+                    # default so the end state matches the model exactly (NOT NULL, no default).
+                    # supplier_account.email is the only such orphan column ('' backfills its rows).
+                    tmp = tbl.c[cname]._copy()
+                    # Must wrap in DefaultClause — a bare sa.text() assigned to .server_default is
+                    # NOT rendered as a column DEFAULT (the add would emit plain NOT NULL and fail).
+                    fill = sa.text("''") if isinstance(col.type, sa.String) else sa.text('0')
+                    tmp.server_default = sa.DefaultClause(fill)
+                    op.add_column(tname, tmp)
+                    op.execute(f'ALTER TABLE "{tname}" ALTER COLUMN "{cname}" DROP DEFAULT')
+                else:
+                    op.add_column(tname, col)
 
         # 3) Create the index ONLY for orphan columns we just added that the model marks index=True
         #    (e.g. ix_invoice_bill_status, ix_supplier_account_email). Restricted to the added
