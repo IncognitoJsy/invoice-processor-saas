@@ -43,6 +43,31 @@ Observed on **2026-06-26** (staging at reconcile_e vs prod at reconcile_d, befor
 - Until that's 0-diff on both envs, removing `create_all` risks a fresh/rebuilt env not matching a
   live one.
 
+## 🚩 Deploy topology — there are THREE create_all'd databases, and prod is TWO targets
+**Both production app services auto-deploy from `master`:**
+- **GoZappify** (gozappify.com) → DB `Postgres` (main prod).
+- **invoice-processor-saas** (the Intuit-test instance) → DB **`Postgres-ot-n`**.
+
+So **a single `master` merge redeploys BOTH apps**, each running `flask db upgrade` against its own
+database. (Staging is a separate environment: GoZappify@staging deploys from `staging` → its own
+staging `Postgres`.) That's **three** independently-`create_all`'d schemas with divergent histories.
+
+This is exactly what turned the reconcile_d NOT-NULL bug into a **two-target incident** (resolved
+2026-06-26): `reconcile_d` added `supplier_account.email` by copying the model's `NOT NULL`. On main
+prod the column already existed (created when the table was empty) so the add was skipped; on
+`Postgres-ot-n` the table predated the column **and already had rows**, so `ADD COLUMN ... NOT NULL`
+hit `NotNullViolation` and crash-looped the second app. Fix: add NOT-NULL orphan columns WITH a
+temporary `server_default` (`sa.DefaultClause`), then drop the default (see
+`scripts/reconcile_d_fix_verify.sh`).
+
+**Standing consideration for the create_all-removal session (and every future migration):**
+- A migration that's a clean no-op on main prod can still **fail on `Postgres-ot-n`** — it has its
+  own, older `create_all` history. Any new/edited migration must be proven safe on **Postgres-ot-n
+  too**, not just main prod and staging.
+- The "0-diff on both envs" gate above must become **0-diff on all THREE** (main prod, staging,
+  Postgres-ot-n) before `create_all` is removed — otherwise a fresh from-migrations build won't
+  match the second prod app's live schema.
+
 ## Verification tooling (in repo)
 - `scripts/rebuild_from_migrations_test.sh` — from-empty migrations build vs a prod snapshot (diff).
 - `scripts/reconcile_e_verify.sh` — build (D+E) vs prod-copy-advanced-to-E (apples-to-apples) +
