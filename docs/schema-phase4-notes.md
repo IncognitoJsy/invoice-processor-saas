@@ -1,0 +1,54 @@
+# Schema Phase 4 — notes & the open blocker for the `create_all` removal session
+
+Context: AUDIT risk #10 Phase 4 = make Alembic migrations the **sole** schema authority, then remove
+`db.create_all()` + the 3 inline `ALTER` blocks from `app/__init__.py` (~L46–78).
+
+## Done so far
+- **reconcile_d_orphans** (live on prod + staging): created the 5 orphan tables (`employee`,
+  `labour_entry`, `supplier_quote`, `supplier_quote_item`, `supplier_quote_session`) + 35 orphan
+  columns the models/`create_all` had but no migration created. Proven no-op on prod & staging.
+- **reconcile_e_index_norm** (live on staging; → prod): index normalization — 10 RENAMEs
+  (legacy → current-model names) + 12 non-unique `CREATE INDEX`-if-absent. Verified:
+  **from-empty build (D+E) == prod-copy advanced to E → 0 column / 0 table / 0 index diff.**
+
+## 🚧 OPEN BLOCKER — resolve BEFORE the `create_all` removal session
+The removal premise is **"a fresh from-migrations build == prod"** (so removing `create_all` is safe
+for prod and any new env). We proved that for **prod**. But shipping E to **staging** revealed that
+**staging and prod have *independent*, divergent index drift** — i.e. `create_all` has produced
+*different* schemas across environments over time. So **fresh-build == prod does NOT imply
+fresh-build == staging**, and "envs are interchangeable" is false today.
+
+Observed on **2026-06-26** (staging at reconcile_e vs prod at reconcile_d, before E on prod):
+- **Index count:** staging **131** vs canonical from-empty build **139** (prod after E == 139).
+- **Same column, different index NAME across envs**, e.g. `customer_invoice_line`:
+  prod `ix_customer_invoice_line_invoice_id` vs staging `ix_customer_invoice_line_customer_invoice_id`.
+- **prod-only indexes not in the canonical build and not handled by E:**
+  `takeoff_cable_run.idx_cable_project`, `takeoff_symbol_detection.idx_detection_project_symbol`,
+  `takeoff_symbol_detection.idx_detection_room`, `customer_invoice.customer_invoice_view_token_key`.
+- Staging was clearly built by `create_all` from a **newer** model than prod (staging already had
+  the current model-name indexes; prod had the legacy names E renames). E behaved correctly
+  (renames guarded/skipped where legacy names absent; nothing dropped) — this is not a regression,
+  but it shows the env schemas are not identical.
+
+### What this means for the removal session
+- We have proven **build == prod** (after E). We have NOT proven **build == staging**, and we now
+  know it isn't.
+- Before removing `create_all`, decide the canonical target and reconcile the stragglers:
+  1. Should the canonical build carry the prod-only indexes (`idx_cable_project`,
+     `idx_detection_*`, `customer_invoice_view_token_key`)? If yes → add them to the models/a
+     migration. If they're redundant → drop on prod (separate, gated).
+  2. Resolve the `customer_invoice_line` index-name divergence (pick one name; rename the other).
+  3. Re-run `scripts/rebuild_from_migrations_test.sh` against **both** a prod snapshot **and** a
+     staging snapshot; require 0 diff on **both** before removing `create_all`.
+- Until that's 0-diff on both envs, removing `create_all` risks a fresh/rebuilt env not matching a
+  live one.
+
+## Verification tooling (in repo)
+- `scripts/rebuild_from_migrations_test.sh` — from-empty migrations build vs a prod snapshot (diff).
+- `scripts/reconcile_e_verify.sh` — build (D+E) vs prod-copy-advanced-to-E (apples-to-apples) +
+  E's exact effect on a prod copy.
+- `scripts/reconcile_d_idempotency_test.sh` — no-op proof on a prod copy.
+
+## Standing gate
+`create_all` + the 3 inline ALTERs in `app/__init__.py` remain **untouched**. Their removal is a
+separate, later, explicitly-gated session — and is blocked on the divergence above being resolved.
