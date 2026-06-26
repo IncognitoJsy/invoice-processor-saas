@@ -44,8 +44,11 @@ _RENAME_CONSTRAINTS = [
     ('supplier_account', 'supplier_account_supplier_name_account_number_key', 'uq_supplier_account'),
 ]
 
-# prod-only perf indexes migrations don't produce -> create on a fresh build (name, table, [cols])
+# Perf indexes the canonical migrations/models define but PROD lacks (create-if-absent).
+# ALL NON-UNIQUE -> plain CREATE INDEX, no constraint/data-integrity change (safe on existing rows).
+# On prod: created (prod is missing them). On a fresh build: already present -> skipped.
 _CREATE_INDEXES = [
+    # (a) prod-only takeoff perf indexes a fresh build otherwise wouldn't have
     ('ix_takeoff_area_project_id', 'takeoff_area', ['project_id']),
     ('ix_takeoff_cable_run_project_id', 'takeoff_cable_run', ['project_id']),
     ('ix_takeoff_room_document_id', 'takeoff_room', ['document_id']),
@@ -54,6 +57,12 @@ _CREATE_INDEXES = [
     ('ix_takeoff_symbol_detection_project_id', 'takeoff_symbol_detection', ['project_id']),
     ('ix_takeoff_symbol_detection_room_id', 'takeoff_symbol_detection', ['room_id']),
     ('ix_takeoff_symbol_detection_symbol_type_id', 'takeoff_symbol_detection', ['symbol_type_id']),
+    # (b) model/migration perf indexes PROD is missing (built by create_all from older models).
+    #     ix_queued_invoice_dedup is a PLAIN composite index, NOT unique (matches the model+prod).
+    ('ix_invoice_document_type', 'invoice', ['document_type']),
+    ('ix_labour_entry_customer_id', 'labour_entry', ['customer_id']),
+    ('ix_queued_invoice_user_status', 'queued_invoice', ['user_id', 'status']),
+    ('ix_queued_invoice_dedup', 'queued_invoice', ['user_id', 'email_message_id', 'original_filename']),
 ]
 
 
