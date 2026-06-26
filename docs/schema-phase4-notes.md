@@ -68,11 +68,73 @@ temporary `server_default` (`sa.DefaultClause`), then drop the default (see
   Postgres-ot-n) before `create_all` is removed — otherwise a fresh from-migrations build won't
   match the second prod app's live schema.
 
+## 📋 Full divergence audit (2026-06-26) — written scope for the reconcile_f / removal session
+Read-only audit of indexes + constraints + nullability across **all four** schemas (canonical
+from-empty build `mig`, main prod, staging, Postgres-ot-n) via `scripts/index_divergence_audit.sh`.
+Object counts: mig 139 idx / 124 con, prod 139 / 124, staging 131 / 126, otn 134 / 124. **Columns
+and NOT-NULL are identical across all four (698, 0 diffs) — the supplier_account.email class is
+fully closed; all remaining drift is indexes + constraints.** Staging is the major outlier (built by
+create_all from a *newer* model); otn lags only on takeoff perf indexes + legacy dupes.
+
+### 🔒 Correctness divergences (behaviour, not just perf-index naming — fix carefully)
+1. **2 UNIQUE constraints MISSING on staging:** `customer_invoice(view_token)` and
+   `supplier_account(supplier_name, account_number)`. Staging is not enforcing uniqueness the model
+   intends (view_token enforced only by a bare unique *index* named `ix_customer_invoice_view_token`,
+   no backing constraint; supplier_account dedup not enforced at all). Adding these on staging is
+   data-unsafe — **must pre-check for duplicate rows or the add fails closed (the email lesson).**
+2. **2 FK `ON DELETE` mismatches:**
+   - `queued_invoice.processed_invoice_id→invoice`: model = `ondelete='SET NULL'`; build/staging/otn
+     correct; **prod diverges (plain)** → prod would RESTRICT an invoice delete others would null.
+   - `supplier_quote.session_id` & `supplier_quote_item.session_id`: model = **plain (no ondelete)**;
+     build + staging correct; **prod + otn carry an extra `ON DELETE CASCADE` the model doesn't
+     declare.** (See open decision below.)
+3. **4 model-defined FKs unenforced on mig/prod/otn** (only staging realised them): `invoice.
+   platform_customer_id→customer`, `invoice.platform_job_id→job`, `invoice.job_card_id→job_card`,
+   `customer_invoice.job_card_id→job_card`. Columns exist everywhere; the FK constraints were never
+   migrated. Adding them is data-unsafe — **must pre-check for orphan child rows or the FK add fails.**
+
+### 🐛 Canonical build is itself wrong in one place (migration ≠ model)
+- `project (user_id, created_at)` index: the **model** declares `Index('idx_project_user_created',
+  user_id, created_at.desc())` (DESC) and **all three live envs have it DESC**, but the **migrations
+  build produces it ASC** — a migration created the index without `.desc()`. So a fresh from-migrations
+  build does NOT match any live env here. reconcile_f must recreate it DESC (fix is in the migration
+  layer; live is already correct).
+
+### ❓ OPEN DECISIONS — must be answered before reconcile_f is written
+- **supplier_quote(_item).session_id cascade:** model says plain, prod/otn have `ON DELETE CASCADE`.
+  Either (i) add `ondelete='CASCADE'` to the model + a migration (cascade is arguably the *right*
+  behaviour — deleting a session should remove its quotes), or (ii) strip CASCADE from prod/otn to
+  match the model. Pick one.
+- **Legacy `idx_*` duplicates:** `idx_cable_project`, `idx_takeoff_room_project`, `idx_detection_room`
+  (present in mig+prod, absent staging+otn) **plus** 5 fully-consistent `idx_*`/`ix_*` pairs present
+  identically in all four (`invoice.document_type`, `invoice.job_reference`, `invoice_item.part_number`,
+  `part_number_correction.supplier_name`, `project_material.part_number`). Recommend **drop** the
+  redundant `idx_*` everywhere (and from the migration that creates them) — but confirm.
+- **`customer_invoice_line` index canonical name:** `ix_customer_invoice_line_invoice_id` (prod/otn/mig)
+  vs staging's `ix_customer_invoice_line_customer_invoice_id`. Pick one; rename the other (pure
+  rename, no data risk).
+
+### Perf-index presence gaps (create-if-absent, no correctness risk)
+- staging missing: `customer_invoice(view_token)` plain, `supplier_account(supplier_name)`, both
+  takeoff indexes, the 3 legacy `idx_*`.
+- otn missing: `takeoff_symbol_detection(project_id,symbol_type_id)`, `takeoff_symbol_template(project_id)`,
+  the 3 legacy `idx_*`.
+
+### Gate
+**reconcile_f is a fresh-session build** after the 3 open decisions are made. After it ships, re-run
+`scripts/index_divergence_audit.sh` and require **0 diffs across all four schemas** before `create_all`
++ the inline ALTERs are removed.
+
 ## Verification tooling (in repo)
+- `scripts/index_divergence_audit.sh` — **THE gate-check** for the removal session: read-only index +
+  constraint + nullability diff across the canonical build and all three live DBs (needs `PROD_URL`,
+  `STAGING_URL`, `OTN_URL` public URLs; queries live catalogs directly, no row data). Must show 0
+  diffs across all four before `create_all` comes out.
 - `scripts/rebuild_from_migrations_test.sh` — from-empty migrations build vs a prod snapshot (diff).
 - `scripts/reconcile_e_verify.sh` — build (D+E) vs prod-copy-advanced-to-E (apples-to-apples) +
   E's exact effect on a prod copy.
 - `scripts/reconcile_d_idempotency_test.sh` — no-op proof on a prod copy.
+- `scripts/reconcile_d_fix_verify.sh` — cross-env proof of the reconcile_d NOT-NULL fix.
 
 ## Standing gate
 `create_all` + the 3 inline ALTERs in `app/__init__.py` remain **untouched**. Their removal is a
