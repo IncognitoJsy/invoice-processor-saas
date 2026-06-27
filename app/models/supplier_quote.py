@@ -34,7 +34,10 @@ class SupplierQuoteSession(db.Model):
 class SupplierQuote(db.Model):
     __tablename__ = 'supplier_quote'
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.Integer, db.ForeignKey('supplier_quote_session.id'),
+    # ON DELETE CASCADE mirrors the ORM `cascade='all, delete-orphan'` on the session
+    # relationships: a session's quotes/items are wholly-owned children. Reconcile_f makes the
+    # DB-level FK match (was plain on build/staging; already CASCADE on prod/otn).
+    session_id = db.Column(db.Integer, db.ForeignKey('supplier_quote_session.id', ondelete='CASCADE'),
                            nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     supplier_name = db.Column(db.String(255), nullable=False)
@@ -48,7 +51,7 @@ class SupplierQuote(db.Model):
 class SupplierQuoteItem(db.Model):
     __tablename__ = 'supplier_quote_item'
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.Integer, db.ForeignKey('supplier_quote_session.id'),
+    session_id = db.Column(db.Integer, db.ForeignKey('supplier_quote_session.id', ondelete='CASCADE'),
                            nullable=False, index=True)
     generic_description = db.Column(db.Text, nullable=False)
     quantity = db.Column(db.Numeric(10, 2), default=1)
