@@ -18,7 +18,7 @@ trap cleanup EXIT
 "$PGBIN/pg_ctl" -D "$PGDATA" -o "-p $PORT -k $TMP -c listen_addresses=''" -l "$TMP/pg.log" -w start >/dev/null
 "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres mig
 cd "$REPO"
-echo "== building canonical 'mig' (base -> reconcile_e) ==" >&2
+echo "== building canonical 'mig' (base -> head; currently reconcile_f) ==" >&2
 DATABASE_URL="postgresql://postgres@/mig?host=$TMP&port=$PORT" APP_CONFIG=default PYTHONPATH="$REPO" SCHEMA_GUARD_STRICT=0 \
   "$PY" scripts/_mig_only_build.py 2>&1 | grep -E "UPGRADE COMPLETE|Error" | tail -1 >&2
 
