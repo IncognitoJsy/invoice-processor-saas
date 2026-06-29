@@ -37,46 +37,19 @@ def create_app(config_name='default'):
     limiter.init_app(app)
     csrf.init_app(app)
     
-# Create tables with retry logic for Railway Postgres restarts
+    # Verify DB connectivity at boot, with retry for Railway Postgres restarts.
+    # Schema is managed SOLELY by Alembic migrations (the Procfile runs `flask db upgrade`).
+    # db.create_all() + the 3 inline ALTER blocks were removed in Phase 4 (AUDIT risk #10) once
+    # reconcile_a..f made migrations the single source of truth: 0-diff across all four schemas
+    # (build/prod/staging/otn) and a from-empty migrations build boots clean with 0 schema-guard
+    # drift (scripts/create_all_removal_gate.sh). schema_guard now backstops any drift at boot.
     import time
     with app.app_context():
         max_retries = 5
         for attempt in range(max_retries):
             try:
-                db.create_all()
-                # Add new columns if they don't exist (safe for both SQLite and PostgreSQL)
                 with db.engine.connect() as conn:
-                    columns_to_add = [
-                        ('floor_plan_path', 'VARCHAR(500)'),
-                        ('floor_plan_filename', 'VARCHAR(300)'),
-                        ('floor_plan_scale', 'VARCHAR(20)'),
-                        ('floor_plan_paper', 'VARCHAR(10)'),
-                        ('floor_plan_orientation', 'VARCHAR(10)'),
-                        ('floor_plan_rooms', 'TEXT'),
-                    ]
-                    for col_name, col_type in columns_to_add:
-                        try:
-                            conn.execute(db.text(f"ALTER TABLE vtq_jobs ADD COLUMN {col_name} {col_type}"))
-                        except Exception:
-                            pass  # Column already exists
-                    conn.commit()
-                
-                # Add billing_frequency to user table
-                with db.engine.connect() as conn2:
-                    try:
-                        conn2.execute(db.text('ALTER TABLE "user" ADD COLUMN billing_frequency VARCHAR(10) DEFAULT \'monthly\''))
-                        conn2.commit()
-                    except Exception:
-                        pass  # Column already exists
-
-                # Add validation_errors to invoice table (arithmetic validator)
-                with db.engine.connect() as conn3:
-                    try:
-                        conn3.execute(db.text('ALTER TABLE invoice ADD COLUMN validation_errors TEXT'))
-                        conn3.commit()
-                    except Exception:
-                        pass  # Column already exists
-                
+                    conn.execute(db.text('SELECT 1'))
                 app.logger.info('Database connection established')
                 break
             except Exception as e:
