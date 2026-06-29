@@ -1,7 +1,16 @@
-# Schema Phase 4 — notes & the open blocker for the `create_all` removal session
+# Schema Phase 4 — ✅ COMPLETE (AUDIT risk #10 closed)
 
 Context: AUDIT risk #10 Phase 4 = make Alembic migrations the **sole** schema authority, then remove
-`db.create_all()` + the 3 inline `ALTER` blocks from `app/__init__.py` (~L46–78).
+`db.create_all()` + the 3 inline `ALTER` blocks from `app/__init__.py`.
+
+> **STATUS (2026-06-29): DONE and live on all three environments.** `db.create_all()` + the 3 inline
+> ALTER blocks have been removed from `create_app()` (replaced with a `SELECT 1` connectivity probe
+> that keeps the Railway-restart retry). Alembic migrations (`reconcile_a..f`) are now the **sole**
+> schema authority. `scripts/index_divergence_audit.sh` shows **0 diffs across all four schemas**
+> (canonical from-empty build / main prod / staging / Postgres-ot-n), verified against the live DBs;
+> a from-empty migrations-only build boots clean with 0 schema-guard drift and `/health` 200
+> (`scripts/create_all_removal_gate.sh`). `schema_guard` backstops any future drift at boot. The
+> blocker notes below are retained for historical context only.
 
 ## Done so far
 - **reconcile_d_orphans** (live on prod + staging): created the 5 orphan tables (`employee`,
@@ -135,7 +144,16 @@ create_all from a *newer* model); otn lags only on takeoff perf indexes + legacy
   E's exact effect on a prod copy.
 - `scripts/reconcile_d_idempotency_test.sh` — no-op proof on a prod copy.
 - `scripts/reconcile_d_fix_verify.sh` — cross-env proof of the reconcile_d NOT-NULL fix.
+- `scripts/reconcile_f_verify.sh` — projected 0-diff proof: build base→f + advance a schema copy of
+  each live DB to head, then diff all four (read-only, pre-deploy).
+- `scripts/create_all_removal_gate.sh` — the irreversible gate: from-empty migrations-only build,
+  assert the 3 ALTER-target column sets exist, then boot the app with create_all neutralised and
+  assert 0 schema-guard drift + `/health` 200.
 
-## Standing gate
-`create_all` + the 3 inline ALTERs in `app/__init__.py` remain **untouched**. Their removal is a
-separate, later, explicitly-gated session — and is blocked on the divergence above being resolved.
+## Standing gate — ✅ CLEARED (2026-06-29)
+The gate ("0-diff on all three live envs + canonical build, and a from-empty migrations build boots
+clean") was met: reconcile_f converged every env to 0 diffs (verified live), and the from-empty boot
+test passed. `create_all` + the 3 inline ALTERs were then removed from `app/__init__.py` and shipped
+staging → master (both prod apps booted clean — no migration, `SELECT 1` probe OK, schema-guard OK,
+`/health` 200). **AUDIT risk #10 is closed.** Migrations are the single source of truth; any future
+schema change is a migration only — never an inline ALTER or `create_all`.
