@@ -976,7 +976,10 @@ class QuickBooksService:
             current_app.logger.error(f"Blocking QB product sync: {tax_status}")
             return self._output_tax_block('products', results=results)
 
-        items = InvoiceItem.query.filter_by(invoice_id=invoice.id).all()
+        # THE catalog-write filter: soft-removed lines (InvoiceItem.excluded) must touch NEITHER the
+        # QB invoice NOR the Products & Services catalog. Excluding here means an excluded SKU gets
+        # zero catalog writes — the same all-or-nothing discipline as the validation/tax gates above.
+        items = InvoiceItem.query.filter_by(invoice_id=invoice.id, excluded=False).all()
 
         for item in items:
             # Skip items without part numbers
@@ -1452,11 +1455,14 @@ Rules:
             'errors': []
         }
         
-        items = InvoiceItem.query.filter_by(invoice_id=gozappify_invoice.id).all()
-        
+        # Non-excluded lines only: this list feeds both the itemised QB invoice lines and the
+        # summary-mode total below, so an excluded (soft-removed) line reaches neither. The catalog
+        # sync re-queries with the same excluded=False filter, keeping the two paths consistent.
+        items = InvoiceItem.query.filter_by(invoice_id=gozappify_invoice.id, excluded=False).all()
+
         if not items:
             return {'success': False, 'error': 'No items to sync'}
-        
+
         # Step 1: Sync all products
         product_results = self.sync_invoice_items_as_products(qb_connection, gozappify_invoice)
         results['products_synced'] = product_results.get('synced', 0)
@@ -1779,8 +1785,10 @@ Rules:
             'errors': []
         }
         
-        items = InvoiceItem.query.filter_by(invoice_id=gozappify_quote.id).all()
-        
+        # Non-excluded lines only (parity with the invoice path): a soft-removed line reaches
+        # neither the QB estimate lines nor the catalog (which re-queries with the same filter).
+        items = InvoiceItem.query.filter_by(invoice_id=gozappify_quote.id, excluded=False).all()
+
         if not items:
             return {'success': False, 'error': 'No items to sync'}
         

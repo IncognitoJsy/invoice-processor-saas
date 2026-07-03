@@ -177,6 +177,13 @@ class InvoiceItem(db.Model):
     # CONTRACT: any future "recalculate markup / re-price" action MUST skip rows where
     # price_overridden is True, or it will silently destroy a deliberate manual price.
     price_overridden = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Soft-remove flag ("remove a returned line / edit qty before sync"). When True the line is
+    # KEPT for audit but EXCLUDED from (a) the header-totals recompute (app/services/invoice_totals.
+    # recompute_invoice_totals) and (b) every sync path — customer invoice AND the QB/Xero catalog
+    # write (wired in a later phase). server_default false so it backfills NOT-NULL-safe on existing
+    # rows across all envs (the reconcile_d lesson); never re-runs the arithmetic validator.
+    excluded = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -200,6 +207,7 @@ class InvoiceItem(db.Model):
             'markup_percent': float(self.markup_percent) if self.markup_percent is not None else None,
             'profit_per_item': float(money(self.profit_per_item)) if self.profit_per_item else 0,
             'price_overridden': bool(self.price_overridden),
+            'excluded': bool(self.excluded),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -270,6 +270,125 @@ def update_item_price(item_id):
     })
 
 
+def _invoice_is_synced(invoice):
+    """True once the invoice/quote has been pushed to QuickBooks or Xero (bill / customer invoice /
+    estimate / quote). Pre-sync line edits (exclude, quantity) are gated on this SERVER-SIDE so a
+    stale UI can't mutate a document that's already left for the accounting software."""
+    return any((
+        invoice.qb_bill_id, invoice.qb_synced_at,
+        invoice.qb_estimate_id, invoice.qb_estimate_synced_at,
+        invoice.xero_invoice_id, invoice.xero_synced_at,
+        invoice.xero_quote_id, invoice.xero_quote_synced_at,
+    ))
+
+
+@bp.route('/invoices/item/<int:item_id>/quantity', methods=['PUT'])
+@login_required
+def update_item_quantity(item_id):
+    """Set a line's quantity before sync (UNSYNCED invoices only).
+
+      body {"quantity": <num>}  -> quantity = money(num, 2); line total_amount scaled to match.
+
+    Quantity is NOT "total = qty x unit". cost_per_item / selling_price are stored as PER-UNIT RATES
+    (per-metre on the 305m cable conversion; tax-INCLUSIVE for non-registered users via the GST fold
+    in claude_parser) — a different basis than total_amount, which is the supplier EX-TAX line net.
+    So we scale the ex-tax total_amount PROPORTIONALLY (new = old * new_qty / old_qty), which is
+    correct for simple, per-metre, and tax-folded lines alike, and leave every per-unit rate
+    (cost_per_item, selling_price, calculated_selling_price, markup_percent, profit_per_item)
+    UNCHANGED. Then recompute the header via the shared excluded-aware path so totals stay consistent
+    for sync. Deliberately does NOT touch price_overridden (an override is per-unit; it just applies
+    to the new quantity) and NEVER re-runs the arithmetic validator (parse-time only)."""
+    from app.models.invoice import Invoice, InvoiceItem
+    from app.extensions import db
+    from app.utils.money import money, to_decimal
+    from app.services.invoice_totals import recompute_invoice_totals
+    from decimal import Decimal
+
+    item = InvoiceItem.query.get(item_id)
+    if not item:
+        return jsonify({'success': False, 'error': 'Item not found'}), 404
+
+    invoice = Invoice.query.get(item.invoice_id)
+    if not invoice or invoice.user_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    if _invoice_is_synced(invoice):
+        return jsonify({'success': False,
+                        'error': 'This invoice has been synced — quantities can no longer be edited'}), 409
+
+    raw = (request.get_json(silent=True) or {}).get('quantity')
+    qty = to_decimal(raw) if raw is not None else None
+    if qty is None or qty <= 0:
+        return jsonify({'success': False, 'error': 'quantity must be a number greater than 0'}), 400
+    qty = money(qty)  # quantity column is Numeric(10,2)
+
+    old_qty = to_decimal(item.quantity) or Decimal('0')
+    old_total = to_decimal(item.total_amount) or Decimal('0')
+    if old_qty > 0:
+        # Proportional scale preserves the ex-tax basis regardless of per-unit rate basis.
+        item.total_amount = money(old_total * qty / old_qty)
+    else:
+        # Degenerate old qty (shouldn't happen: NOT NULL default 1) — fall back to rate * qty.
+        item.total_amount = money((to_decimal(item.cost_per_item) or Decimal('0')) * qty)
+    item.quantity = qty
+
+    recompute_invoice_totals(invoice)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'item': item.to_dict(),
+        'invoice_totals': {
+            'total_cost': float(invoice.total_cost),
+            'total_selling': float(invoice.total_selling),
+            'total_profit': float(invoice.total_profit),
+        },
+    })
+
+
+@bp.route('/invoices/item/<int:item_id>/exclude', methods=['PUT'])
+@login_required
+def update_item_excluded(item_id):
+    """Soft-remove (exclude) or restore a line before sync (UNSYNCED invoices only).
+
+      default              -> exclude the line
+      query ?restore=true  -> restore it (reversible; mirrors the price ?reset=true idiom)
+
+    An excluded line is KEPT for audit but dropped from the header totals AND from every sync path
+    (customer invoice + QB/Xero catalog). Recomputes the header via the shared excluded-aware path
+    so the view/sync stay consistent; never re-runs the arithmetic validator (parse-time only) and
+    never touches price_overridden."""
+    from app.models.invoice import Invoice, InvoiceItem
+    from app.extensions import db
+    from app.services.invoice_totals import recompute_invoice_totals
+
+    item = InvoiceItem.query.get(item_id)
+    if not item:
+        return jsonify({'success': False, 'error': 'Item not found'}), 404
+
+    invoice = Invoice.query.get(item.invoice_id)
+    if not invoice or invoice.user_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    if _invoice_is_synced(invoice):
+        return jsonify({'success': False,
+                        'error': 'This invoice has been synced — lines can no longer be removed'}), 409
+
+    restore = request.args.get('restore', '').lower() in ('1', 'true', 'yes')
+    item.excluded = not restore
+
+    recompute_invoice_totals(invoice)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'item': item.to_dict(),
+        'invoice_totals': {
+            'total_cost': float(invoice.total_cost),
+            'total_selling': float(invoice.total_selling),
+            'total_profit': float(invoice.total_profit),
+        },
+    })
+
+
 @bp.route('/api/invoices/<int:invoice_id>/assign-customer', methods=['POST'])
 @login_required
 def assign_customer(invoice_id):
