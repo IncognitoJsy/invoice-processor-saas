@@ -1010,8 +1010,10 @@ class XeroService:
 
         if not connection.default_expense_account_code or not connection.default_sales_account_code:
             return {'synced': 0, 'failed': 0, 'errors': ['Please configure expense and sales accounts in Xero settings']}
-        
-        for item in invoice.items:
+
+        # Soft-removed lines touch NEITHER the Xero catalog NOR the invoice (shared exclusion gate).
+        from app.services.sync_lines import get_syncable_line_items
+        for item in get_syncable_line_items(invoice):
             try:
                 sku = (item.part_number or '')[:30]
                 if not sku:
@@ -1063,9 +1065,11 @@ class XeroService:
             # First sync products (updates prices if item exists)
             product_results = self.sync_products_to_items(connection, invoice)
             
-            # Prepare line items with markup prices
+            # Prepare line items with markup prices — non-excluded only (same gate as the catalog
+            # sync above), so the pushed lines and the recomputed header totals stay in agreement.
+            from app.services.sync_lines import get_syncable_line_items
             line_items = []
-            for item in invoice.items:
+            for item in get_syncable_line_items(invoice):
                 sku = (item.part_number or '')[:30]
                 if not sku:
                     sku = f"ITEM-{invoice.id}-{len(line_items) + 1}"
@@ -1160,9 +1164,10 @@ class XeroService:
             # First sync products
             product_results = self.sync_products_to_items(connection, quote)
             
-            # Prepare line items
+            # Prepare line items — non-excluded only (same gate as the invoice/catalog paths).
+            from app.services.sync_lines import get_syncable_line_items
             line_items = []
-            for item in quote.items:
+            for item in get_syncable_line_items(quote):
                 sku = (item.part_number or '')[:30]
                 if not sku:
                     sku = f"ITEM-{quote.id}-{len(line_items) + 1}"
