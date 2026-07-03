@@ -3,6 +3,53 @@
 {% block title %}Invoices - GoZappify{% endblock %}
 
 {% block content %}
+<style>
+/* Editable-cell affordances for the invoice-detail line items (Selling / Qty / Part#).
+   AESTHETIC ONLY — device-tuned via CSS media features; no JS/logic involved. The hook classes
+   (.gz-editable, .gz-edit-pencil, tr.row-excluded) are emitted by static/js/line_items.js. */
+.gz-editable {
+  border: 1px solid transparent;        /* reserved 1px so state changes cause NO layout shift */
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+/* box hugs its content; :not(.hidden) so this never fights the JS show/hide edit toggle */
+.gz-editable:not(.hidden) { display: inline-flex; align-items: center; gap: .15rem; padding: 1px 6px; }
+.gz-edit-pencil { color: rgba(37,99,235,.6); flex: none; transition: opacity .12s ease, transform .12s ease; }
+
+/* ── DESKTOP (hover + fine pointer): subtle at rest, strong on hover ── */
+@media (hover: hover) and (pointer: fine) {
+  .gz-editable { border-bottom-color: rgba(59,130,246,.45); border-bottom-style: dotted; }  /* faint dotted underline */
+  .gz-edit-pencil { opacity: .45; }
+  .gz-editable:hover {
+    border-color: rgba(59,130,246,.75);
+    border-bottom-style: solid;
+    background-color: rgba(59,130,246,.10);
+  }
+  .gz-editable:hover .gz-edit-pencil { opacity: 1; transform: scale(1.3); color: #2563eb; }
+}
+
+/* ── MOBILE / TOUCH (no hover, or coarse pointer): PERMANENT affordance + LARGER tap targets ── */
+@media (hover: none), (pointer: coarse) {
+  .gz-editable {
+    border-color: rgba(59,130,246,.55);
+    background-color: rgba(59,130,246,.09);
+    padding: .5rem .625rem;             /* roomier tappable cell */
+    min-height: 2.6rem;                 /* comfortable finger target (~42px) */
+  }
+  .gz-edit-pencil { opacity: 1; transform: scale(1.45); color: #2563eb; }  /* bigger pencil */
+}
+
+/* ── BOTH: excluded (struck-through) rows show NO edit affordance ── */
+tr.row-excluded .gz-editable {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  cursor: default;
+  padding: 1px 0 !important;
+  min-height: 0 !important;
+}
+tr.row-excluded .gz-edit-pencil { display: none !important; }
+</style>
 <div x-data="invoicesPage()" class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
