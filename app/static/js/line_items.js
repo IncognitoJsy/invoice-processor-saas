@@ -53,6 +53,7 @@
     const profitU = parseFloat(item.profit_per_item) || 0;
     const manual = !!item.price_overridden;
     const excluded = !!item.excluded;
+    const deduction = (parseFloat(item.total_amount) || 0) < 0;  // sign-derived supplier deduction — retained, not billed
     const markup = (item.markup_percent == null) ? null : parseFloat(item.markup_percent);
     const part = _esc(item.part_number || '-'), partAttr = _escA(item.part_number || '');
     const strike = excluded ? 'line-through' : '';
@@ -61,33 +62,44 @@
     const x = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
     const trash = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>';
     const exclBadge = excluded ? '<span class="inline-block px-1.5 py-0.5 mr-1 rounded text-[10px] font-bold bg-gray-400 text-white align-middle">EXCLUDED</span>' : '';
+    const dedBadge = deduction ? '<span class="inline-block px-1.5 py-0.5 mr-1 rounded text-[10px] font-bold bg-indigo-500 text-white align-middle" title="Supplier deduction — a component removed from a kit. Kept for reconciliation, NOT billed to the customer.">DEDUCTION</span>' : '';
 
     const partCell = ctx.partEditable
-      ? `<td id="part-cell-${id}" class="px-4 py-3 text-sm align-top">${exclBadge}<span id="part-display-${id}" class="gz-editable font-mono text-gray-900 dark:text-white ${strike}" onclick="startEditPartNumber(${id}, '${partAttr}')" title="Click to edit part number">${part}${pencil}</span><div id="part-edit-${id}" class="hidden flex items-center space-x-1"><input type="text" id="part-input-${id}" class="w-28 px-2 py-1 text-sm font-mono border border-blue-500 rounded dark:bg-gray-700 dark:text-white uppercase" onkeydown="handlePartNumberKeydown(event, ${id})"><button onclick="savePartNumber(${id})" class="p-1 text-green-600">${ok}</button><button onclick="cancelEditPartNumber(${id})" class="p-1 text-red-600">${x}</button></div></td>`
-      : `<td class="px-4 py-3 text-sm align-top">${exclBadge}<span class="font-mono text-gray-900 dark:text-white ${strike}">${part}</span></td>`;
+      ? `<td id="part-cell-${id}" class="px-4 py-3 text-sm align-top">${exclBadge}${dedBadge}<span id="part-display-${id}" class="gz-editable font-mono text-gray-900 dark:text-white ${strike}" onclick="startEditPartNumber(${id}, '${partAttr}')" title="Click to edit part number">${part}${pencil}</span><div id="part-edit-${id}" class="hidden flex items-center space-x-1"><input type="text" id="part-input-${id}" class="w-28 px-2 py-1 text-sm font-mono border border-blue-500 rounded dark:bg-gray-700 dark:text-white uppercase" onkeydown="handlePartNumberKeydown(event, ${id})"><button onclick="savePartNumber(${id})" class="p-1 text-green-600">${ok}</button><button onclick="cancelEditPartNumber(${id})" class="p-1 text-red-600">${x}</button></div></td>`
+      : `<td class="px-4 py-3 text-sm align-top">${exclBadge}${dedBadge}<span class="font-mono text-gray-900 dark:text-white ${strike}">${part}</span></td>`;
     const descCell = `<td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 align-top ${strike}">${_esc(item.description || '-')}</td>`;
     const qtyCell = ctx.editable
       ? `<td class="px-4 py-3 text-sm text-center align-top"><div id="qty-display-${id}" class="gz-editable" onclick="LineItems.editQty(${id}, ${qty})" title="Click to edit quantity"><span class="text-gray-900 dark:text-white ${strike}">${qty}</span>${pencil}</div><div id="qty-edit-${id}" class="hidden flex items-center justify-center space-x-1"><input type="number" step="0.01" min="0" id="qty-input-${id}" class="w-16 px-2 py-1 text-sm text-center border border-blue-500 rounded dark:bg-gray-700 dark:text-white" onkeydown="LineItems.handleQtyKeydown(event, ${id})"><button onclick="LineItems.saveQty(${id})" class="p-1 text-green-600 hover:bg-green-50 rounded">${ok}</button><button onclick="LineItems.cancelQtyEdit(${id})" class="p-1 text-red-600 hover:bg-red-50 rounded">${x}</button></div></td>`
       : `<td class="px-4 py-3 text-sm text-gray-900 dark:text-white text-center align-top ${strike}">${qty}</td>`;
-    const costCell = `<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top ${strike}"><div>${fmtMoney(costU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(costU * qty)} line</div>` : ''}</td>`;
-    const sellCell = ctx.overrideEnabled
+    const costCell = `<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top ${strike}"><div>${fmtMoney(costU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</div>${(multi || deduction) ? `<div class="text-xs text-gray-400">${fmtMoney(costU * qty)} line</div>` : ''}</td>`;
+    const sellCell = deduction
+      ? `<td class="px-4 py-3 text-sm text-right align-top" title="Not charged to the customer — this supplier deduction is absorbed into your margin"><div class="text-gray-500 dark:text-gray-400">${fmtMoney(sellU)}</div><div class="text-[11px] text-indigo-500 dark:text-indigo-300 font-medium whitespace-nowrap">not charged</div></td>`
+      : ctx.overrideEnabled
       ? `<td class="px-4 py-3 text-sm text-right align-top ${manual ? 'bg-amber-50 dark:bg-amber-900/10' : ''}"><div id="sell-display-${id}" class="gz-editable" onclick="LineItems.editSellPrice(${id}, ${sellU})" title="Click to edit selling price"><span class="font-medium text-gray-900 dark:text-white ${strike}">${fmtMoney(sellU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</span>${pencil}</div><div id="sell-edit-${id}" class="hidden flex items-center justify-end space-x-1"><span class="text-xs text-gray-400">£</span><input type="number" step="0.01" min="0" id="sell-input-${id}" class="w-20 px-2 py-1 text-sm text-right border border-blue-500 rounded dark:bg-gray-700 dark:text-white" onkeydown="LineItems.handleSellKeydown(event, ${id})"><button onclick="LineItems.saveSellPrice(${id})" class="p-1 text-green-600 hover:bg-green-50 rounded">${ok}</button><button onclick="LineItems.cancelSellEdit(${id})" class="p-1 text-red-600 hover:bg-red-50 rounded">${x}</button></div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(sellU * qty)} line</div>` : ''}</td>`
       : `<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white align-top ${strike}"><div>${fmtMoney(sellU)}${multi ? '<span class="text-gray-400 text-xs"> /u</span>' : ''}</div>${multi ? `<div class="text-xs text-gray-400">${fmtMoney(sellU * qty)} line</div>` : ''}</td>`;
-    const markupCell = ctx.overrideEnabled
+    const markupCell = deduction
+      ? `<td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-400" title="No markup — a deduction is not sold">—</span></td>`
+      : ctx.overrideEnabled
       ? `<td class="px-4 py-3 text-sm text-right align-top">${manual ? `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white whitespace-nowrap">⚑ MANUAL</span><div class="text-xs text-gray-500 mt-1">${markup != null ? markup.toFixed(1) + '%' : ''} · <a class="text-blue-600 cursor-pointer hover:underline" onclick="LineItems.resetPrice(${id})">reset</a></div>` : `<span class="text-gray-700 dark:text-gray-300 ${strike}">${markup != null ? markup.toFixed(1) + '%' : '—'}</span>`}</td>`
       : `<td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-700 dark:text-gray-300 ${strike}">${markup != null ? markup.toFixed(1) + '%' : '—'}</span></td>`;
     const lineProfit = profitU * qty;
-    const profitCell = `<td class="px-4 py-3 text-sm text-right font-medium align-top ${strike} ${lineProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${fmtMoney(lineProfit)}${multi ? `<div class="text-xs text-gray-400 font-normal">${fmtMoney(profitU)}/u</div>` : ''}</td>`;
+    const profitCell = deduction
+      ? `<td class="px-4 py-3 text-sm text-right align-top"><span class="text-gray-400">—</span></td>`
+      : `<td class="px-4 py-3 text-sm text-right font-medium align-top ${strike} ${lineProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${fmtMoney(lineProfit)}${multi ? `<div class="text-xs text-gray-400 font-normal">${fmtMoney(profitU)}/u</div>` : ''}</td>`;
     const updCell = `<td class="px-4 py-3 text-xs text-gray-400 text-center align-top" title="${item.updated_at || ''}">${manual ? relTime(item.updated_at) : '—'}</td>`;
     // Action cell only in editable views (unsynced invoices). Omitted otherwise so shared 8-column
     // views (quotes / upload result / synced invoices) keep their header alignment.
     const actionCell = ctx.editable
-      ? `<td class="px-3 py-3 text-center align-top">${excluded
+      ? `<td class="px-3 py-3 text-center align-top">${deduction
+          ? '<span class="text-gray-300 dark:text-gray-600" title="A supplier deduction stays on record for reconciliation — it is already not billed to the customer">—</span>'
+          : excluded
           ? `<button onclick="LineItems.toggleExclude(${id}, false)" class="text-xs text-blue-600 hover:underline whitespace-nowrap" title="Restore this line">↩ Restore</button>`
           : `<button onclick="LineItems.toggleExclude(${id}, true)" class="text-gray-400 hover:text-red-600" title="Remove this line (kept for your records, excluded from totals & sync)">${trash}</button>`
         }</td>`
       : '';
-    const rowCls = excluded ? 'row-excluded opacity-50 bg-gray-50 dark:bg-gray-900/30' : '';
+    const rowCls = excluded ? 'row-excluded opacity-50 bg-gray-50 dark:bg-gray-900/30'
+      : deduction ? 'row-deduction bg-indigo-50/60 dark:bg-indigo-900/20'
+      : '';
     return `<tr class="${rowCls}">${partCell}${descCell}${qtyCell}${costCell}${sellCell}${markupCell}${profitCell}${updCell}${actionCell}</tr>`;
   }
 

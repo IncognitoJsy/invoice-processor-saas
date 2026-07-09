@@ -49,6 +49,15 @@ tr.row-excluded .gz-editable {
   min-height: 0 !important;
 }
 tr.row-excluded .gz-edit-pencil { display: none !important; }
+/* ── Deduction ("not billed") rows: subtle indigo tint (set on the row) + no edit affordance ── */
+tr.row-deduction .gz-editable {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  cursor: default;
+  padding: 1px 0 !important;
+  min-height: 0 !important;
+}
+tr.row-deduction .gz-edit-pencil { display: none !important; }
 </style>
 <div x-data="invoicesPage()" class="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
