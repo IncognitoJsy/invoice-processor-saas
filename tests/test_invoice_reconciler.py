@@ -119,3 +119,40 @@ def test_no_independent_anchor_does_not_tie():
     result = reconcile_totals(data)
     assert not result.tied
     assert "no independent stated total" in result.reason
+
+
+# ── IN391901: a negative DEDUCTION line is what makes it tie legitimately ─────────────────
+def test_in391901_deduction_line_ties_and_passes():
+    """The bundled VARME sensor is removed as a qty -1 / -33.00 line. With that
+    deduction RETAINED, the line-sum (107.66 - 33.00 + 45.00 = 119.66) ties to the
+    stated net and every independent anchor, and the UNCHANGED validator passes."""
+    data = _load("in391901_negative_deduction")
+
+    result = reconcile_totals(data)
+    assert result.tied
+    assert result.anchors["lines"] == Decimal("119.66")            # -33 is counted, not skipped
+    assert result.canonical_net == Decimal("119.66")
+    assert result.corrected_from is None                            # stated net was already right
+    assert set(result.agreeing) == {"gross_minus_tax", "goods_minus_settlement"}
+
+    # The validator passes because the numbers legitimately reconcile — not because
+    # any check was disabled. It still WARNS on the negative line (safety net live).
+    v = validate_invoice(data)
+    assert v.is_valid
+    assert not v.errors
+    assert any("negative" in w.lower() for w in v.warnings)
+
+
+def test_in391901_without_deduction_line_still_blocks():
+    """Regression guard for the ORIGINAL bug: if the -33 line is dropped (as the old
+    line-1092 filter did), the line-sum is 152.66, ties to nothing, and the validator
+    MUST still block. Proves the fix works by legitimately including the deduction —
+    the safety net is not blinded."""
+    data = copy.deepcopy(_load("in391901_negative_deduction"))
+    data["items"] = [it for it in data["items"] if Decimal(str(it["total_amount"])) >= 0]
+
+    result = reconcile_totals(data)
+    assert result.anchors["lines"] == Decimal("152.66")            # the dropped-line bug
+    assert not result.tied
+    assert result.canonical_net is None
+    assert not validate_invoice(data).is_valid
