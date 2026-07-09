@@ -1088,9 +1088,15 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - no total_amount")
                     continue
 
-                # Skip items with zero quantity or amount
-                if quantity <= 0 or total_amount <= 0:
-                    self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - zero value")
+                # Skip only genuinely EMPTY lines. A zero quantity carries no value
+                # and would divide-by-zero below; a zero amount carries no value.
+                # NEGATIVE lines are deliberately RETAINED (handled by the deduction
+                # branch after the discount maths): a supplier can post a bundled
+                # component it removes from a kit as a negative line, and that amount
+                # must COUNT toward the invoice net so reconciliation ties legitimately
+                # (the arithmetic validator is never skipped or blinded).
+                if quantity == 0 or total_amount == 0:
+                    self.logger.warning(f"Skipping item {item.get('part_number', 'unknown')} - empty line (zero qty/amount)")
                     continue
 
                 # Get discount percentage - safely handle None (kept as string for storage)
@@ -1111,6 +1117,45 @@ Double-check your work - missing items, wrong document type, wrong account numbe
                     discounted_total = total_amount
 
                 cost_per_item = money(discounted_total / quantity)
+
+                # ─── DEDUCTION / NEGATIVE LINE ──────────────────────────────────
+                # A negative line total is a supplier DEDUCTION — e.g. a bundled
+                # component removed from a kit and posted as qty -1 / amount -33.
+                # Retain it as a COST-ONLY line so its amount COUNTS toward the
+                # invoice net (reconciliation ties legitimately — we never skip the
+                # validator), but give it NO markup and NO customer-facing selling
+                # value (selling_price = 0). A later phase filters it from the
+                # customer sync push. Keyed purely on the sign — never on a SKU — so
+                # ANY supplier's negative line is handled identically.
+                if total_amount < 0:
+                    # Canonical shape: POSITIVE per-unit cost, NEGATIVE quantity,
+                    # NEGATIVE line total. Normalise the signs so exactly one factor
+                    # is negative regardless of how the model emitted them — both
+                    # (qty -1, amount -33) and (qty 1, amount -33) land here identically.
+                    signed_qty = -abs(quantity)
+                    unit_cost = money(discounted_total.copy_abs() / quantity.copy_abs())
+                    line_net = money(-discounted_total.copy_abs())
+                    transformed.append({
+                        'part_number': item.get('part_number', ''),
+                        'description': item.get('description', ''),
+                        'quantity': float(signed_qty),
+                        'original_unit_price': float(item.get('original_unit_price', 0) or 0),
+                        'discount': discount,
+                        'cost_per_item': float(unit_cost),
+                        'total_amount': float(line_net),      # negative — reconciliation authority
+                        'selling_price': 0.0,                 # not billed to the customer
+                        'calculated_selling_price': 0.0,
+                        'qb_selling_price': None,
+                        'markup_percent': 0,                  # markup is meaningless on a deduction
+                        'profit_per_item': 0.0,
+                    })
+                    self.logger.info(
+                        f"➖ Deduction line retained (cost-only, not billed to customer): "
+                        f"{item.get('part_number', '?')} qty {float(signed_qty)} "
+                        f"line £{float(line_net):.2f}"
+                    )
+                    continue
+                # ─── END DEDUCTION ──────────────────────────────────────────────
 
                 # ─── BULK CABLE PER-METRE CONVERSION ────────────────────────────
                 # Cat6/data cable is sold as 1 box of 305m but needs per-metre pricing

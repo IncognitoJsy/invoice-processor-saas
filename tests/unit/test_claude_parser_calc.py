@@ -421,3 +421,64 @@ def test_retail_cap_discounted_below_cost_noops():
     p = make_parser(is_admin=True, tax_registered=True)
     row = _cap_line(p, "DLOSS", 1, 50, "100.00", "40.00")
     assert round_half_up(row["selling_price"]) == Decimal("150.00")  # 100×1.50, NOT 40
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Negative DEDUCTION lines (bundled component removed by the supplier)
+#    Phase 1: the line must be RETAINED (not dropped at :1092) as a COST-ONLY
+#    line — positive per-unit cost, negative qty, negative line total, zero
+#    selling, no markup — so its amount counts toward the invoice net.
+# ═══════════════════════════════════════════════════════════════════════════
+def test_negative_line_retained_as_cost_only_deduction():
+    """A qty -1 / -33.00 line survives the parser and takes the canonical
+    deduction shape: cost +33 per unit, qty -1, line -33, sell 0, markup 0."""
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = transform_one(p, WHOLESALE_SUPPLIER, "FH-01", -1, 0, "-33.00")
+    assert row is not None                                   # NOT dropped (the old bug)
+    assert Decimal(str(row["quantity"])) == Decimal("-1")    # negative quantity retained
+    assert round_half_up(row["cost_per_item"]) == Decimal("33.00")   # POSITIVE per-unit cost
+    assert round_half_up(row["total_amount"]) == Decimal("-33.00")   # negative — reconciliation authority
+    assert Decimal(str(row["selling_price"])) == Decimal("0")        # not billed to customer
+    assert Decimal(str(row["markup_percent"])) == Decimal("0")       # no markup applied
+
+
+def test_negative_line_sign_normalised_regardless_of_input():
+    """(qty 1, amount -33) must normalise to the SAME canonical shape as
+    (qty -1, amount -33): positive unit, negative qty, negative total."""
+    p = make_parser(is_admin=True, tax_registered=True)
+    row = transform_one(p, WHOLESALE_SUPPLIER, "FH-01", 1, 0, "-33.00")
+    assert Decimal(str(row["quantity"])) == Decimal("-1")
+    assert round_half_up(row["cost_per_item"]) == Decimal("33.00")
+    assert round_half_up(row["total_amount"]) == Decimal("-33.00")
+    assert Decimal(str(row["selling_price"])) == Decimal("0")
+
+
+def test_negative_line_gets_no_markup_even_with_high_flat_markup():
+    """The deduction bypasses the markup engine entirely — a 200% user markup
+    must not turn -33 into a marked-up figure."""
+    p = make_parser(is_admin=False, default_markup=200.0, tax_registered=True)
+    row = transform_one(p, WHOLESALE_SUPPLIER, "FH-01", -1, 0, "-33.00")
+    assert Decimal(str(row["selling_price"])) == Decimal("0")
+    assert round_half_up(row["total_amount"]) == Decimal("-33.00")
+
+
+def test_zero_amount_line_still_skipped():
+    """The empty-line guard is preserved: a genuinely zero line is still dropped
+    (and would otherwise divide-by-zero)."""
+    p = make_parser(is_admin=True, tax_registered=True)
+    assert transform_one(p, WHOLESALE_SUPPLIER, "EMPTY", 0, 0, "0") is None
+
+
+def test_in391901_three_lines_sum_to_stated_net():
+    """The whole IN391901 line set (kit + deduction + fan) sums to the supplier
+    net 119.66 once the -33 deduction is retained — the reconciliation fix."""
+    p = make_parser(is_admin=True, tax_registered=True)
+    lines = [
+        make_item("TPSM0450", 1,  45, "195.74"),   # 45% settlement -> net 107.66
+        make_item("FH-01",   -1,  0,  "-33.00"),   # deduction
+        make_item("SIL100T",  1,  0,  "45.00"),
+    ]
+    out = p._transform_items(lines, supplier=WHOLESALE_SUPPLIER)
+    assert len(out) == 3                                     # nothing dropped
+    net = sum((round_half_up(r["total_amount"]) for r in out), Decimal("0"))
+    assert net == Decimal("119.66")

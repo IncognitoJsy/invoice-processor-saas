@@ -1,0 +1,16 @@
+{
+  "_note": "Real shape of Wholesale Electrics IN391901 as it reaches save_invoice_to_db AFTER the negative-deduction-line fix (post-transform, pre-reconcile). The kit line TPSM0450 is net of its 45% settlement (107.66); FH-01 is a bundled VARME sensor the supplier REMOVED, posted as qty -1 / total_amount -33.00 (a DEDUCTION). With that deduction line RETAINED, the line-sum is 107.66 - 33.00 + 45.00 = 119.66, which ties to the stated net, gross-minus-tax (125.64-5.98) and goods-minus-settlement (207.74-88.08). Before the fix the -33 line was dropped, the line-sum was 152.66, and the validator (correctly) blocked. This fixture proves the deduction is what makes it tie LEGITIMATELY — the validator is never skipped.",
+  "supplier": "Wholesale Electrics (Jersey) Ltd",
+  "invoice_number": "IN391901",
+  "tax_rate": 5.0,
+  "tax_amount": 5.98,
+  "goods_value": 207.74,
+  "item_settlement": 88.08,
+  "total_ex_tax": 119.66,
+  "total_inc_tax": 125.64,
+  "items": [
+    {"part_number": "TPSM0450", "description": "PROWARM CABLE MAT KIT", "quantity": 1.0, "original_unit_price": 195.74, "discount": "45", "total_amount": 107.66},
+    {"part_number": "FH-01", "description": "VARME PROGRAMMER SENSOR (removed from kit)", "quantity": -1.0, "original_unit_price": 33.00, "discount": "0", "total_amount": -33.00},
+    {"part_number": "SIL100T", "description": "SILENT 100T EXTRACTOR FAN", "quantity": 1.0, "original_unit_price": 45.00, "discount": "0", "total_amount": 45.00}
+  ]
+}
