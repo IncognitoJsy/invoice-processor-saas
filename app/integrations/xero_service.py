@@ -460,9 +460,20 @@ class XeroService:
         return result.get('Contacts', []) if result else []
     
     def get_customers(self, connection) -> List[Dict]:
-        """Get customer contacts"""
-        result = self._make_request('GET', '/Contacts?where=IsCustomer==true', connection)
-        return result.get('Contacts', []) if result else []
+        """Get ALL customer contacts (paginated — Xero returns 100 Contacts/page, so a single
+        unpaginated call silently capped the list at 100)."""
+        all_contacts = []
+        page = 1
+        while True:
+            result = self._make_request('GET', f'/Contacts?where=IsCustomer==true&page={page}', connection)
+            contacts = result.get('Contacts', []) if result else []
+            if not contacts:
+                break
+            all_contacts.extend(contacts)
+            if len(contacts) < 100:
+                break
+            page += 1
+        return all_contacts
     
     def create_contact(self, connection, name: str, is_supplier: bool = False, is_customer: bool = False) -> Optional[Dict]:
         """Create a new contact"""
@@ -1209,17 +1220,21 @@ class XeroService:
     
     # ==================== Smart Customer Matching ====================
     
-    def match_customer_to_job_reference(self, connection, job_reference: str) -> List[Dict]:
+    def match_customer_to_job_reference(self, connection, job_reference: str, customers=None) -> List[Dict]:
         """
         Use Claude to intelligently match a job reference to a Xero contact
         Returns list of potential matches with confidence scores
+
+        ``customers`` (optional): a pre-fetched contact list (e.g. from the local CustomerCache),
+        each dict carrying ContactID/Name. When provided we do NOT pull live from Xero.
         """
         if not job_reference:
             return []
-        
-        # Get all customers/contacts
-        customers = self.get_customers(connection)
-        
+
+        # Use the provided (cached) list if given; otherwise pull live from Xero (legacy path).
+        if customers is None:
+            customers = self.get_customers(connection)
+
         if not customers:
             return []
         

@@ -1079,18 +1079,23 @@ class QuickBooksService:
             return result['QueryResponse']['Customer']
         return []
     
-    def match_customer_to_job_reference(self, qb_connection, job_reference: str):
+    def match_customer_to_job_reference(self, qb_connection, job_reference: str, customers=None):
         """
         Use Claude to intelligently match a job reference to a QuickBooks customer
         Returns list of potential matches with confidence scores
+
+        ``customers`` (optional): a pre-fetched customer list (e.g. from the local CustomerCache),
+        each dict carrying Id/DisplayName/FullyQualifiedName. When provided we do NOT pull live from
+        QBO — this removes the ~9s "all customers" pull from the match path.
         """
         if not job_reference:
             return []
-        
-        # Get all customers
-        customers_result = self.get_customers(qb_connection)
-        customers = customers_result.get('QueryResponse', {}).get('Customer', [])
-        
+
+        # Use the provided (cached) list if given; otherwise pull live from QBO (legacy path).
+        if customers is None:
+            customers_result = self.get_customers(qb_connection)
+            customers = customers_result.get('QueryResponse', {}).get('Customer', [])
+
         if not customers:
             return []
         

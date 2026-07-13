@@ -730,54 +730,82 @@ def quickbooks_status():
     return jsonify({'connected': False})
 
 
+def _qb_customer_fetch(qb, connection):
+    """Live QBO customer pull → normalized dicts for the cache. The ONLY ~9s all-customers
+    pull; invoked only on an explicit refresh (client-fired async), never on modal open."""
+    result = qb.get_customers(connection)
+    customers = result.get('QueryResponse', {}).get('Customer', [])
+    return [{
+        'external_id': c.get('Id'),
+        'display_name': c.get('DisplayName') or c.get('FullyQualifiedName') or '',
+        'fully_qualified_name': c.get('FullyQualifiedName'),
+        'company_name': c.get('CompanyName'),
+        'email': (c.get('PrimaryEmailAddr') or {}).get('Address'),
+    } for c in customers]
+
+
+def _xero_customer_fetch(xero, connection):
+    """Live Xero contact pull → normalized dicts for the cache (refresh-only)."""
+    contacts = xero.get_customers(connection)
+    return [{
+        'external_id': c.get('ContactID'),
+        'display_name': c.get('Name') or '',
+        'fully_qualified_name': None,
+        'company_name': c.get('Name'),
+        'email': c.get('EmailAddress'),
+    } for c in contacts]
+
+
 @bp.route('/api/quickbooks/customers')
 @login_required
 def quickbooks_customers():
-    """Get all QuickBooks customers"""
+    """Customers for the sync picker — served from the local CustomerCache (sub-second, no API).
+    The live ~1300-customer QBO pull happens ONLY on ?refresh=true (client fires it async)."""
     from app.models.quickbooks import QuickBooksConnection
     from app.integrations.quickbooks_service import QuickBooksService
-    
+    from app.services.customer_cache import read_cached_customers, refresh_customer_cache
+
     connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
     if not connection or not connection.is_active:
         return jsonify({'error': 'QuickBooks not connected'}), 400
-    
-    qb = QuickBooksService(current_user)
-    result = qb.get_customers(connection)
-    
-    customers = result.get('QueryResponse', {}).get('Customer', [])
-    
+
+    if request.args.get('refresh', '').lower() in ('1', 'true', 'yes'):
+        qb = QuickBooksService(current_user)
+        refresh_customer_cache(current_user.id, 'quickbooks', lambda: _qb_customer_fetch(qb, connection))
+
+    rows, stale, synced = read_cached_customers(current_user.id, 'quickbooks')
     return jsonify({
-        'customers': [
-            {
-                'Id': c.get('Id'), 
-                'DisplayName': c.get('DisplayName'),
-                'FullyQualifiedName': c.get('FullyQualifiedName'),
-                'ParentRef': c.get('ParentRef')
-            }
-            for c in customers
-        ]
+        'customers': [r.to_dict() for r in rows],
+        'stale': stale,
+        'synced_at': synced.isoformat() if synced else None,
     })
 
 
 @bp.route('/api/quickbooks/match-customer')
 @login_required
 def quickbooks_match_customer():
-    """Match job reference to QuickBooks customer using Claude"""
+    """Match job reference to a customer — matched against the local cache, NOT a live pull."""
     from app.models.quickbooks import QuickBooksConnection
     from app.integrations.quickbooks_service import QuickBooksService
-    
+    from app.services.customer_cache import read_cached_customers, refresh_customer_cache
+
     job_reference = request.args.get('job_reference', '')
-    
     if not job_reference:
         return jsonify({'matches': []})
-    
+
     connection = QuickBooksConnection.query.filter_by(user_id=current_user.id).first()
     if not connection or not connection.is_active:
         return jsonify({'error': 'QuickBooks not connected'}), 400
-    
+
     qb = QuickBooksService(current_user)
-    matches = qb.match_customer_to_job_reference(connection, job_reference)
-    
+    rows, _, _ = read_cached_customers(current_user.id, 'quickbooks')
+    if not rows:
+        # First-ever use: populate once. Off the modal-open path (match is lazy/on-demand now).
+        refresh_customer_cache(current_user.id, 'quickbooks', lambda: _qb_customer_fetch(qb, connection))
+        rows, _, _ = read_cached_customers(current_user.id, 'quickbooks')
+
+    customers = [r.to_dict() for r in rows]   # {Id, DisplayName, FullyQualifiedName}
+    matches = qb.match_customer_to_job_reference(connection, job_reference, customers=customers)
     return jsonify({'matches': matches})
 
 
@@ -1191,49 +1219,50 @@ def xero_status():
 @bp.route('/api/xero/customers')
 @login_required
 def xero_customers():
-    """Get all Xero customers"""
+    """Xero customers for the sync picker — served from CustomerCache. Live pull only on ?refresh."""
     from app.models.xero import XeroConnection
     from app.integrations.xero_service import XeroService
-    
+    from app.services.customer_cache import read_cached_customers, refresh_customer_cache
+
     connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
     if not connection or not connection.is_active:
         return jsonify({'error': 'Xero not connected'}), 400
-    
-    xero = XeroService(current_user)
-    customers = xero.get_customers(connection)
-    
+
+    if request.args.get('refresh', '').lower() in ('1', 'true', 'yes'):
+        xero = XeroService(current_user)
+        refresh_customer_cache(current_user.id, 'xero', lambda: _xero_customer_fetch(xero, connection))
+
+    rows, stale, synced = read_cached_customers(current_user.id, 'xero')
     return jsonify({
-        'customers': [
-            {
-                'ContactID': c.get('ContactID'),
-                'Name': c.get('Name'),
-                'FirstName': c.get('FirstName'),
-                'LastName': c.get('LastName'),
-                'EmailAddress': c.get('EmailAddress')
-            }
-            for c in customers
-        ]
+        'customers': [r.to_dict() for r in rows],
+        'stale': stale,
+        'synced_at': synced.isoformat() if synced else None,
     })
 
 @bp.route('/api/xero/match-customer')
 @login_required
 def xero_match_customer():
-    """Match job reference to Xero customer using Claude"""
+    """Match job reference to a Xero contact — matched against the local cache, NOT a live pull."""
     from app.models.xero import XeroConnection
     from app.integrations.xero_service import XeroService
-    
+    from app.services.customer_cache import read_cached_customers, refresh_customer_cache
+
     job_reference = request.args.get('job_reference', '')
-    
     if not job_reference:
         return jsonify({'matches': []})
-    
+
     connection = XeroConnection.query.filter_by(user_id=current_user.id).first()
     if not connection or not connection.is_active:
         return jsonify({'error': 'Xero not connected'}), 400
-    
+
     xero = XeroService(current_user)
-    matches = xero.match_customer_to_job_reference(connection, job_reference)
-    
+    rows, _, _ = read_cached_customers(current_user.id, 'xero')
+    if not rows:
+        refresh_customer_cache(current_user.id, 'xero', lambda: _xero_customer_fetch(xero, connection))
+        rows, _, _ = read_cached_customers(current_user.id, 'xero')
+
+    customers = [r.to_dict() for r in rows]   # {ContactID, Name, EmailAddress}
+    matches = xero.match_customer_to_job_reference(connection, job_reference, customers=customers)
     return jsonify({'matches': matches})
 
 @bp.route('/xero/sync-to-customer/<int:invoice_id>', methods=['POST'])
