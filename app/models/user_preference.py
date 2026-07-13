@@ -137,3 +137,47 @@ class ProductCache(db.Model):
             'source': self.source,
             'synced_at': self.synced_at.isoformat() if self.synced_at else None,
         }
+
+
+class CustomerCache(db.Model):
+    """Cached QuickBooks/Xero customers — avoids the ~9s live "pull all ~1300 customers"
+    on every invoice-modal open. Mirrors ProductCache. Per-user, provider-aware.
+
+    Refreshed ONLY on an explicit refresh (client-fired async) — never on the modal-open
+    path. external_id is the SAME id the sync already uses (QB Customer.Id / Xero ContactID),
+    so a cached row syncs identically. Upsert-by-(user_id, source, external_id) keeps a stable
+    local id per customer (leaves the future two-way sync's ID-mapping door open — CLAUDE.md).
+    """
+    __tablename__ = 'customer_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    external_id = db.Column(db.String(200), nullable=False)          # QB Customer.Id / Xero ContactID
+    display_name = db.Column(db.String(255), nullable=False)          # QB DisplayName / Xero Name
+    fully_qualified_name = db.Column(db.String(255))                  # QB "Parent:Child" sub-customers; null for Xero
+    company_name = db.Column(db.String(255))
+    email = db.Column(db.String(255))
+    source = db.Column(db.String(20), nullable=False)                # 'quickbooks' | 'xero'
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        # Upsert key — one row per (user, provider, external customer id).
+        db.Index('uq_customer_cache_user_source_ext', 'user_id', 'source', 'external_id', unique=True),
+        # Search/order by name within a user's list.
+        db.Index('ix_customer_cache_user_name', 'user_id', 'display_name'),
+    )
+
+    def to_dict(self):
+        """Provider-shaped dict IDENTICAL to what the /customers endpoints emitted from the
+        live API — so the frontend dropdown consumes it with zero shape changes."""
+        if self.source == 'xero':
+            return {
+                'ContactID': self.external_id,
+                'Name': self.display_name,
+                'EmailAddress': self.email,
+            }
+        return {
+            'Id': self.external_id,
+            'DisplayName': self.display_name,
+            'FullyQualifiedName': self.fully_qualified_name or self.display_name,
+        }
