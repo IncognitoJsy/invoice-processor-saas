@@ -717,6 +717,105 @@ class QuickBooksService:
         return {'success': False, 'error': msg, 'code': 'VALIDATION_BLOCKED',
                 'validation_errors': reasons}
 
+    def _find_unappendable_lines(self, existing_invoice):
+        """READ-ONLY pre-flight over an existing QBO invoice's lines before we re-POST them.
+
+        Adding lines to an existing invoice forces a FULL `Line` re-POST (QBO has no partial /
+        append operation — omitted lines are deleted), and QBO re-validates EVERY echoed line on
+        write. A line QBO tolerates as stored — most commonly an Amount hand-edited in the QBO UI
+        so it no longer equals Qty × UnitPrice — makes the whole update fail with the opaque
+        "Amount calculation incorrect in the request". We refuse to silently rewrite or convert a
+        line we did not create (that could corrupt a deliberate figure), so instead we detect any
+        line we cannot faithfully round-trip and let the caller block with a clear, line-naming
+        message (offering "sync to a new invoice" as the fallback).
+
+        Returns a list of problem dicts (empty ⇒ safe to append). Never mutates, never calls the API.
+
+        Classification (see AUDIT / the draft-preflight design):
+          - SubTotalLineDetail → NOT reported: it is auto-generated and simply stripped before the
+            re-POST (add_items_to_invoice / _add_summary_to_invoice), never echoed.
+          - DescriptionOnly, and SalesItemLineDetail that reconciles, and an Amount-only
+            SalesItemLineDetail (no Qty/UnitPrice — a valid QBO construct) → safe, not reported.
+          - SalesItemLineDetail with Qty AND UnitPrice present but Amount ≠ round(Qty×UnitPrice,2)
+            → reported as `amount_mismatch` (the real-mistake case).
+          - DiscountLineDetail, GroupLineDetail, and any other/unknown DetailType → reported as
+            `unsupported_line`: we cannot guarantee a faithful verbatim round-trip (a discount is
+            structurally tied to the SubTotal we strip), so we refuse rather than risk corruption.
+        """
+        problems = []
+        for ln in existing_invoice.get('Line', []):
+            dt = ln.get('DetailType')
+            if dt in ('SubTotalLineDetail', 'DescriptionOnly'):
+                continue
+            if dt == 'SalesItemLineDetail':
+                d = ln.get('SalesItemLineDetail', {})
+                qty, unit, amt = d.get('Qty'), d.get('UnitPrice'), ln.get('Amount')
+                # Amount-only line (no Qty/UnitPrice): valid QBO construct, nothing to reconcile.
+                if qty is None or unit is None or amt is None:
+                    continue
+                expected = money(to_decimal(unit) * to_decimal(qty))
+                if money(amt) != expected:
+                    problems.append({
+                        'line_id': str(ln.get('Id', '')),
+                        'item': (d.get('ItemRef', {}).get('name')
+                                 or d.get('ItemRef', {}).get('value') or 'line'),
+                        'qty': float(to_decimal(qty) or Decimal('0')),
+                        'unit': float(money(unit)),
+                        'amount': float(money(amt)),
+                        'expected': float(expected),
+                        'reason': 'amount_mismatch',
+                    })
+                continue
+            # DiscountLineDetail / GroupLineDetail / unknown → cannot safely round-trip.
+            problems.append({
+                'line_id': str(ln.get('Id', '')),
+                'item': None,
+                'reason': 'unsupported_line',
+                'detail_type': dt,
+            })
+        return problems
+
+    def _draft_not_appendable_block(self, existing_invoice, problems, *, results=None):
+        """Blocked-sync error when an existing draft contains a line we cannot faithfully re-POST
+        (see _find_unappendable_lines). Fail closed BEFORE any write, mirroring _output_tax_block /
+        _validation_block. Builds a clear, line-naming message that shows the arithmetic, and flags
+        `can_create_new` so the caller/UI can offer "sync to a new invoice instead"."""
+        doc = existing_invoice.get('DocNumber') or existing_invoice.get('Id')
+        qbid = existing_invoice.get('Id')
+
+        def _qty(v):
+            dv = to_decimal(v) or Decimal('0')
+            return str(int(dv)) if dv == dv.to_integral_value() else str(dv.normalize())
+
+        def _gbp(v):
+            return f"£{money(v):.2f}"
+
+        parts = []
+        for p in problems:
+            if p['reason'] == 'amount_mismatch':
+                parts.append(f"'{p['item']}' shows {_gbp(p['amount'])} but "
+                             f"{_qty(p['qty'])} × {_gbp(p['unit'])} = {_gbp(p['expected'])}")
+            else:
+                parts.append(f"a {p.get('detail_type') or 'special'} line we can't safely update")
+
+        if len(parts) == 1:
+            msg = (f"Can't add to draft #{doc} — {parts[0]}. "
+                   f"Fix it in QuickBooks, or sync to a new invoice instead.")
+        else:
+            bullets = "\n".join(f"• {t}" for t in parts)
+            msg = (f"Can't add to draft #{doc} — {len(parts)} lines can't be added:\n{bullets}\n"
+                   f"Fix them in QuickBooks, or sync to a new invoice instead.")
+
+        detail = {'code': 'DRAFT_NOT_APPENDABLE', 'draft_doc_number': str(doc),
+                  'draft_qb_id': str(qbid), 'can_create_new': True,
+                  'unappendable_lines': problems}
+        if results is not None:
+            results['success'] = False
+            results.setdefault('errors', []).append(msg)
+            results.update(detail)
+            return results
+        return {'success': False, 'error': msg, **detail}
+
     def _fetch_active_tax_codes(self, qb_connection):
         """Active QB TaxCodes (list); [] on any error."""
         try:
@@ -1317,7 +1416,12 @@ Rules:
             return {'error': 'Invoice not found'}
         
         invoice = existing['Invoice']
-        existing_lines = invoice.get('Line', [])
+        # Strip QBO's auto-generated SubTotalLineDetail before we echo the array back: it is
+        # recomputed by QBO on save, and re-POSTing it is a second trigger of the same
+        # "Amount calculation incorrect" rejection. All other pre-existing lines were vetted by the
+        # add-to-draft pre-flight (_find_unappendable_lines) and are echoed verbatim.
+        existing_lines = [l for l in invoice.get('Line', [])
+                          if l.get('DetailType') != 'SubTotalLineDetail']
 
         # Resolve output-GST treatment; fail closed for a registered user with no code.
         tax_code, tax_status = self.resolve_output_tax(qb_connection)
@@ -1470,26 +1574,38 @@ Rules:
         if not items:
             return {'success': False, 'error': 'No items to sync'}
 
-        # Step 1: Sync all products
-        product_results = self.sync_invoice_items_as_products(qb_connection, gozappify_invoice)
-        results['products_synced'] = product_results.get('synced', 0)
-        results['products_failed'] = product_results.get('failed', 0)
-        results['errors'].extend(product_results.get('errors', []))
-        
-        # Build map of part numbers to QB item IDs
-        product_map = {}
-        for prod in product_results.get('products', []):
-            product_map[prod['part_number']] = prod['qb_id']
-        
-        # Step 2: Check for existing draft invoice
+        # Step 0: If we're adding to an existing draft, PRE-FLIGHT it BEFORE any write. QBO forces a
+        # full-Line re-POST (no partial append), and re-validates every echoed line — so one line we
+        # can't faithfully round-trip (a hand-edited Amount, a discount/bundle) fails the whole update
+        # with an opaque "Amount calculation incorrect in the request". Block cleanly instead, naming
+        # the line; the caller/UI offers "sync to a new invoice" (use_existing_invoice=False) as the
+        # fallback. get_draft_invoices returns SELECT * so the draft already carries its Line array —
+        # no extra API call, and no catalog writes happen on a doomed sync.
         qb_invoice = None
         if use_existing_invoice:
             draft_invoices = self.get_draft_invoices(qb_connection, customer_id)
             if draft_invoices:
                 qb_invoice = draft_invoices[0]  # Use first draft invoice
+                problems = self._find_unappendable_lines(qb_invoice)
+                if problems:
+                    current_app.logger.warning(
+                        f"Blocking add-to-draft {qb_invoice.get('Id')} "
+                        f"(#{qb_invoice.get('DocNumber')}): {len(problems)} unappendable line(s)")
+                    return self._draft_not_appendable_block(qb_invoice, problems, results=results)
                 results['invoice_action'] = 'added_to_existing'
                 current_app.logger.info(f"Found existing draft invoice: {qb_invoice.get('Id')}")
-        
+
+        # Step 1: Sync all products
+        product_results = self.sync_invoice_items_as_products(qb_connection, gozappify_invoice)
+        results['products_synced'] = product_results.get('synced', 0)
+        results['products_failed'] = product_results.get('failed', 0)
+        results['errors'].extend(product_results.get('errors', []))
+
+        # Build map of part numbers to QB item IDs
+        product_map = {}
+        for prod in product_results.get('products', []):
+            product_map[prod['part_number']] = prod['qb_id']
+
         # Step 3: Build line items for QB invoice
         if sync_mode == 'summary':
             # Summary mode: combine all items into one "Materials Used" line
@@ -1626,7 +1742,10 @@ Rules:
             return self._output_tax_block('invoice')
 
         invoice = existing['Invoice']
-        existing_lines = invoice.get('Line', [])
+        # Strip QBO's auto-generated SubTotalLineDetail (recomputed on save; re-POSTing it re-triggers
+        # the "Amount calculation incorrect" rejection). Other lines were vetted by the pre-flight.
+        existing_lines = [l for l in invoice.get('Line', [])
+                          if l.get('DetailType') != 'SubTotalLineDetail']
 
         materials_line_idx = None
         for idx, line in enumerate(existing_lines):
