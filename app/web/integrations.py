@@ -851,7 +851,10 @@ def quickbooks_sync_to_customer(invoice_id):
     data = request.get_json() or {}
     customer_id = data.get('customer_id')
     sync_mode = data.get('sync_mode', 'itemised')
-    
+    # Fallback path: when a draft can't be appended to (DRAFT_NOT_APPENDABLE), the UI re-submits
+    # with force_new_invoice=True to create a fresh invoice instead of adding to the draft.
+    force_new_invoice = bool(data.get('force_new_invoice'))
+
     if not customer_id:
         return jsonify({'success': False, 'error': 'Customer ID required'}), 400
     
@@ -873,15 +876,17 @@ def quickbooks_sync_to_customer(invoice_id):
     if block:
         return block
 
-    # Perform full sync
+    # Perform full sync (force_new_invoice bypasses the draft and creates a fresh invoice)
     qb = QuickBooksService(current_user)
-    result = qb.sync_invoice_to_customer(connection, invoice, customer_id, sync_mode=sync_mode)
-    
+    result = qb.sync_invoice_to_customer(
+        connection, invoice, customer_id,
+        use_existing_invoice=not force_new_invoice, sync_mode=sync_mode)
+
     if result.get('success'):
         # Update invoice sync status
         invoice.qb_synced_at = datetime.utcnow()
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'products_synced': result.get('products_synced', 0),
@@ -891,10 +896,13 @@ def quickbooks_sync_to_customer(invoice_id):
             'qb_invoice_number': result.get('qb_invoice_number')
         })
     else:
-        return jsonify({
-            'success': False,
-            'error': '; '.join(result.get('errors', ['Unknown error']))
-        }), 400
+        # Surface the machine-readable code + draft detail so the UI can offer "sync to a new
+        # invoice instead" on a DRAFT_NOT_APPENDABLE block (rather than a dead-end error).
+        resp = {'success': False, 'error': '; '.join(result.get('errors', ['Unknown error']))}
+        for k in ('code', 'draft_doc_number', 'can_create_new', 'unappendable_lines'):
+            if result.get(k) is not None:
+                resp[k] = result[k]
+        return jsonify(resp), 400
 
 
 @bp.route('/quickbooks/create-estimate/<int:quote_id>', methods=['POST'])
