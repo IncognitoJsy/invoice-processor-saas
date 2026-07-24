@@ -1,10 +1,16 @@
-"""Job Cards routes - full platform mode only"""
+"""Job Cards routes.
+
+Jobs are accounting-mode-independent (sync, full AND both) — gated by @require_jobs (the ENABLE_JOBS
+flag), NOT by platform_mode. The ONE place that still branches on platform_mode is the supplier-invoice
+attach: the FK link (Invoice.job_card_id) is always set, but the full-suite CustomerInvoice draft is
+only built for full/both users (sync users push to QuickBooks/Xero and have no CustomerInvoice)."""
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models.job_card import JobCard
+from app.models.job_card import JobCard, JobSnapshot
 from app.models.customer_invoice import CustomerInvoiceLine
 from app.models.customer import Customer
+from app.utils.access import require_jobs
 from app.utils.money import money, to_decimal
 from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime
@@ -12,20 +18,36 @@ from datetime import datetime
 bp = Blueprint('job_cards', __name__, url_prefix='/jobs')
 
 
-def require_full_mode(f):
-    from functools import wraps
-    from flask import abort
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if current_user.platform_mode not in ('full', 'both'):
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated
+def _full_suite(user):
+    """True when the user runs the GoZappify-native invoicing surface (not pure sync)."""
+    return user.platform_mode in ('full', 'both')
+
+
+def _freeze_snapshot(job):
+    """Freeze a versioned completion snapshot for ``job`` (does not commit — caller commits).
+
+    Append-only / versioned: re-completing a re-opened job writes a NEW row (version + 1); prior
+    versions are preserved so history is never lost. Figures come from the single source of truth
+    (compute_job_financials); metadata is copied in so the snapshot is self-contained. A pay-rise or
+    price change after this point can never rewrite the frozen numbers."""
+    from app.services.job_financials import compute_job_financials
+    last = job.snapshots.order_by(JobSnapshot.snapshot_version.desc()).first()
+    version = (last.snapshot_version + 1) if last else 1
+    fin = compute_job_financials(job)
+    snap = JobSnapshot(
+        job_card_id=job.id, user_id=job.user_id, snapshot_version=version,
+        frozen_at=datetime.utcnow(), status_at_freeze='complete',
+        job_type=job.job_type, room_count=job.room_count, room_types=job.room_types,
+        floor_area_sqm=job.floor_area_sqm,
+        **fin,
+    )
+    db.session.add(snap)
+    return snap
 
 
 @bp.route('/')
 @login_required
-@require_full_mode
+@require_jobs
 def index():
     status_filter = request.args.get('status', 'active')
     customer_id = request.args.get('customer_id', type=int)
@@ -62,7 +84,7 @@ def index():
 
 @bp.route('/create', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def create():
     """Create a new job card"""
     data = request.get_json() or request.form
@@ -105,7 +127,7 @@ def create():
 
 @bp.route('/<int:job_id>')
 @login_required
-@require_full_mode
+@require_jobs
 def view(job_id):
     job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
     from app.models.customer_quote import CustomerQuote
@@ -122,16 +144,20 @@ def view(job_id):
 
 @bp.route('/<int:job_id>/update-status', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def update_status(job_id):
     job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
     new_status = data.get('status')
     if new_status in JobCard.STATUSES:
         job.status = new_status
-        if new_status == 'complete' and not job.end_date:
-            from datetime import date
-            job.end_date = date.today()
+        if new_status == 'complete':
+            if not job.end_date:
+                from datetime import date
+                job.end_date = date.today()
+            # Freeze a versioned snapshot on completion (the pricing-reference record). Re-opening
+            # later preserves this; re-completing writes a new version.
+            _freeze_snapshot(job)
         db.session.commit()
         return jsonify({'success': True, 'status': job.status_label})
     return jsonify({'error': 'Invalid status'}), 400
@@ -139,7 +165,7 @@ def update_status(job_id):
 
 @bp.route('/<int:job_id>/attach-invoice', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def attach_invoice(job_id):
     """Attach a supplier invoice to this job"""
     job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
@@ -154,7 +180,7 @@ def attach_invoice(job_id):
 
 @bp.route('/<int:job_id>/update-notes', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def update_notes(job_id):
     job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
@@ -165,7 +191,7 @@ def update_notes(job_id):
 
 @bp.route('/api/all-open')
 @login_required
-@require_full_mode
+@require_jobs
 def api_all_open():
     from app.models.customer import Customer
     jobs = JobCard.query.filter_by(user_id=current_user.id).filter(
@@ -184,7 +210,7 @@ def api_all_open():
 
 @bp.route('/api/customer/<int:customer_id>/open')
 @login_required
-@require_full_mode
+@require_jobs
 def api_customer_jobs(customer_id):
     """Get open job cards for a customer - used in invoice processing flow"""
     jobs = JobCard.query.filter_by(
@@ -214,7 +240,7 @@ def api_customer_jobs(customer_id):
 
 @bp.route('/api/attach-supplier-invoice', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def api_attach_supplier_invoice():
     """Attach supplier invoice to job card and merge into draft customer invoice"""
     data = request.get_json()
@@ -225,7 +251,9 @@ def api_attach_supplier_invoice():
     if not invoice_id:
         return jsonify({'error': 'No invoice ID'}), 400
 
-    if output_rate_unconfigured(current_user):
+    # Output-rate config is a prerequisite only for the full-suite CustomerInvoice built below;
+    # sync users (FK link only) don't need it.
+    if _full_suite(current_user) and output_rate_unconfigured(current_user):
         return jsonify({'error': OUTPUT_RATE_UNSET_MESSAGE}), 400
 
     from app.models.invoice import Invoice, InvoiceItem
@@ -254,8 +282,16 @@ def api_attach_supplier_invoice():
     else:
         return jsonify({'error': 'No job specified'}), 400
 
-    # Attach supplier invoice to job
+    # Attach supplier invoice to job (the FK link — mode-agnostic, retrospective, sync-independent).
     supplier_inv.job_card_id = job.id
+
+    # Sync mode: the link IS the whole operation. Sync users push supplier invoices straight to
+    # QuickBooks/Xero and have no native CustomerInvoice — so set the link and stop. This is the ONE
+    # behavioural branch; the full-suite path below is unchanged.
+    if not _full_suite(current_user):
+        db.session.commit()
+        return jsonify({'success': True, 'job_id': job.id, 'customer_invoice_id': None,
+                        'invoice_action': 'linked', 'message': 'Invoice attached to job'})
 
     # Get items from supplier invoice
     items = InvoiceItem.query.filter_by(invoice_id=supplier_inv.id).all()
@@ -445,7 +481,7 @@ def _recalculate_invoice(customer_inv):
 
 @bp.route('/<int:job_id>/delete', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def delete(job_id):
     job = JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
     # Detach any linked invoices first

@@ -13,10 +13,13 @@ def create_app(config_name='default'):
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     app = Flask(__name__, static_folder=static_folder)
     # Feature flags (default off; set to "true" in Railway env to re-enable)
-    def _feature_on(name):
-        return os.environ.get(name, "false").lower() in ("1", "true", "yes", "on")
+    def _feature_on(name, default="false"):
+        return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
     app.config["ENABLE_VOICE_TO_QUOTE"] = _feature_on("ENABLE_VOICE_TO_QUOTE")
     app.config["ENABLE_QUOTE_BUILDER"] = _feature_on("ENABLE_QUOTE_BUILDER")
+    # Jobs are a foundational, accounting-mode-independent feature (available to sync, full AND
+    # both). Default ON; set ENABLE_JOBS="false" in Railway env as a kill-switch. See require_jobs.
+    app.config["ENABLE_JOBS"] = _feature_on("ENABLE_JOBS", default="true")
     app.config.from_object(config[config_name])
 
     # Fail hard if token-encryption keys are missing/invalid (AUDIT risk #3).
