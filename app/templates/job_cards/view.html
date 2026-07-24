@@ -142,7 +142,10 @@
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
                 <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <h2 class="font-semibold text-gray-900 dark:text-white">Materials / Supplier Invoices</h2>
-                    <a href="/invoices" class="text-sm text-primary-600 hover:underline font-medium">Process Invoice</a>
+                    <div class="flex items-center gap-4">
+                        <button onclick="openAttachInvoiceModal()" class="text-sm text-primary-600 hover:underline font-medium">+ Attach invoice</button>
+                        <a href="/invoices" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Process new</a>
+                    </div>
                 </div>
                 {% if job.supplier_invoices %}
                 <div class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -150,15 +153,19 @@
                     <div class="flex items-center justify-between px-5 py-3.5">
                         <div>
                             <p class="font-semibold text-sm text-gray-900 dark:text-white">{{ inv.supplier_name or 'Unknown Supplier' }}</p>
-                            <p class="text-xs text-gray-400">{{ inv.invoice_number or '—' }} · {{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '' }}</p>
+                            <p class="text-xs text-gray-400">{{ inv.invoice_number or '—' }} · {{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '' }} ·
+                                {% if inv.qb_synced_at or inv.xero_synced_at %}<span class="text-green-600 dark:text-green-400">Synced</span>{% else %}<span class="text-gray-400">Not synced</span>{% endif %}</p>
                         </div>
-                        <span class="font-bold text-sm font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(inv.total_cost or 0) }}</span>
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-sm font-mono text-gray-900 dark:text-white">£{{ "%.2f"|format(inv.total_cost or 0) }}</span>
+                            <button onclick="detachInvoice({{ inv.id }})" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400" title="Detach from this job">Detach</button>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
                 <div class="p-8 text-center text-gray-400 text-sm">
-                    No supplier invoices attached yet — process an invoice and attach it to this job
+                    No supplier invoices attached yet — use <button onclick="openAttachInvoiceModal()" class="text-primary-600 hover:underline">+ Attach invoice</button> to link one you've already processed
                 </div>
                 {% endif %}
             </div>
@@ -203,8 +210,59 @@
     </div>
 </div>
 
+<!-- Attach existing invoice modal -->
+<div id="attach-invoice-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg flex flex-col" style="max-height: 85vh;">
+        <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Attach an invoice to this job</h3>
+            <button onclick="document.getElementById('attach-invoice-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <input type="text" id="attach-search" placeholder="Search by supplier, invoice no. or job ref…" autocomplete="off"
+                   class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+            <p class="text-xs text-gray-400 mt-1.5">Synced and unsynced invoices both attachable — attaching only links it, it never re-sends anything to QuickBooks.</p>
+        </div>
+        <div id="attachable-list" class="overflow-y-auto flex-1"></div>
+    </div>
+</div>
+
 <script>
 const csrf = '{{ csrf_token() }}';
+const JOB_ID = {{ job.id }};
+let _attachSearchTimer = null;
+function openAttachInvoiceModal() { document.getElementById('attach-invoice-modal').classList.remove('hidden'); document.getElementById('attach-search').value = ''; loadAttachable(''); }
+document.addEventListener('DOMContentLoaded', () => { const s = document.getElementById('attach-search'); if (s) s.addEventListener('input', () => { clearTimeout(_attachSearchTimer); _attachSearchTimer = setTimeout(() => loadAttachable(s.value), 200); }); });
+async function loadAttachable(q) {
+    const list = document.getElementById('attachable-list');
+    list.innerHTML = '<p class="p-6 text-sm text-gray-400 text-center">Loading…</p>';
+    try {
+        const res = await fetch('/jobs/' + JOB_ID + '/attachable-invoices' + (q ? ('?q=' + encodeURIComponent(q)) : ''));
+        const data = await res.json();
+        if (!data.invoices || !data.invoices.length) { list.innerHTML = '<p class="p-6 text-sm text-gray-400 text-center">No invoices found.</p>'; return; }
+        list.innerHTML = data.invoices.map(inv => {
+            const synced = inv.synced ? '<span class="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">Synced</span>' : '<span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Not synced</span>';
+            const onOther = (inv.current_job_id && !inv.attached_here) ? ' · <span class="text-amber-600 dark:text-amber-400">on ' + escapeHtml(inv.current_job_name || 'another job') + '</span>' : '';
+            const action = inv.attached_here
+                ? '<span class="text-xs text-green-600 dark:text-green-400 font-medium whitespace-nowrap">✓ on this job</span>'
+                : '<button onclick="attachInvoice(' + inv.id + ')" class="text-xs px-2.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold whitespace-nowrap">' + (inv.current_job_id ? 'Move here' : 'Attach') + '</button>';
+            return '<div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700">'
+                + '<div class="min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white truncate">' + escapeHtml(inv.supplier_name || 'Unknown') + ' <span class="text-gray-400 font-normal font-mono">' + escapeHtml(inv.invoice_number || '—') + '</span></p>'
+                + '<p class="text-xs text-gray-400">' + escapeHtml(inv.date || '') + ' · £' + (inv.total_cost || 0).toFixed(2) + ' · ' + synced + onOther + '</p></div>'
+                + action + '</div>';
+        }).join('');
+    } catch (e) { list.innerHTML = '<p class="p-6 text-sm text-red-500 text-center">Could not load invoices.</p>'; }
+}
+async function attachInvoice(invoiceId) {
+    const r = await fetch('/jobs/' + JOB_ID + '/attach-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ invoice_id: invoiceId }) });
+    if ((await r.json()).success) window.location.reload(); else alert('Could not attach invoice');
+}
+async function detachInvoice(invoiceId) {
+    if (!confirm('Detach this invoice from the job? (This only removes the link — it does not touch QuickBooks.)')) return;
+    const r = await fetch('/jobs/detach-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ invoice_id: invoiceId }) });
+    if ((await r.json()).success) window.location.reload(); else alert('Could not detach invoice');
+}
 
 async function deleteJob() {
     if (!confirm('Delete this job? This cannot be undone.')) return;
