@@ -11,6 +11,7 @@ from app.models.job_card import JobCard, JobSnapshot
 from app.models.customer_invoice import CustomerInvoiceLine
 from app.models.customer import Customer
 from app.utils.access import require_jobs
+from app.services.customer_link import user_sync_source, resolve_local_customer
 from app.utils.money import money, to_decimal
 from app.utils.tax import effective_output_rate, output_rate_unconfigured, OUTPUT_RATE_UNSET_MESSAGE
 from datetime import datetime
@@ -63,7 +64,15 @@ def index():
         query = query.filter_by(customer_id=customer_id)
 
     jobs = query.order_by(JobCard.created_at.desc()).all()
-    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
+
+    # Customer dropdown source depends on mode: sync users pick from their accounting software
+    # (served client-side from CustomerCache via the shared picker — no local Customer rows exist);
+    # full/both users pick from the local Customer table (unchanged). 'both' has local customers, so
+    # only PURE sync uses the cache path.
+    use_cache = current_user.platform_mode == 'sync'
+    sync_source = user_sync_source(current_user) if use_cache else None
+    customers = ([] if use_cache
+                 else Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all())
 
     counts = {
         'active': JobCard.query.filter_by(user_id=current_user.id).filter(
@@ -76,6 +85,8 @@ def index():
     return render_template('job_cards/index.html',
         jobs=jobs,
         customers=customers,
+        use_cache=use_cache,
+        sync_source=sync_source,
         status_filter=status_filter,
         counts=counts,
         customer_id=customer_id,
@@ -88,8 +99,23 @@ def index():
 def create():
     """Create a new job card"""
     data = request.get_json() or request.form
-    customer_id = data.get('customer_id')
     name = data.get('name', '').strip()
+
+    # Sync mode: the picker sends an external (QBO/Xero) customer id — materialise / find the local
+    # Customer for the FK. Full/both mode sends a local customer_id directly (unchanged).
+    external_customer_id = data.get('external_customer_id')
+    if external_customer_id:
+        cust = resolve_local_customer(current_user.id, user_sync_source(current_user),
+                                      external_customer_id, fallback_name=data.get('customer_name'))
+        if not cust:
+            msg = 'Could not resolve that customer — refresh the customer list and try again.'
+            if request.is_json:
+                return jsonify({'error': msg}), 400
+            flash(msg, 'error')
+            return redirect(url_for('job_cards.index'))
+        customer_id = cust.id
+    else:
+        customer_id = data.get('customer_id')
 
     if not customer_id or not name:
         if request.is_json:
@@ -265,7 +291,14 @@ def api_attach_supplier_invoice():
 
     # Create job card if needed
     if job_id == 'new':
-        customer_id = data.get('customer_id') or supplier_inv.platform_customer_id
+        # Sync mode: resolve the picked external (QBO/Xero) customer to a local Customer for the FK.
+        external_customer_id = data.get('external_customer_id')
+        if external_customer_id:
+            cust = resolve_local_customer(current_user.id, user_sync_source(current_user),
+                                          external_customer_id, fallback_name=data.get('customer_name'))
+            customer_id = cust.id if cust else None
+        else:
+            customer_id = data.get('customer_id') or supplier_inv.platform_customer_id
         job_name = data.get('job_name', 'New Job')
         if not customer_id:
             return jsonify({'error': 'Customer required to create job'}), 400

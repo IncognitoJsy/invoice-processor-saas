@@ -1,4 +1,5 @@
 {% extends "base/layout.html" %}
+{% from 'partials/_customer_picker.html' import customer_picker %}
 {% block title %}Jobs - GoZappify{% endblock %}
 {% block content %}
 <div class="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
@@ -102,6 +103,17 @@
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">New Job</h3>
         <div class="space-y-4">
+            {% if use_cache %}
+            {# Sync mode: pick from the accounting software, served from CustomerCache (shared picker). #}
+            <div>
+                {% if sync_source %}
+                {{ customer_picker('new-job-customer-picker', label='Customer') }}
+                {% else %}
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Customer</label>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Connect QuickBooks or Xero to pick a customer.</p>
+                {% endif %}
+            </div>
+            {% else %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Customer</label>
                 <select id="new-job-customer" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white">
@@ -111,6 +123,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Job Name</label>
                 <input type="text" id="new-job-name" placeholder="e.g. Full House Rewire"
@@ -136,22 +149,41 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/customer_picker.js') }}"></script>
 <script>
 const csrf = '{{ csrf_token() }}';
+{% if use_cache and sync_source %}
+// Sync mode: shared searchable picker served from CustomerCache (instant, no live pull).
+const jobsCustomerPicker = new CustomerPicker({
+    container: 'new-job-customer-picker',
+    provider: '{{ sync_source }}',
+    endpoint: '{{ "/integrations/api/quickbooks/customers" if sync_source == "quickbooks" else "/integrations/api/xero/customers" }}',
+    onSelect: () => {},
+});
+{% endif %}
 async function createJob() {
-    const customer = document.getElementById('new-job-customer').value;
     const name = document.getElementById('new-job-name').value.trim();
+    const payload = {
+        name: name,
+        description: document.getElementById('new-job-desc').value,
+        start_date: document.getElementById('new-job-date').value,
+    };
+    {% if use_cache %}
+    // Sync mode sends the external (QBO/Xero) customer id — the server materialises a local Customer.
+    const extId = (typeof jobsCustomerPicker !== 'undefined') ? jobsCustomerPicker.value() : '';
+    if (!extId) { alert('Please select a customer'); return; }
+    payload.external_customer_id = extId;
+    payload.customer_name = jobsCustomerPicker.selectedName();
+    {% else %}
+    const customer = document.getElementById('new-job-customer').value;
     if (!customer) { alert('Please select a customer'); return; }
+    payload.customer_id = customer;
+    {% endif %}
     if (!name) { alert('Please enter a job name'); return; }
     const r = await fetch('/jobs/create', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({
-            customer_id: customer,
-            name: name,
-            description: document.getElementById('new-job-desc').value,
-            start_date: document.getElementById('new-job-date').value,
-        })
+        body: JSON.stringify(payload)
     });
     const d = await r.json();
     if (d.success) window.location = '/jobs/' + d.job_id;
