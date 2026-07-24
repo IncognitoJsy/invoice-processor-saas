@@ -19,11 +19,26 @@ class Customer(db.Model):
     country = db.Column(db.String(50))
     notes = db.Column(db.Text)
     payment_terms = db.Column(db.String(20), default='30')
+
+    # Sync-mode link to the accounting-software customer this local row materialises (lazy: a sync
+    # user has no local customers until a job needs one). Keyed on the SAME id the sync/cache use —
+    # QB Customer.Id / Xero ContactID — so a rename in QBO/Xero updates THIS row (no duplicate /
+    # mislink). NULL for full-suite-native customers (they have no external counterpart).
+    external_id = db.Column(db.String(200), nullable=True)   # QB Customer.Id / Xero ContactID
+    source = db.Column(db.String(20), nullable=True)         # 'quickbooks' | 'xero' | NULL (local)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     jobs = db.relationship('Job', backref='customer', lazy='dynamic')
     documents = db.relationship('CustomerDocument', backref='customer', lazy='dynamic')
+
+    __table_args__ = (
+        # One local row per (user, provider, external id). NULLs are distinct in Postgres, so
+        # full-suite-native customers (external_id NULL) never collide — the constraint only binds
+        # materialised sync customers, guaranteeing find-or-create can't create duplicates.
+        db.Index('uq_customer_user_source_ext', 'user_id', 'source', 'external_id', unique=True),
+    )
 
     @property
     def display_name(self):

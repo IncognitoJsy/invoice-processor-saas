@@ -1,0 +1,37 @@
+{# Reusable searchable customer dropdown markup for window.CustomerPicker (static/js/customer_picker.js).
+   Shared by the invoice sync picker (QB + Xero) and the Jobs page so behaviour can't drift.
+
+   Args:
+     container_id  : id for the root element (pass to `new CustomerPicker({container: id, ...})`)
+     label         : field label (default 'Customer')
+     hidden_id     : optional id on the hidden input (lets callers keep existing ids, e.g.
+                     'qb-customer-select', so their submit/sync code needs no change)
+     selected_id, selected_name_id : optional ids on the selected-chip / its name span
+     accent        : tailwind ring/border accent, 'blue' (default) or 'xero'
+#}
+{% macro customer_picker(container_id, label='Customer', hidden_id='', selected_id='', selected_name_id='', accent='blue') %}
+{% set ring = 'focus:ring-[#13B5EA]' if accent == 'xero' else 'focus:ring-blue-500' %}
+<div class="relative" id="{{ container_id }}">
+  <div class="flex items-center justify-between mb-1 gap-2 flex-wrap">
+    <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">{{ label }}</label>
+    <div class="flex items-center gap-2 text-xs">
+      <span data-cp="synced" class="text-gray-400"></span>
+      <button type="button" data-cp="refresh" class="text-blue-600 hover:underline whitespace-nowrap"
+              title="Pull the latest customers from your accounting software (use if you just created one there)">🔄 Refresh</button>
+    </div>
+  </div>
+  <div class="relative">
+    <input type="text" data-cp="search" placeholder="Type to search customers..." autocomplete="off"
+           class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 {{ ring }} dark:bg-gray-700 dark:text-white">
+    <input type="hidden" data-cp="hidden" {% if hidden_id %}id="{{ hidden_id }}"{% endif %} value="">
+    <div data-cp="dropdown" class="hidden absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-72 overflow-y-auto"></div>
+  </div>
+  <div data-cp="selected" {% if selected_id %}id="{{ selected_id }}"{% endif %}
+       class="hidden mt-1 flex items-center justify-between text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+    <span data-cp="selectedName" {% if selected_name_id %}id="{{ selected_name_id }}"{% endif %} class="truncate"></span>
+    <button type="button" data-cp="clear" class="ml-2 hover:text-blue-900 dark:hover:text-blue-100">
+      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+</div>
+{% endmacro %}
