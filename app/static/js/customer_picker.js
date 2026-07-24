@@ -123,7 +123,7 @@
 
     _meta() { if (this.$synced) this.$synced.textContent = this.syncedAt ? ('Synced ' + _relTime(this.syncedAt)) : 'Not synced yet'; }
 
-    setJobReference(ref) { this.jobReference = ref; this.matchDone = false; }
+    setJobReference(ref) { this.jobReference = ref; this.matchDone = false; this.suggestions = []; }
 
     async _runSuggestions() {
       if (!this.matchEndpoint || !this.jobReference) return;
@@ -199,6 +199,7 @@
 
     value() { return this.$hidden ? this.$hidden.value : this.selectedId; }
     selectedName() { return this.$selectedName ? this.$selectedName.textContent : ''; }
+    close() { this._closeDropdown(); }
 
     _items() { return this.$dropdown ? this.$dropdown.querySelectorAll('.cp-option') : []; }
     _focusItem(dir) {
