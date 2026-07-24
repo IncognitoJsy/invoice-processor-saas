@@ -1,8 +1,14 @@
-"""Employee routes - full platform only"""
+"""Employee & labour routes.
+
+Employee management and per-job labour logging are part of the Jobs feature, so those routes use
+@require_jobs (available to sync, full AND both). The routes that build/extend the full-suite native
+CustomerInvoice (add_to_invoice, api_job_labour_uninvoiced, api_customer_labour) keep @require_full_mode
+— sync users bill labour through their accounting software, not a CustomerInvoice."""
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.employee import Employee, LabourEntry
+from app.utils.access import require_jobs
 from datetime import datetime, date
 
 bp = Blueprint('employees', __name__, url_prefix='/employees')
@@ -21,7 +27,7 @@ def require_full_mode(f):
 
 @bp.route('/')
 @login_required
-@require_full_mode
+@require_jobs
 def index():
     employees = Employee.query.filter_by(
         user_id=current_user.id
@@ -35,7 +41,7 @@ def index():
 
 @bp.route('/create', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def create():
     data = request.get_json()
     name = (data.get('name') or '').strip()
@@ -58,7 +64,7 @@ def create():
 
 @bp.route('/<int:emp_id>', methods=['GET'])
 @login_required
-@require_full_mode
+@require_jobs
 def get(emp_id):
     emp = Employee.query.filter_by(id=emp_id, user_id=current_user.id).first_or_404()
     return jsonify(emp.to_dict(float(current_user.employer_contribution_rate or 6.5)))
@@ -66,7 +72,7 @@ def get(emp_id):
 
 @bp.route('/<int:emp_id>/update', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def update(emp_id):
     emp = Employee.query.filter_by(id=emp_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
@@ -84,7 +90,7 @@ def update(emp_id):
 
 @bp.route('/<int:emp_id>/deactivate', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def deactivate(emp_id):
     emp = Employee.query.filter_by(id=emp_id, user_id=current_user.id).first_or_404()
     emp.is_active = False
@@ -96,7 +102,7 @@ def deactivate(emp_id):
 
 @bp.route('/labour/log', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def log_labour():
     """Log hours for an employee against a job card"""
     data = request.get_json()
@@ -144,7 +150,7 @@ def log_labour():
 
 @bp.route('/labour/<int:entry_id>/delete', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def delete_labour(entry_id):
     entry = LabourEntry.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     if entry.status == 'invoiced':
@@ -156,7 +162,7 @@ def delete_labour(entry_id):
 
 @bp.route('/api/job/<int:job_card_id>/labour')
 @login_required
-@require_full_mode
+@require_jobs
 def api_job_labour(job_card_id):
     """Get all labour entries for a job card"""
     entries = LabourEntry.query.filter_by(
@@ -353,7 +359,7 @@ def add_to_invoice():
 
 @bp.route('/api/list')
 @login_required
-@require_full_mode
+@require_jobs
 def api_list():
     """Get all active employees — for dropdowns"""
     employees = Employee.query.filter_by(
@@ -388,7 +394,7 @@ def api_customer_labour(customer_id):
 
 @bp.route('/api/preview-hours', methods=['POST'])
 @login_required
-@require_full_mode
+@require_jobs
 def preview_hours():
     """Preview which hours will be added based on cutoff datetime"""
     from datetime import datetime as dt_type, time as time_type, date as date_type

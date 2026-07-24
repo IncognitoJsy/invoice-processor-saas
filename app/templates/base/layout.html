@@ -172,6 +172,17 @@
                         Dashboard
                     </a>
 
+                    {% if mode == 'sync' and config.get('ENABLE_JOBS', True) %}
+                    <!-- Jobs is accounting-mode-independent; sync users get standalone links (full/both
+                         reach Jobs via the My Business dropdown below). -->
+                    <a href="/jobs" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'job_cards' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                        Jobs
+                    </a>
+                    <a href="/employees" class="px-4 py-2 rounded-lg text-sm font-medium {% if request.endpoint and 'employees' in request.endpoint %}bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} transition">
+                        Labour
+                    </a>
+                    {% endif %}
+
                     {% if mode in ['full', 'both'] %}
                     <!-- Full platform nav -->
 
