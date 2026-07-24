@@ -137,6 +137,7 @@ class Invoice(db.Model):
             'xero_synced_at': self.xero_synced_at.isoformat() if self.xero_synced_at else None,
             'xero_quote_id': self.xero_quote_id,
             'xero_quote_synced_at': self.xero_quote_synced_at.isoformat() if self.xero_quote_synced_at else None,
+            'job_card_id': self.job_card_id,
             'matched_customer_id': self.matched_customer_id,
             'matched_customer_name': self.matched_customer_name,
             'platform_customer_id': self.platform_customer_id,

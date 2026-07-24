@@ -326,6 +326,17 @@ tr.row-deduction .gz-edit-pencil { display: none !important; }
             <p class="text-xs text-gray-400 mt-1">Optional — attach this invoice to a job card to track materials and auto-update draft customer invoice</p>
         </div>
 
+        <!-- Attach to Job (sync/both mode) — link only; never re-sends to QuickBooks/Xero -->
+        <div id="sync-job-attach-section" class="hidden p-4 bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-800">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Attach to Job
+            </h3>
+            <p class="text-xs text-gray-400 mb-2">Link this invoice to a job for cost tracking. This only sets the link — it never re-sends anything to QuickBooks.</p>
+            <div id="sync-current-job" class="hidden mb-2"></div>
+            <div id="sync-job-list" class="space-y-1.5 max-h-44 overflow-y-auto"><p class="text-xs text-gray-400">Loading jobs…</p></div>
+        </div>
+
         <!-- QuickBooks Sync Section -->
         <div id="qb-sync-section" class="hidden p-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
@@ -737,7 +748,38 @@ async function viewInvoice(id) { try { const response = await fetch('/api/invoic
     loadModalCustomerSuggest(inv);
 } else {
     document.getElementById('customer-assign-section').classList.add('hidden');
-    currentJobReference = inv.job_reference || ''; if (qbConnected) { document.getElementById('qb-sync-section').classList.remove('hidden'); resetQBSyncUI(); if (qbPicker) qbPicker.setJobReference(currentJobReference); } else { document.getElementById('qb-sync-section').classList.add('hidden'); } if (xeroConnected) { document.getElementById('xero-sync-section').classList.remove('hidden'); resetXeroSyncUI(); if (xeroPicker) xeroPicker.setJobReference(currentJobReference); } else { document.getElementById('xero-sync-section').classList.add('hidden'); } } document.getElementById('invoice-modal').classList.remove('hidden'); } } catch (error) { console.error('Error loading invoice:', error); } }
+    currentJobReference = inv.job_reference || ''; if (qbConnected) { document.getElementById('qb-sync-section').classList.remove('hidden'); resetQBSyncUI(); if (qbPicker) qbPicker.setJobReference(currentJobReference); } else { document.getElementById('qb-sync-section').classList.add('hidden'); } if (xeroConnected) { document.getElementById('xero-sync-section').classList.remove('hidden'); resetXeroSyncUI(); if (xeroPicker) xeroPicker.setJobReference(currentJobReference); } else { document.getElementById('xero-sync-section').classList.add('hidden'); } } if (PLATFORM_MODE === 'sync' || PLATFORM_MODE === 'both') { loadSyncJobAttach(inv); } else { const _s = document.getElementById('sync-job-attach-section'); if (_s) _s.classList.add('hidden'); } document.getElementById('invoice-modal').classList.remove('hidden'); } } catch (error) { console.error('Error loading invoice:', error); } }
+// Sync/both mode: link this invoice to an open job (FK only — never re-sends to QuickBooks/Xero).
+async function loadSyncJobAttach(inv) {
+    const section = document.getElementById('sync-job-attach-section'); if (!section) return;
+    section.classList.remove('hidden');
+    const cur = document.getElementById('sync-current-job');
+    const list = document.getElementById('sync-job-list');
+    cur.classList.add('hidden'); list.innerHTML = '<p class="text-xs text-gray-400">Loading jobs…</p>';
+    try {
+        const data = await (await fetch('/jobs/api/all-open')).json();
+        const jobs = data.jobs || [];
+        if (inv.job_card_id) {
+            const j = jobs.find(x => x.id === inv.job_card_id);
+            cur.classList.remove('hidden');
+            cur.innerHTML = '<div class="flex items-center justify-between text-xs bg-white dark:bg-gray-800 border border-green-300 dark:border-green-700 rounded-lg px-2.5 py-1.5"><span class="text-green-700 dark:text-green-300">Attached to <strong>' + escapeHtml(j ? j.name : 'a job') + '</strong></span><button onclick="detachInvoiceFromJob(' + inv.id + ')" class="text-red-500 hover:text-red-700 font-medium">Detach</button></div>';
+        }
+        if (!jobs.length) { list.innerHTML = '<p class="text-xs text-gray-400">No open jobs — create one on the Jobs page.</p>'; return; }
+        list.innerHTML = jobs.map(j => {
+            const isCur = j.id === inv.job_card_id;
+            const btn = isCur ? '<span class="text-xs text-green-600 dark:text-green-400 font-medium whitespace-nowrap">✓ attached</span>' : '<button onclick="attachInvoiceToJob(' + inv.id + ',' + j.id + ')" class="text-xs px-2.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold whitespace-nowrap">' + (inv.job_card_id ? 'Move here' : 'Attach') + '</button>';
+            return '<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg"><div class="min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white truncate">' + escapeHtml(j.name) + '</p><p class="text-xs text-gray-400 truncate">' + escapeHtml(j.customer_name || '') + '</p></div>' + btn + '</div>';
+        }).join('');
+    } catch (e) { list.innerHTML = '<p class="text-xs text-red-500">Could not load jobs.</p>'; }
+}
+async function attachInvoiceToJob(invoiceId, jobId) {
+    const r = await fetch('/jobs/' + jobId + '/attach-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoice_id: invoiceId }) });
+    if ((await r.json()).success && currentInvoice) { currentInvoice.job_card_id = jobId; loadSyncJobAttach(currentInvoice); loadInvoices(); } else alert('Could not attach invoice');
+}
+async function detachInvoiceFromJob(invoiceId) {
+    const r = await fetch('/jobs/detach-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoice_id: invoiceId }) });
+    if ((await r.json()).success && currentInvoice) { currentInvoice.job_card_id = null; loadSyncJobAttach(currentInvoice); loadInvoices(); } else alert('Could not detach invoice');
+}
 
 // Instantiate once (or re-load the cache on reconnect). onSelect keeps the invoice-specific
 // draft-detection (onCustomerChange, which reads the same qb-customer-select hidden field).

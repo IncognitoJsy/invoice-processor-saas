@@ -199,7 +199,58 @@ def attach_invoice(job_id):
     invoice_id = data.get('invoice_id')
     from app.models.invoice import Invoice
     invoice = Invoice.query.filter_by(id=invoice_id, user_id=current_user.id).first_or_404()
-    invoice.job_card_id = job_id
+    invoice.job_card_id = job_id   # FK-only; attaching an already-synced invoice never re-pushes to QB
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/<int:job_id>/attachable-invoices')
+@login_required
+@require_jobs
+def attachable_invoices(job_id):
+    """List the user's processed supplier invoices for the job-side 'attach existing invoice' picker.
+
+    Returns ALL supplier invoices (synced AND unsynced) with their sync status and current job link.
+    The UI SHOWS status but never restricts by it — attach is retrospective and sync-independent. An
+    invoice already on another job is included (attaching here MOVES it — a plain FK overwrite)."""
+    JobCard.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()  # tenant guard
+    from app.models.invoice import Invoice
+    search = (request.args.get('q') or '').strip()
+    q = (Invoice.query
+         .filter_by(user_id=current_user.id)
+         .filter(db.or_(Invoice.document_type.is_(None), Invoice.document_type != 'quote')))
+    if search:
+        like = f'%{search}%'
+        q = q.filter(db.or_(Invoice.invoice_number.ilike(like),
+                            Invoice.supplier_name.ilike(like),
+                            Invoice.job_reference.ilike(like)))
+    invoices = q.order_by(Invoice.created_at.desc()).limit(200).all()
+    job_names = {j.id: j.name for j in JobCard.query.filter_by(user_id=current_user.id).all()}
+    result = [{
+        'id': inv.id,
+        'invoice_number': inv.invoice_number,
+        'supplier_name': inv.supplier_name,
+        'job_reference': inv.job_reference,
+        'date': inv.created_at.strftime('%d %b %Y') if inv.created_at else '',
+        'total_cost': float(inv.total_cost or 0),
+        'synced': bool(inv.qb_synced_at or inv.xero_synced_at),
+        'current_job_id': inv.job_card_id,
+        'current_job_name': job_names.get(inv.job_card_id) if inv.job_card_id else None,
+        'attached_here': inv.job_card_id == job_id,
+    } for inv in invoices]
+    return jsonify({'invoices': result})
+
+
+@bp.route('/detach-invoice', methods=['POST'])
+@login_required
+@require_jobs
+def detach_invoice():
+    """Detach a supplier invoice from its job (job_card_id -> NULL). FK-only; never touches QB/Xero
+    or the invoice's sync state. To MOVE, just attach to another job (overwrites the FK)."""
+    from app.models.invoice import Invoice
+    data = request.get_json() or {}
+    invoice = Invoice.query.filter_by(id=data.get('invoice_id'), user_id=current_user.id).first_or_404()
+    invoice.job_card_id = None
     db.session.commit()
     return jsonify({'success': True})
 
